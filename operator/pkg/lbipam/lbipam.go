@@ -14,9 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cilium/ipam/service/ipallocator"
 	"github.com/sirupsen/logrus"
-	"go.uber.org/multierr"
 	"golang.org/x/exp/slices"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -24,6 +22,7 @@ import (
 
 	"github.com/cilium/cilium/pkg/hive"
 	"github.com/cilium/cilium/pkg/hive/job"
+	"github.com/cilium/cilium/pkg/ipam/service/ipallocator"
 	"github.com/cilium/cilium/pkg/k8s"
 	cilium_api_v2alpha1 "github.com/cilium/cilium/pkg/k8s/apis/cilium.io/v2alpha1"
 	cilium_client_v2alpha1 "github.com/cilium/cilium/pkg/k8s/client/clientset/versioned/typed/cilium.io/v2alpha1"
@@ -356,12 +355,9 @@ func (ipam *LBIPAM) svcOnUpsert(ctx context.Context, k resource.Key, svc *slim_c
 func (ipam *LBIPAM) svcOnDelete(ctx context.Context, k resource.Key, svc *slim_core_v1.Service) error {
 	ipam.logger.Debugf("Deleted service '%s/%s'", svc.GetNamespace(), svc.GetName())
 
-	err := ipam.handleDeletedService(svc)
-	if err != nil {
-		return fmt.Errorf("handleDeletedService: %w", err)
-	}
+	ipam.handleDeletedService(svc)
 
-	err = ipam.satisfyAndUpdateCounts(ctx)
+	err := ipam.satisfyAndUpdateCounts(ctx)
 	if err != nil {
 		return fmt.Errorf("satisfyAndUpdateCounts: %w", err)
 	}
@@ -403,10 +399,7 @@ func (ipam *LBIPAM) handleUpsertService(ctx context.Context, svc *slim_core_v1.S
 
 		// Release allocations
 		for _, alloc := range sv.AllocatedIPs {
-			err := alloc.Origin.allocRange.Release(alloc.IP)
-			if err != nil {
-				return fmt.Errorf("alloc range release: %w", err)
-			}
+			alloc.Origin.allocRange.Release(alloc.IP)
 		}
 		ipam.serviceStore.Delete(sv.Key)
 
@@ -474,17 +467,14 @@ func (ipam *LBIPAM) handleUpsertService(ctx context.Context, svc *slim_core_v1.S
 }
 
 func (ipam *LBIPAM) stripInvalidAllocations(sv *ServiceView) error {
-	var errors []error
+	var errs error
 	// Remove bad allocations which are no longer valid
 	for allocIdx := len(sv.AllocatedIPs) - 1; allocIdx >= 0; allocIdx-- {
 		alloc := sv.AllocatedIPs[allocIdx]
 
 		releaseAllocIP := func() error {
 			ipam.logger.Debugf("removing allocation '%s' from '%s'", alloc.IP.String(), sv.Key.String())
-			err := alloc.Origin.allocRange.Release(alloc.IP)
-			if err != nil {
-				return fmt.Errorf("Error while releasing '%s' from '%s': %w", alloc.IP, alloc.Origin.String(), err)
-			}
+			alloc.Origin.allocRange.Release(alloc.IP)
 
 			sv.AllocatedIPs = slices.Delete(sv.AllocatedIPs, allocIdx, allocIdx+1)
 			return nil
@@ -493,10 +483,7 @@ func (ipam *LBIPAM) stripInvalidAllocations(sv *ServiceView) error {
 		// If origin pool no longer exists, remove allocation
 		pool, found := ipam.pools[alloc.Origin.originPool]
 		if !found {
-			err := releaseAllocIP()
-			if err != nil {
-				errors = append(errors, err)
-			}
+			errs = errors.Join(errs, releaseAllocIP())
 			continue
 		}
 
@@ -504,15 +491,12 @@ func (ipam *LBIPAM) stripInvalidAllocations(sv *ServiceView) error {
 		if pool.Spec.ServiceSelector != nil {
 			selector, err := slim_meta_v1.LabelSelectorAsSelector(pool.Spec.ServiceSelector)
 			if err != nil {
-				errors = append(errors, fmt.Errorf("Making selector from pool '%s' label selector", pool.Name))
+				errs = errors.Join(errs, fmt.Errorf("Making selector from pool '%s' label selector", pool.Name))
 				continue
 			}
 
 			if !selector.Matches(sv.Labels) {
-				err := releaseAllocIP()
-				if err != nil {
-					errors = append(errors, err)
-				}
+				errs = errors.Join(errs, releaseAllocIP())
 				continue
 			}
 		}
@@ -528,10 +512,7 @@ func (ipam *LBIPAM) stripInvalidAllocations(sv *ServiceView) error {
 			}
 			// If allocated IP has not been requested, remove it
 			if !found {
-				err := releaseAllocIP()
-				if err != nil {
-					errors = append(errors, err)
-				}
+				errs = errors.Join(errs, releaseAllocIP())
 				continue
 			}
 		} else {
@@ -540,31 +521,20 @@ func (ipam *LBIPAM) stripInvalidAllocations(sv *ServiceView) error {
 			if isIPv6(alloc.IP) {
 				// Service has an IPv6 address, but its spec doesn't request it anymore, so take it away
 				if !sv.RequestedFamilies.IPv6 {
-					err := releaseAllocIP()
-					if err != nil {
-						errors = append(errors, err)
-					}
+					errs = errors.Join(errs, releaseAllocIP())
 					continue
 				}
 
 			} else {
 				// Service has an IPv4 address, but its spec doesn't request it anymore, so take it away
 				if !sv.RequestedFamilies.IPv4 {
-					err := releaseAllocIP()
-					if err != nil {
-						errors = append(errors, err)
-					}
+					errs = errors.Join(errs, releaseAllocIP())
 					continue
 				}
 			}
 		}
 	}
-
-	if len(errors) > 0 {
-		return multierr.Combine(errors...)
-	}
-
-	return nil
+	return errs
 }
 
 func (ipam *LBIPAM) stripOrImportIngresses(sv *ServiceView) (statusModified bool, err error) {
@@ -690,23 +660,18 @@ func getSVCRequestedIPs(svc *slim_core_v1.Service) []net.IP {
 	})
 }
 
-func (ipam *LBIPAM) handleDeletedService(svc *slim_core_v1.Service) error {
+func (ipam *LBIPAM) handleDeletedService(svc *slim_core_v1.Service) {
 	key := resource.NewKey(svc)
 	sv, found, _ := ipam.serviceStore.GetService(key)
 	if !found {
-		return nil
+		return
 	}
 
 	for _, alloc := range sv.AllocatedIPs {
-		err := alloc.Origin.allocRange.Release(alloc.IP)
-		if err != nil {
-			return fmt.Errorf("alloc range release: %w", err)
-		}
+		alloc.Origin.allocRange.Release(alloc.IP)
 	}
 
 	ipam.serviceStore.Delete(key)
-
-	return nil
 }
 
 // satisfyServices attempts to satisfy all unsatisfied services by allocating and assigning IP addresses

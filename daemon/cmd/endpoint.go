@@ -15,9 +15,11 @@ import (
 
 	"github.com/go-openapi/runtime/middleware"
 	"github.com/sirupsen/logrus"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/cilium/cilium/api/v1/models"
 	. "github.com/cilium/cilium/api/v1/server/restapi/endpoint"
+	"github.com/cilium/cilium/daemon/restapi"
 	"github.com/cilium/cilium/pkg/annotation"
 	"github.com/cilium/cilium/pkg/api"
 	"github.com/cilium/cilium/pkg/bandwidth"
@@ -30,6 +32,8 @@ import (
 	k8sConst "github.com/cilium/cilium/pkg/k8s/apis/cilium.io"
 	"github.com/cilium/cilium/pkg/k8s/client"
 	slim_corev1 "github.com/cilium/cilium/pkg/k8s/slim/k8s/api/core/v1"
+	slimclientset "github.com/cilium/cilium/pkg/k8s/slim/k8s/client/clientset/versioned"
+	"github.com/cilium/cilium/pkg/k8s/watchers"
 	"github.com/cilium/cilium/pkg/labels"
 	"github.com/cilium/cilium/pkg/labelsfilter"
 	"github.com/cilium/cilium/pkg/lock"
@@ -41,24 +45,16 @@ import (
 
 var errEndpointNotFound = errors.New("endpoint not found")
 
-type getEndpoint struct {
-	d *Daemon
-}
-
-func NewGetEndpointHandler(d *Daemon) GetEndpointHandler {
-	return &getEndpoint{d: d}
-}
-
-func (h *getEndpoint) Handle(params GetEndpointParams) middleware.Responder {
+func getEndpointHandler(d *Daemon, params GetEndpointParams) middleware.Responder {
 	log.WithField(logfields.Params, logfields.Repr(params)).Debug("GET /endpoint request")
 
-	r, err := h.d.apiLimiterSet.Wait(params.HTTPRequest.Context(), apiRequestEndpointList)
+	r, err := d.apiLimiterSet.Wait(params.HTTPRequest.Context(), restapi.APIRequestEndpointList)
 	if err != nil {
 		return api.Error(http.StatusTooManyRequests, err)
 	}
 	defer r.Done()
 
-	resEPs := h.d.getEndpointList(params)
+	resEPs := d.getEndpointList(params)
 
 	if params.Labels != nil && len(resEPs) == 0 {
 		r.Error(errEndpointNotFound)
@@ -129,24 +125,16 @@ func (d *Daemon) getEndpointList(params GetEndpointParams) []*models.Endpoint {
 	return resEPs
 }
 
-type getEndpointID struct {
-	d *Daemon
-}
-
-func NewGetEndpointIDHandler(d *Daemon) GetEndpointIDHandler {
-	return &getEndpointID{d: d}
-}
-
-func (h *getEndpointID) Handle(params GetEndpointIDParams) middleware.Responder {
+func getEndpointIDHandler(d *Daemon, params GetEndpointIDParams) middleware.Responder {
 	log.WithField(logfields.EndpointID, params.ID).Debug("GET /endpoint/{id} request")
 
-	r, err := h.d.apiLimiterSet.Wait(params.HTTPRequest.Context(), apiRequestEndpointGet)
+	r, err := d.apiLimiterSet.Wait(params.HTTPRequest.Context(), restapi.APIRequestEndpointGet)
 	if err != nil {
 		return api.Error(http.StatusTooManyRequests, err)
 	}
 	defer r.Done()
 
-	ep, err := h.d.endpointManager.Lookup(params.ID)
+	ep, err := d.endpointManager.Lookup(params.ID)
 
 	if err != nil {
 		r.Error(err)
@@ -159,24 +147,12 @@ func (h *getEndpointID) Handle(params GetEndpointIDParams) middleware.Responder 
 	}
 }
 
-type putEndpointID struct {
-	d *Daemon
-}
-
-func NewPutEndpointIDHandler(d *Daemon) PutEndpointIDHandler {
-	return &putEndpointID{d: d}
-}
-
-// fetchK8sLabelsAndAnnotations wraps the k8s package to fetch and provide
+// fetchK8sMetadataForEndpoint wraps the k8s package to fetch and provide
 // endpoint metadata. It implements endpoint.MetadataResolverCB.
 // The returned pod is deepcopied which means the its fields can be written
 // into.
-func (d *Daemon) fetchK8sLabelsAndAnnotations(nsName, podName string) (*slim_corev1.Pod, []slim_corev1.ContainerPort, labels.Labels, labels.Labels, map[string]string, error) {
-	p, err := d.k8sWatcher.GetCachedPod(nsName, podName)
-	if err != nil {
-		return nil, nil, nil, nil, nil, err
-	}
-	ns, err := d.k8sWatcher.GetCachedNamespace(nsName)
+func (d *Daemon) fetchK8sMetadataForEndpoint(nsName, podName string) (*slim_corev1.Pod, []slim_corev1.ContainerPort, labels.Labels, labels.Labels, map[string]string, error) {
+	ns, p, err := d.endpointMetadataFetcher.Fetch(nsName, podName)
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
 	}
@@ -189,6 +165,38 @@ func (d *Daemon) fetchK8sLabelsAndAnnotations(nsName, podName string) (*slim_cor
 	k8sLbls := labels.Map2Labels(lbls, labels.LabelSourceK8s)
 	identityLabels, infoLabels := labelsfilter.Filter(k8sLbls)
 	return p, containerPorts, identityLabels, infoLabels, annotations, nil
+}
+
+type cachedEndpointMetadataFetcher struct {
+	k8sWatcher *watchers.K8sWatcher
+}
+
+func (cemf *cachedEndpointMetadataFetcher) Fetch(nsName, podName string) (*slim_corev1.Namespace, *slim_corev1.Pod, error) {
+	p, err := cemf.k8sWatcher.GetCachedPod(nsName, podName)
+	if err != nil {
+		return nil, nil, err
+	}
+	ns, err := cemf.k8sWatcher.GetCachedNamespace(nsName)
+	if err != nil {
+		return nil, nil, err
+	}
+	return ns, p, err
+}
+
+type uncachedEndpointMetadataFetcher struct {
+	slimcli slimclientset.Interface
+}
+
+func (uemf *uncachedEndpointMetadataFetcher) Fetch(nsName, podName string) (*slim_corev1.Namespace, *slim_corev1.Pod, error) {
+	p, err := uemf.slimcli.CoreV1().Pods(nsName).Get(context.TODO(), podName, metav1.GetOptions{})
+	if err != nil {
+		return nil, nil, err
+	}
+	ns, err := uemf.slimcli.CoreV1().Namespaces().Get(context.TODO(), nsName, metav1.GetOptions{})
+	if err != nil {
+		return nil, nil, err
+	}
+	return ns, p, err
 }
 
 func invalidDataError(ep *endpoint.Endpoint, err error) (*endpoint.Endpoint, int, error) {
@@ -389,14 +397,12 @@ func (d *Daemon) createEndpoint(ctx context.Context, owner regeneration.Owner, e
 	defer d.endpointCreations.EndCreateRequest(ep)
 
 	if ep.K8sNamespaceAndPodNameIsSet() && d.clientset.IsEnabled() {
-		pod, cp, identityLabels, info, annotations, err := d.fetchK8sLabelsAndAnnotations(ep.K8sNamespace, ep.K8sPodName)
+		pod, cp, identityLabels, info, annotations, err := d.fetchK8sMetadataForEndpoint(ep.K8sNamespace, ep.K8sPodName)
 		if err != nil {
 			ep.Logger("api").WithError(err).Warning("Unable to fetch kubernetes labels")
 		} else {
 			ep.SetPod(pod)
-			if err := ep.SetK8sMetadata(cp); err != nil {
-				return invalidDataError(ep, fmt.Errorf("Invalid ContainerPorts %v: %s", cp, err))
-			}
+			ep.SetK8sMetadata(cp)
 			addLabels.MergeLabels(identityLabels)
 			infoLabels.MergeLabels(info)
 			if _, ok := annotations[bandwidth.IngressBandwidth]; ok {
@@ -436,7 +442,7 @@ func (d *Daemon) createEndpoint(ctx context.Context, owner regeneration.Owner, e
 		// If there are labels, but no pod namespace, then it's
 		// likely that there are no k8s labels at all. Resolve.
 		if _, k8sLabelsConfigured = addLabels[k8sConst.PodNamespaceLabel]; !k8sLabelsConfigured {
-			ep.RunMetadataResolver(d.fetchK8sLabelsAndAnnotations)
+			ep.RunMetadataResolver(d.fetchK8sMetadataForEndpoint)
 		}
 	}
 
@@ -452,7 +458,7 @@ func (d *Daemon) createEndpoint(ctx context.Context, owner regeneration.Owner, e
 	// manager creates the endpoint queue the operation will fail.
 	if ep.K8sNamespaceAndPodNameIsSet() && d.clientset.IsEnabled() && k8sLabelsConfigured {
 		ep.UpdateVisibilityPolicy(func(ns, podName string) (proxyVisibility string, err error) {
-			p, err := d.k8sWatcher.GetCachedPod(ns, podName)
+			_, p, err := d.endpointMetadataFetcher.Fetch(ns, podName)
 			if err != nil {
 				return "", err
 			}
@@ -460,14 +466,14 @@ func (d *Daemon) createEndpoint(ctx context.Context, owner regeneration.Owner, e
 			return value, nil
 		})
 		ep.UpdateBandwidthPolicy(func(ns, podName string) (bandwidthEgress string, err error) {
-			p, err := d.k8sWatcher.GetCachedPod(ns, podName)
+			_, p, err := d.endpointMetadataFetcher.Fetch(ns, podName)
 			if err != nil {
 				return "", err
 			}
 			return p.Annotations[bandwidth.EgressBandwidth], nil
 		})
 		ep.UpdateNoTrackRules(func(ns, podName string) (noTrackPort string, err error) {
-			p, err := d.k8sWatcher.GetCachedPod(ns, podName)
+			_, p, err := d.endpointMetadataFetcher.Fetch(ns, podName)
 			if err != nil {
 				return "", err
 			}
@@ -510,14 +516,16 @@ func (d *Daemon) createEndpoint(ctx context.Context, owner regeneration.Owner, e
 	if addressing := epTemplate.Addressing; addressing != nil {
 		if uuid := addressing.IPV4ExpirationUUID; uuid != "" {
 			if ip := net.ParseIP(addressing.IPV4); ip != nil {
-				if err := d.ipam.StopExpirationTimer(ip, ipam.PoolDefault, uuid); err != nil {
+				pool := ipam.PoolOrDefault(addressing.IPV4PoolName)
+				if err := d.ipam.StopExpirationTimer(ip, pool, uuid); err != nil {
 					return d.errorDuringCreation(ep, err)
 				}
 			}
 		}
 		if uuid := addressing.IPV6ExpirationUUID; uuid != "" {
 			if ip := net.ParseIP(addressing.IPV6); ip != nil {
-				if err := d.ipam.StopExpirationTimer(ip, ipam.PoolDefault, uuid); err != nil {
+				pool := ipam.PoolOrDefault(addressing.IPV4PoolName)
+				if err := d.ipam.StopExpirationTimer(ip, pool, uuid); err != nil {
 					return d.errorDuringCreation(ep, err)
 				}
 			}
@@ -527,7 +535,7 @@ func (d *Daemon) createEndpoint(ctx context.Context, owner regeneration.Owner, e
 	return ep, 0, nil
 }
 
-func (h *putEndpointID) Handle(params PutEndpointIDParams) (resp middleware.Responder) {
+func putEndpointIDHandler(d *Daemon, params PutEndpointIDParams) (resp middleware.Responder) {
 	if ep := params.Endpoint; ep != nil {
 		log.WithField("endpoint", logfields.Repr(*ep)).Debug("PUT /endpoint/{id} request")
 	} else {
@@ -535,13 +543,13 @@ func (h *putEndpointID) Handle(params PutEndpointIDParams) (resp middleware.Resp
 	}
 	epTemplate := params.Endpoint
 
-	r, err := h.d.apiLimiterSet.Wait(params.HTTPRequest.Context(), apiRequestEndpointCreate)
+	r, err := d.apiLimiterSet.Wait(params.HTTPRequest.Context(), restapi.APIRequestEndpointCreate)
 	if err != nil {
 		return api.Error(http.StatusTooManyRequests, err)
 	}
 	defer r.Done()
 
-	ep, code, err := h.d.createEndpoint(params.HTTPRequest.Context(), h.d, epTemplate)
+	ep, code, err := d.createEndpoint(params.HTTPRequest.Context(), d, epTemplate)
 	if err != nil {
 		r.Error(err)
 		return api.Error(code, err)
@@ -550,14 +558,6 @@ func (h *putEndpointID) Handle(params PutEndpointIDParams) (resp middleware.Resp
 	ep.Logger(daemonSubsys).Info("Successful endpoint creation")
 
 	return NewPutEndpointIDCreated()
-}
-
-type patchEndpointID struct {
-	d *Daemon
-}
-
-func NewPatchEndpointIDHandler(d *Daemon) PatchEndpointIDHandler {
-	return &patchEndpointID{d: d}
 }
 
 // validPatchTransitionState checks whether the state to which the provided
@@ -573,14 +573,14 @@ func validPatchTransitionState(state *models.EndpointState) bool {
 	return false
 }
 
-func (h *patchEndpointID) Handle(params PatchEndpointIDParams) middleware.Responder {
+func patchEndpointIDHandler(d *Daemon, params PatchEndpointIDParams) middleware.Responder {
 	scopedLog := log.WithField(logfields.Params, logfields.Repr(params))
 	if ep := params.Endpoint; ep != nil {
 		scopedLog = scopedLog.WithField("endpoint", logfields.Repr(*ep))
 	}
 	scopedLog.Debug("PATCH /endpoint/{id} request")
 
-	r, err := h.d.apiLimiterSet.Wait(params.HTTPRequest.Context(), apiRequestEndpointPatch)
+	r, err := d.apiLimiterSet.Wait(params.HTTPRequest.Context(), restapi.APIRequestEndpointPatch)
 	if err != nil {
 		return api.Error(http.StatusTooManyRequests, err)
 	}
@@ -600,7 +600,7 @@ func (h *patchEndpointID) Handle(params PatchEndpointIDParams) middleware.Respon
 
 	// Validate the template. Assignment afterwards is atomic.
 	// Note: newEp's labels are ignored.
-	newEp, err2 := endpoint.NewEndpointFromChangeModel(h.d.ctx, h.d, h.d, h.d.ipcache, h.d.l7Proxy, h.d.identityAllocator, epTemplate)
+	newEp, err2 := endpoint.NewEndpointFromChangeModel(d.ctx, d, d, d.ipcache, d.l7Proxy, d.identityAllocator, epTemplate)
 	if err2 != nil {
 		r.Error(err2)
 		return api.Error(PutEndpointIDInvalidCode, err2)
@@ -616,7 +616,7 @@ func (h *patchEndpointID) Handle(params PatchEndpointIDParams) middleware.Respon
 		validStateTransition = true
 	}
 
-	ep, err := h.d.endpointManager.Lookup(params.ID)
+	ep, err := d.endpointManager.Lookup(params.ID)
 	if err != nil {
 		r.Error(err)
 		return api.Error(GetEndpointIDInvalidCode, err)
@@ -727,13 +727,13 @@ func (d *Daemon) EndpointDeleted(ep *endpoint.Endpoint, conf endpoint.DeleteConf
 
 	if !conf.NoIPRelease {
 		if option.Config.EnableIPv4 {
-			if err := d.ipam.ReleaseIP(ep.IPv4.AsSlice(), ipam.PoolDefault); err != nil {
+			if err := d.ipam.ReleaseIP(ep.IPv4.AsSlice(), ipam.PoolOrDefault(ep.IPv4IPAMPool)); err != nil {
 				scopedLog := ep.Logger(daemonSubsys).WithError(err)
 				scopedLog.Warning("Unable to release IPv4 address during endpoint deletion")
 			}
 		}
 		if option.Config.EnableIPv6 {
-			if err := d.ipam.ReleaseIP(ep.IPv6.AsSlice(), ipam.PoolDefault); err != nil {
+			if err := d.ipam.ReleaseIP(ep.IPv6.AsSlice(), ipam.PoolOrDefault(ep.IPv6IPAMPool)); err != nil {
 				scopedLog := ep.Logger(daemonSubsys).WithError(err)
 				scopedLog.Warning("Unable to release IPv6 address during endpoint deletion")
 			}
@@ -751,24 +751,15 @@ func (d *Daemon) EndpointCreated(ep *endpoint.Endpoint) {
 	d.SendNotification(monitorAPI.EndpointCreateMessage(ep))
 }
 
-type deleteEndpointID struct {
-	daemon *Daemon
-}
-
-func NewDeleteEndpointIDHandler(d *Daemon) DeleteEndpointIDHandler {
-	return &deleteEndpointID{daemon: d}
-}
-
-func (h *deleteEndpointID) Handle(params DeleteEndpointIDParams) middleware.Responder {
+func deleteEndpointIDHandler(d *Daemon, params DeleteEndpointIDParams) middleware.Responder {
 	log.WithField(logfields.Params, logfields.Repr(params)).Debug("DELETE /endpoint/{id} request")
 
-	r, err := h.daemon.apiLimiterSet.Wait(params.HTTPRequest.Context(), apiRequestEndpointDelete)
+	r, err := d.apiLimiterSet.Wait(params.HTTPRequest.Context(), restapi.APIRequestEndpointDelete)
 	if err != nil {
 		return api.Error(http.StatusTooManyRequests, err)
 	}
 	defer r.Done()
 
-	d := h.daemon
 	if nerr, err := d.DeleteEndpoint(params.ID); err != nil {
 		r.Error(err)
 		if apierr, ok := err.(*api.APIError); ok {
@@ -808,24 +799,15 @@ func (d *Daemon) EndpointUpdate(id string, cfg *models.EndpointConfigurationSpec
 	return nil
 }
 
-type patchEndpointIDConfig struct {
-	daemon *Daemon
-}
-
-func NewPatchEndpointIDConfigHandler(d *Daemon) PatchEndpointIDConfigHandler {
-	return &patchEndpointIDConfig{daemon: d}
-}
-
-func (h *patchEndpointIDConfig) Handle(params PatchEndpointIDConfigParams) middleware.Responder {
+func patchEndpointIDConfigHandler(d *Daemon, params PatchEndpointIDConfigParams) middleware.Responder {
 	log.WithField(logfields.Params, logfields.Repr(params)).Debug("PATCH /endpoint/{id}/config request")
 
-	r, err := h.daemon.apiLimiterSet.Wait(params.HTTPRequest.Context(), apiRequestEndpointPatch)
+	r, err := d.apiLimiterSet.Wait(params.HTTPRequest.Context(), restapi.APIRequestEndpointPatch)
 	if err != nil {
 		return api.Error(http.StatusTooManyRequests, err)
 	}
 	defer r.Done()
 
-	d := h.daemon
 	if err := d.EndpointUpdate(params.ID, params.EndpointConfiguration); err != nil {
 		r.Error(err)
 		if apierr, ok := err.(*api.APIError); ok {
@@ -837,24 +819,16 @@ func (h *patchEndpointIDConfig) Handle(params PatchEndpointIDConfigParams) middl
 	return NewPatchEndpointIDConfigOK()
 }
 
-type getEndpointIDConfig struct {
-	daemon *Daemon
-}
-
-func NewGetEndpointIDConfigHandler(d *Daemon) GetEndpointIDConfigHandler {
-	return &getEndpointIDConfig{daemon: d}
-}
-
-func (h *getEndpointIDConfig) Handle(params GetEndpointIDConfigParams) middleware.Responder {
+func getEndpointIDConfigHandler(d *Daemon, params GetEndpointIDConfigParams) middleware.Responder {
 	log.WithField(logfields.Params, logfields.Repr(params)).Debug("GET /endpoint/{id}/config")
 
-	r, err := h.daemon.apiLimiterSet.Wait(params.HTTPRequest.Context(), apiRequestEndpointGet)
+	r, err := d.apiLimiterSet.Wait(params.HTTPRequest.Context(), restapi.APIRequestEndpointGet)
 	if err != nil {
 		return api.Error(http.StatusTooManyRequests, err)
 	}
 	defer r.Done()
 
-	ep, err := h.daemon.endpointManager.Lookup(params.ID)
+	ep, err := d.endpointManager.Lookup(params.ID)
 	if err != nil {
 		r.Error(err)
 		return api.Error(GetEndpointIDInvalidCode, err)
@@ -868,24 +842,16 @@ func (h *getEndpointIDConfig) Handle(params GetEndpointIDConfigParams) middlewar
 	}
 }
 
-type getEndpointIDLabels struct {
-	daemon *Daemon
-}
-
-func NewGetEndpointIDLabelsHandler(d *Daemon) GetEndpointIDLabelsHandler {
-	return &getEndpointIDLabels{daemon: d}
-}
-
-func (h *getEndpointIDLabels) Handle(params GetEndpointIDLabelsParams) middleware.Responder {
+func getEndpointIDLabelsHandler(d *Daemon, params GetEndpointIDLabelsParams) middleware.Responder {
 	log.WithField(logfields.Params, logfields.Repr(params)).Debug("GET /endpoint/{id}/labels")
 
-	r, err := h.daemon.apiLimiterSet.Wait(params.HTTPRequest.Context(), apiRequestEndpointGet)
+	r, err := d.apiLimiterSet.Wait(params.HTTPRequest.Context(), restapi.APIRequestEndpointGet)
 	if err != nil {
 		return api.Error(http.StatusTooManyRequests, err)
 	}
 	defer r.Done()
 
-	ep, err := h.daemon.endpointManager.Lookup(params.ID)
+	ep, err := d.endpointManager.Lookup(params.ID)
 	if err != nil {
 		r.Error(err)
 		return api.Error(GetEndpointIDInvalidCode, err)
@@ -904,24 +870,16 @@ func (h *getEndpointIDLabels) Handle(params GetEndpointIDLabelsParams) middlewar
 	return NewGetEndpointIDLabelsOK().WithPayload(cfg)
 }
 
-type getEndpointIDLog struct {
-	d *Daemon
-}
-
-func NewGetEndpointIDLogHandler(d *Daemon) GetEndpointIDLogHandler {
-	return &getEndpointIDLog{d: d}
-}
-
-func (h *getEndpointIDLog) Handle(params GetEndpointIDLogParams) middleware.Responder {
+func getEndpointIDLogHandler(d *Daemon, params GetEndpointIDLogParams) middleware.Responder {
 	log.WithField(logfields.EndpointID, params.ID).Debug("GET /endpoint/{id}/log request")
 
-	r, err := h.d.apiLimiterSet.Wait(params.HTTPRequest.Context(), apiRequestEndpointGet)
+	r, err := d.apiLimiterSet.Wait(params.HTTPRequest.Context(), restapi.APIRequestEndpointGet)
 	if err != nil {
 		return api.Error(http.StatusTooManyRequests, err)
 	}
 	defer r.Done()
 
-	ep, err := h.d.endpointManager.Lookup(params.ID)
+	ep, err := d.endpointManager.Lookup(params.ID)
 
 	if err != nil {
 		r.Error(err)
@@ -934,24 +892,16 @@ func (h *getEndpointIDLog) Handle(params GetEndpointIDLogParams) middleware.Resp
 	}
 }
 
-type getEndpointIDHealthz struct {
-	d *Daemon
-}
-
-func NewGetEndpointIDHealthzHandler(d *Daemon) GetEndpointIDHealthzHandler {
-	return &getEndpointIDHealthz{d: d}
-}
-
-func (h *getEndpointIDHealthz) Handle(params GetEndpointIDHealthzParams) middleware.Responder {
+func getEndpointIDHealthzHandler(d *Daemon, params GetEndpointIDHealthzParams) middleware.Responder {
 	log.WithField(logfields.EndpointID, params.ID).Debug("GET /endpoint/{id}/log request")
 
-	r, err := h.d.apiLimiterSet.Wait(params.HTTPRequest.Context(), apiRequestEndpointGet)
+	r, err := d.apiLimiterSet.Wait(params.HTTPRequest.Context(), restapi.APIRequestEndpointGet)
 	if err != nil {
 		return api.Error(http.StatusTooManyRequests, err)
 	}
 	defer r.Done()
 
-	ep, err := h.d.endpointManager.Lookup(params.ID)
+	ep, err := d.endpointManager.Lookup(params.ID)
 
 	if err != nil {
 		r.Error(err)
@@ -998,24 +948,15 @@ func (d *Daemon) modifyEndpointIdentityLabelsFromAPI(id string, add, del labels.
 	return PatchEndpointIDLabelsOKCode, nil
 }
 
-type putEndpointIDLabels struct {
-	daemon *Daemon
-}
-
-func NewPatchEndpointIDLabelsHandler(d *Daemon) PatchEndpointIDLabelsHandler {
-	return &putEndpointIDLabels{daemon: d}
-}
-
-func (h *putEndpointIDLabels) Handle(params PatchEndpointIDLabelsParams) middleware.Responder {
+func putEndpointIDLabelsHandler(d *Daemon, params PatchEndpointIDLabelsParams) middleware.Responder {
 	log.WithField(logfields.Params, logfields.Repr(params)).Debug("PATCH /endpoint/{id}/labels request")
 
-	r, err := h.daemon.apiLimiterSet.Wait(params.HTTPRequest.Context(), apiRequestEndpointPatch)
+	r, err := d.apiLimiterSet.Wait(params.HTTPRequest.Context(), restapi.APIRequestEndpointPatch)
 	if err != nil {
 		return api.Error(http.StatusTooManyRequests, err)
 	}
 	defer r.Done()
 
-	d := h.daemon
 	mod := params.Configuration
 	lbls := labels.NewLabelsFromModel(mod.User)
 

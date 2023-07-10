@@ -149,6 +149,9 @@ to create a Kubernetes cluster locally or using a managed Kubernetes service:
           ``minikube ssh -- sudo mount bpffs -t bpf /sys/fs/bpf`` in order to mount the BPF filesystem
           ``bpffs`` to ``/sys/fs/bpf``.
 
+          It might be necessary to add ``--host-dns-resolver=false`` if using the Virtualbox provider,
+          otherwise DNS resolution may not work after Cilium installation.
+
     .. group-tab:: Rancher Desktop
 
        Install Rancher Desktop >= v1.1.0 as per Rancher Desktop documentation:
@@ -232,7 +235,7 @@ You can install Cilium on any Kubernetes cluster. Pick one of the options below:
 
        .. code-block:: shell-session
 
-           cilium install --azure-resource-group "${AZURE_RESOURCE_GROUP}"
+           cilium install --set azure.resourceGroup="${AZURE_RESOURCE_GROUP}"
 
        The Cilium CLI will automatically install Cilium using one of the
        following installation modes based on the ``--network-plugin``

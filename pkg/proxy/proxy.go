@@ -21,6 +21,7 @@ import (
 	"github.com/cilium/cilium/pkg/node"
 	"github.com/cilium/cilium/pkg/option"
 	"github.com/cilium/cilium/pkg/policy"
+	"github.com/cilium/cilium/pkg/proxy/endpoint"
 	"github.com/cilium/cilium/pkg/proxy/logger"
 	"github.com/cilium/cilium/pkg/rand"
 	"github.com/cilium/cilium/pkg/revert"
@@ -101,10 +102,11 @@ type ProxyPort struct {
 // Proxy maintains state about redirects
 type Proxy struct {
 	*envoy.XDSServer
+	accessLogServer *envoy.AccessLogServer
 
-	// stateDir is the path of the directory where the state of L7 proxies is
+	// runDir is the path of the directory where the state of L7 proxies is
 	// stored.
-	stateDir string
+	runDir string
 
 	// mutex is the lock required when modifying any proxy datastructure
 	mutex lock.RWMutex
@@ -132,33 +134,15 @@ type Proxy struct {
 
 	// defaultEndpointInfoRegistry is the default instance implementing the
 	// EndpointInfoRegistry interface.
-	defaultEndpointInfoRegistry *endpointInfoRegistry
+	defaultEndpointInfoRegistry logger.EndpointInfoRegistry
 }
 
-// StartProxySupport starts the servers to support L7 proxies: xDS GRPC server
-// and access log server.
-func StartProxySupport(minPort uint16, maxPort uint16, stateDir string,
-	accessLogNotifier logger.LogRecordNotifier, accessLogMetadata []string,
-	datapathUpdater DatapathUpdater, mgr EndpointLookup,
-	ipcache IPCacheManager) *Proxy {
-	endpointManager = mgr
-	eir := newEndpointInfoRegistry(ipcache)
-	logger.SetEndpointInfoRegistry(eir)
-	xdsServer := envoy.StartXDSServer(ipcache, stateDir)
-
-	if accessLogNotifier != nil {
-		logger.SetNotifier(accessLogNotifier)
-	}
-
-	if len(accessLogMetadata) > 0 {
-		logger.SetMetadata(accessLogMetadata)
-	}
-
-	envoy.StartAccessLogServer(stateDir, xdsServer)
+func createProxy(minPort uint16, maxPort uint16, runDir string,
+	datapathUpdater DatapathUpdater, ipcache IPCacheManager,
+	eir logger.EndpointInfoRegistry) *Proxy {
 
 	return &Proxy{
-		XDSServer:                   xdsServer,
-		stateDir:                    stateDir,
+		runDir:                      runDir,
 		rangeMin:                    minPort,
 		rangeMax:                    maxPort,
 		redirects:                   make(map[string]*Redirect),
@@ -170,13 +154,13 @@ func StartProxySupport(minPort uint16, maxPort uint16, stateDir string,
 
 // Overload XDSServer.UpsertEnvoyResources to start Envoy on demand
 func (p *Proxy) UpsertEnvoyResources(ctx context.Context, resources envoy.Resources, portAllocator envoy.PortAllocator) error {
-	startEnvoy(p.stateDir, p.XDSServer, nil)
+	initEnvoy(p.runDir, p.XDSServer, nil)
 	return p.XDSServer.UpsertEnvoyResources(ctx, resources, portAllocator)
 }
 
 // Overload XDSServer.UpdateEnvoyResources to start Envoy on demand
 func (p *Proxy) UpdateEnvoyResources(ctx context.Context, old, new envoy.Resources, portAllocator envoy.PortAllocator) error {
-	startEnvoy(p.stateDir, p.XDSServer, nil)
+	initEnvoy(p.runDir, p.XDSServer, nil)
 	return p.XDSServer.UpdateEnvoyResources(ctx, old, new, portAllocator)
 }
 
@@ -206,6 +190,7 @@ var (
 		DNSProxyName: {
 			proxyType: ProxyTypeDNS,
 			ingress:   false,
+			localOnly: true,
 		},
 		"cilium-proxylib-egress": {
 			proxyType: ProxyTypeAny,
@@ -491,7 +476,7 @@ func (p *Proxy) ReinstallRules(ctx context.Context) error {
 // - finalizeFunc to make the changes stick, or
 // - revertFunc to cancel the changes.
 // Called with 'localEndpoint' locked!
-func (p *Proxy) CreateOrUpdateRedirect(ctx context.Context, l4 policy.ProxyPolicy, id string, localEndpoint logger.EndpointUpdater,
+func (p *Proxy) CreateOrUpdateRedirect(ctx context.Context, l4 policy.ProxyPolicy, id string, localEndpoint endpoint.EndpointUpdater,
 	wg *completion.WaitGroup) (proxyPort uint16, err error, finalizeFunc revert.FinalizeFunc, revertFunc revert.RevertFunc) {
 
 	p.mutex.Lock()
@@ -506,7 +491,6 @@ func (p *Proxy) CreateOrUpdateRedirect(ctx context.Context, l4 policy.ProxyPolic
 	scopedLog := log.WithField(fieldProxyRedirectID, id)
 
 	var revertStack revert.RevertStack
-	revertFunc = revertStack.Revert
 	defer func() {
 		if err != nil {
 			// We ignore errors while reverting. This is best-effort.
@@ -514,15 +498,23 @@ func (p *Proxy) CreateOrUpdateRedirect(ctx context.Context, l4 policy.ProxyPolic
 			// some functions in the revert stack (like removeRevertFunc)
 			// require it
 			p.mutex.Unlock()
-			revertFunc()
+			revertStack.Revert()
 			p.mutex.Lock()
+			finalizeFunc = nil
+			revertFunc = nil
+		} else {
+			revertFunc = revertStack.Revert
 		}
 	}()
+
+	proxyPortsMutex.Lock()
+	defer proxyPortsMutex.Unlock()
 
 	if redir, ok := p.redirects[id]; ok {
 		redir.mutex.Lock()
 
-		if redir.listener.proxyType == ProxyType(l4.GetL7Parser()) {
+		// Only consider configured (but not necessarily acked) proxy ports for update
+		if redir.listener.configured && redir.listener.proxyType == ProxyType(l4.GetL7Parser()) {
 			updateRevertFunc := redir.updateRules(l4)
 			revertStack.Push(updateRevertFunc)
 			var implUpdateRevertFunc revert.RevertFunc
@@ -544,6 +536,7 @@ func (p *Proxy) CreateOrUpdateRedirect(ctx context.Context, l4 policy.ProxyPolic
 			return
 		}
 
+		// Stale or incompatible redirects get removed before a new one is created below
 		var removeRevertFunc revert.RevertFunc
 		err, finalizeFunc, removeRevertFunc = p.removeRedirect(id, wg)
 		redir.mutex.Unlock()
@@ -556,8 +549,6 @@ func (p *Proxy) CreateOrUpdateRedirect(ctx context.Context, l4 policy.ProxyPolic
 		revertStack.Push(removeRevertFunc)
 	}
 
-	proxyPortsMutex.Lock()
-	defer proxyPortsMutex.Unlock()
 	ppName, pp := findProxyPortByType(ProxyType(l4.GetL7Parser()), l4.GetListener(), l4.GetIngress())
 	if pp == nil {
 		err = proxyTypeNotFoundError(ProxyType(l4.GetL7Parser()), l4.GetListener(), l4.GetIngress())
@@ -570,16 +561,19 @@ func (p *Proxy) CreateOrUpdateRedirect(ctx context.Context, l4 policy.ProxyPolic
 
 	for nRetry := 0; nRetry < redirectCreationAttempts; nRetry++ {
 		if nRetry > 0 {
-			// an error occurred and we can retry
+			// an error occurred and we are retrying
 			scopedLog.WithError(err).Warningf("Unable to create %s proxy, retrying", ppName)
-			if option.Config.ToFQDNsProxyPort == 0 {
+		}
+		if !pp.configured {
+			if nRetry > 0 {
+				// Retry with a new proxy port in case there was a conflict with the
+				// previous one when the port has not been `configured` yet.
+				// The incremented port number here is just a hint to allocatePort()
+				// below, it will check if it is available for use.
 				pp.proxyPort++
 			}
-		}
 
-		if !pp.configured {
-			// Try allocate (the configured) port, but only if the proxy has not
-			// been already configured.
+			// Check if pp.proxyPort is available and find an another available proxy port if not.
 			pp.proxyPort, err = allocatePort(pp.proxyPort, p.rangeMin, p.rangeMax)
 			if err != nil {
 				return 0, err, nil, nil
@@ -596,7 +590,7 @@ func (p *Proxy) CreateOrUpdateRedirect(ctx context.Context, l4 policy.ProxyPolic
 				err = nil
 			} else {
 				// create an Envoy Listener for Cilium policy enforcement
-				redir.implementation, err = createEnvoyRedirect(redir, p.stateDir, p.XDSServer, p.datapathUpdater.SupportsOriginalSourceAddr(), wg)
+				redir.implementation, err = createEnvoyRedirect(redir, p.runDir, p.XDSServer, p.datapathUpdater.SupportsOriginalSourceAddr(), wg)
 			}
 		}
 
@@ -715,8 +709,9 @@ func (p *Proxy) removeRedirect(id string, wg *completion.WaitGroup) (err error, 
 
 // ChangeLogLevel changes proxy log level to correspond to the logrus log level 'level'.
 func ChangeLogLevel(level logrus.Level) {
-	if envoyProxy != nil {
-		envoyProxy.ChangeLogLevel(level)
+	if envoyAdminClient != nil {
+		err := envoyAdminClient.ChangeLogLevel(level)
+		log.WithError(err).Debug("failed to change log level in Envoy")
 	}
 }
 
@@ -744,6 +739,10 @@ func (p *Proxy) GetStatusModel() *models.ProxyStatus {
 			ProxyPort: int64(redirect.listener.rulesPort),
 		})
 	}
+	result.EnvoyDeploymentMode = "embedded"
+	if option.Config.ExternalEnvoyProxy {
+		result.EnvoyDeploymentMode = "external"
+	}
 	return result
 }
 
@@ -760,11 +759,6 @@ func (p *Proxy) updateRedirectMetrics() {
 }
 
 // UpdateNetworkPolicy must update the redirect configuration of an endpoint in the proxy
-func (p *Proxy) UpdateNetworkPolicy(ep logger.EndpointUpdater, vis *policy.VisibilityPolicy, policy *policy.L4Policy, ingressPolicyEnforced, egressPolicyEnforced bool, wg *completion.WaitGroup) (error, func() error) {
+func (p *Proxy) UpdateNetworkPolicy(ep endpoint.EndpointUpdater, vis *policy.VisibilityPolicy, policy *policy.L4Policy, ingressPolicyEnforced, egressPolicyEnforced bool, wg *completion.WaitGroup) (error, func() error) {
 	return p.XDSServer.UpdateNetworkPolicy(ep, vis, policy, ingressPolicyEnforced, egressPolicyEnforced, wg)
-}
-
-// UseCurrentNetworkPolicy inserts a Completion to the WaitGroup if the current network policy has not yet been acked
-func (p *Proxy) UseCurrentNetworkPolicy(ep logger.EndpointUpdater, policy *policy.L4Policy, wg *completion.WaitGroup) {
-	p.XDSServer.UseCurrentNetworkPolicy(ep, policy, wg)
 }

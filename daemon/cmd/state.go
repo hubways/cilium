@@ -18,6 +18,8 @@ import (
 	"github.com/cilium/cilium/pkg/controller"
 	"github.com/cilium/cilium/pkg/endpoint"
 	"github.com/cilium/cilium/pkg/ipam"
+	ipamOption "github.com/cilium/cilium/pkg/ipam/option"
+	slim_corev1 "github.com/cilium/cilium/pkg/k8s/slim/k8s/api/core/v1"
 	"github.com/cilium/cilium/pkg/k8s/watchers/resources"
 	"github.com/cilium/cilium/pkg/labels"
 	"github.com/cilium/cilium/pkg/logging/logfields"
@@ -65,14 +67,8 @@ func (d *Daemon) validateEndpoint(ep *endpoint.Endpoint) (valid bool, err error)
 	}
 
 	if ep.K8sPodName != "" && ep.K8sNamespace != "" && d.clientset.IsEnabled() {
-		d.k8sWatcher.WaitForCacheSync(resources.K8sAPIGroupPodV1Core)
-		pod, err := d.k8sWatcher.GetCachedPod(ep.K8sNamespace, ep.K8sPodName)
-		if err != nil && k8serrors.IsNotFound(err) {
-			return false, fmt.Errorf("Kubernetes pod %s/%s does not exist", ep.K8sNamespace, ep.K8sPodName)
-		} else if err == nil && pod.Spec.NodeName != nodeTypes.GetName() {
-			// if flag `option.Config.K8sEventHandover` is false and CiliumEndpointCRD is disabled,
-			// `GetCachedPod` may return endpoint has moved to another node.
-			return false, fmt.Errorf("Kubernetes pod %s/%s is not owned by this agent", ep.K8sNamespace, ep.K8sPodName)
+		if err := d.getPodForEndpoint(ep); err != nil {
+			return false, err
 		}
 
 		// Initialize the endpoint's event queue because the following call to
@@ -81,7 +77,7 @@ func (d *Daemon) validateEndpoint(ep *endpoint.Endpoint) (valid bool, err error)
 		// which the endpoint manager will begin processing the events off the
 		// queue.
 		ep.InitEventQueue()
-		ep.RunMetadataResolver(d.fetchK8sLabelsAndAnnotations)
+		ep.RunMetadataResolver(d.fetchK8sMetadataForEndpoint)
 	}
 
 	if err := ep.ValidateConnectorPlumbing(checkLink); err != nil {
@@ -95,6 +91,27 @@ func (d *Daemon) validateEndpoint(ep *endpoint.Endpoint) (valid bool, err error)
 	}
 
 	return true, nil
+}
+
+func (d *Daemon) getPodForEndpoint(ep *endpoint.Endpoint) error {
+	var (
+		pod *slim_corev1.Pod
+		err error
+	)
+	if option.Config.EnableHighScaleIPcache {
+		pod, _, _, _, _, err = d.fetchK8sMetadataForEndpoint(ep.K8sNamespace, ep.K8sPodName)
+	} else {
+		d.k8sWatcher.WaitForCacheSync(resources.K8sAPIGroupPodV1Core)
+		pod, err = d.k8sWatcher.GetCachedPod(ep.K8sNamespace, ep.K8sPodName)
+	}
+	if err != nil && k8serrors.IsNotFound(err) {
+		return fmt.Errorf("Kubernetes pod %s/%s does not exist", ep.K8sNamespace, ep.K8sPodName)
+	} else if err == nil && pod.Spec.NodeName != nodeTypes.GetName() {
+		// if flag `option.Config.K8sEventHandover` is false and CiliumEndpointCRD is disabled,
+		// `GetCachedPod` may return endpoint has moved to another node.
+		return fmt.Errorf("Kubernetes pod %s/%s is not owned by this agent", ep.K8sNamespace, ep.K8sPodName)
+	}
+	return nil
 }
 
 // fetchOldEndpoints reads the list of existing endpoints previously managed by Cilium when it was
@@ -158,10 +175,18 @@ func (d *Daemon) restoreOldEndpoints(state *endpointRestoreState, clean bool) er
 		return nil
 	}
 
+	var emf endpointMetadataFetcher
+	if option.Config.EnableHighScaleIPcache {
+		emf = &uncachedEndpointMetadataFetcher{slimcli: d.clientset.Slim()}
+	} else {
+		emf = &cachedEndpointMetadataFetcher{k8sWatcher: d.k8sWatcher}
+	}
+	d.endpointMetadataFetcher = emf
+
 	log.Info("Restoring endpoints...")
 
 	var (
-		existingEndpoints map[string]*lxcmap.EndpointInfo
+		existingEndpoints map[string]lxcmap.EndpointInfo
 		err               error
 	)
 
@@ -280,7 +305,39 @@ func (d *Daemon) regenerateRestoredEndpoints(state *endpointRestoreState) (resto
 		}
 	}
 
+	if option.Config.EnableIPSec &&
+		(option.Config.IPAM == ipamOption.IPAMENI || option.Config.IPAM == ipamOption.IPAMAzure) {
+		// If IPsec is enabled on EKS or AKS, we need to restore the host
+		// endpoint before any other endpoint, to ensure a dropless upgrade.
+		// This code can be removed in v1.15.
+		// This is necessary because we changed how the IPsec encapsulation is
+		// done. In older version, bpf_lxc would pass the outer destination IP
+		// via skb->cb to bpf_host which would write it to the outer header.
+		// In newer versions, the header is written by the kernel XFRM
+		// subsystem and bpf_host must therefore not write it. To allow for a
+		// smooth upgrade, bpf_host has been updated to handle both cases. But
+		// for that to succeed, it must be reloaded first, before the bpf_lxc
+		// programs stop writing the IP into skb->cb.
+		for _, ep := range state.restored {
+			if ep.IsHost() {
+				log.WithField(logfields.EndpointID, ep.ID).Info("Successfully restored endpoint. Scheduling regeneration")
+				if err := ep.RegenerateAfterRestore(); err != nil {
+					log.WithField(logfields.EndpointID, ep.ID).WithError(err).Debug("error regenerating restored host endpoint")
+					epRegenerated <- false
+				} else {
+					epRegenerated <- true
+				}
+				break
+			}
+		}
+	}
+
 	for _, ep := range state.restored {
+		if ep.IsHost() && option.Config.EnableIPSec &&
+			(option.Config.IPAM == ipamOption.IPAMENI || option.Config.IPAM == ipamOption.IPAMAzure) {
+			// The host endpoint was handled above.
+			continue
+		}
 		log.WithField(logfields.EndpointID, ep.ID).Info("Successfully restored endpoint. Scheduling regeneration")
 		go func(ep *endpoint.Endpoint, epRegenerated chan<- bool) {
 			if err := ep.RegenerateAfterRestore(); err != nil {
@@ -335,24 +392,24 @@ func (d *Daemon) regenerateRestoredEndpoints(state *endpointRestoreState) (resto
 	return
 }
 
-func (d *Daemon) allocateIPsLocked(ep *endpoint.Endpoint) error {
-	var err error
-
+func (d *Daemon) allocateIPsLocked(ep *endpoint.Endpoint) (err error) {
 	if option.Config.EnableIPv6 && ep.IPv6.IsValid() {
-		_, err = d.ipam.AllocateIPWithoutSyncUpstream(ep.IPv6.AsSlice(), ep.HumanStringLocked()+" [restored]", ipam.PoolDefault)
+		ipv6Pool := ipam.PoolOrDefault(ep.IPv6IPAMPool)
+		_, err = d.ipam.AllocateIPWithoutSyncUpstream(ep.IPv6.AsSlice(), ep.HumanString()+" [restored]", ipv6Pool)
 		if err != nil {
 			return fmt.Errorf("unable to reallocate %s IPv6 address: %w", ep.IPv6, err)
 		}
 
 		defer func() {
 			if err != nil {
-				d.ipam.ReleaseIP(ep.IPv6.AsSlice(), ipam.PoolDefault)
+				d.ipam.ReleaseIP(ep.IPv6.AsSlice(), ipv6Pool)
 			}
 		}()
 	}
 
 	if option.Config.EnableIPv4 && ep.IPv4.IsValid() {
-		_, err = d.ipam.AllocateIPWithoutSyncUpstream(ep.IPv4.AsSlice(), ep.HumanStringLocked()+" [restored]", ipam.PoolDefault)
+		ipv4Pool := ipam.PoolOrDefault(ep.IPv4IPAMPool)
+		_, err = d.ipam.AllocateIPWithoutSyncUpstream(ep.IPv4.AsSlice(), ep.HumanString()+" [restored]", ipv4Pool)
 		switch {
 		// We only check for BypassIPAllocUponRestore for IPv4 because we
 		// assume that this flag is only turned on for IPv4-only IPAM modes
@@ -392,7 +449,6 @@ func (d *Daemon) initRestore(restoredEndpoints *endpointRestoreState) chan struc
 		restoreComplete = d.regenerateRestoredEndpoints(restoredEndpoints)
 		go func() {
 			<-restoreComplete
-			endParallelMapMode()
 		}()
 
 		go func() {
@@ -425,9 +481,6 @@ func (d *Daemon) initRestore(restoredEndpoints *endpointRestoreState) chan struc
 		}()
 	} else {
 		log.Info("State restore is disabled. Existing endpoints on node are ignored")
-
-		// No restore happened, end parallel map mode immediately
-		endParallelMapMode()
 	}
 	bootstrapStats.restore.End(true)
 

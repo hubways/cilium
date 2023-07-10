@@ -459,7 +459,8 @@ func (m *IptablesManager) iptIngressProxyRule(rules string, prog iptablesInterfa
 	ingressProxyMark := fmt.Sprintf("%#x", linux_defaults.MagicMarkIsToProxy)
 	ingressProxyPort := fmt.Sprintf("%d", proxyPort)
 
-	if strings.Contains(rules, fmt.Sprintf("CILIUM_PRE_mangle -p %s -m mark --mark %s", l4proto, ingressMarkMatch)) {
+	existingRuleRegex := regexp.MustCompile(fmt.Sprintf("CILIUM_PRE_mangle -p %s -m mark --mark %s.*--on-ip %s", l4proto, ingressMarkMatch, ip))
+	if existingRuleRegex.MatchString(rules) {
 		return nil
 	}
 
@@ -489,7 +490,8 @@ func (m *IptablesManager) iptEgressProxyRule(rules string, prog iptablesInterfac
 	egressProxyMark := fmt.Sprintf("%#x", linux_defaults.MagicMarkIsToProxy)
 	egressProxyPort := fmt.Sprintf("%d", proxyPort)
 
-	if strings.Contains(rules, fmt.Sprintf("-A CILIUM_PRE_mangle -p %s -m mark --mark %s", l4proto, egressMarkMatch)) {
+	existingRuleRegex := regexp.MustCompile(fmt.Sprintf("-A CILIUM_PRE_mangle -p %s -m mark --mark %s.*--on-ip %s", l4proto, egressMarkMatch, ip))
+	if existingRuleRegex.MatchString(rules) {
 		return nil
 	}
 
@@ -740,11 +742,11 @@ func (m *IptablesManager) addProxyRules(prog iptablesInterface, ip string, proxy
 
 	// Delete all other rules for this same proxy name
 	// These may accumulate if there is a bind failure on a previously used port
-	portMatch := fmt.Sprintf("TPROXY --on-port %d ", proxyPort)
+	portAndIPMatch := fmt.Sprintf("TPROXY --on-port %d --on-ip %s ", proxyPort, ip)
 	scanner := bufio.NewScanner(strings.NewReader(rules))
 	for scanner.Scan() {
 		rule := scanner.Text()
-		if !strings.Contains(rule, "-A CILIUM_PRE_mangle ") || !strings.Contains(rule, "cilium: TPROXY to host "+name) || strings.Contains(rule, portMatch) {
+		if !strings.Contains(rule, "-A CILIUM_PRE_mangle ") || !strings.Contains(rule, "cilium: TPROXY to host "+name) || strings.Contains(rule, portAndIPMatch) {
 			continue
 		}
 
@@ -1191,13 +1193,26 @@ func (m *IptablesManager) installMasqueradeRules(prog iptablesInterface, ifName,
 			return err
 		}
 
-		if err := prog.runProg([]string{
+		progArgs := []string{
 			"-t", "nat",
 			"-A", ciliumPostNatChain,
-			"-s", allocRange,
+		}
+
+		// If EgressMasqueradeInterfaces is set, we need to mirror base condition
+		// of the "cilium masquerade non-cluster" rule below, as the allocRange might
+		// not be valid in such setups (e.g. in ENI mode).
+		if option.Config.EgressMasqueradeInterfaces != "" {
+			progArgs = append(progArgs, "-o", option.Config.EgressMasqueradeInterfaces)
+		} else {
+			progArgs = append(progArgs, "-s", allocRange)
+		}
+
+		progArgs = append(progArgs,
 			"-m", "set", "--match-set", prog.getIpset(), "dst",
 			"-m", "comment", "--comment", "exclude traffic to cluster nodes from masquerade",
-			"-j", "ACCEPT"}); err != nil {
+			"-j", "ACCEPT",
+		)
+		if err := prog.runProg(progArgs); err != nil {
 			return err
 		}
 	}

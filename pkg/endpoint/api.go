@@ -23,6 +23,7 @@ import (
 	"github.com/cilium/cilium/pkg/mac"
 	"github.com/cilium/cilium/pkg/option"
 	"github.com/cilium/cilium/pkg/policy"
+	"github.com/cilium/cilium/pkg/types"
 	"github.com/cilium/cilium/pkg/u8proto"
 )
 
@@ -98,6 +99,7 @@ func NewEndpointFromChangeModel(ctx context.Context, owner regeneration.Owner, p
 				return nil, fmt.Errorf("invalid IPv6 address %q", ip)
 			}
 			ep.IPv6 = ip6
+			ep.IPv6IPAMPool = base.Addressing.IPV6PoolName
 		}
 
 		if ip := base.Addressing.IPV4; ip != "" {
@@ -109,11 +111,17 @@ func NewEndpointFromChangeModel(ctx context.Context, owner regeneration.Owner, p
 				return nil, fmt.Errorf("invalid IPv4 address %q", ip)
 			}
 			ep.IPv4 = ip4
+			ep.IPv4IPAMPool = base.Addressing.IPV4PoolName
 		}
 	}
 
 	if base.DatapathConfiguration != nil {
 		ep.DatapathConfiguration = *base.DatapathConfiguration
+		// We need to make sure DatapathConfiguration.DisableSipVerification value
+		// overrides the value of SourceIPVerification runtime option of the endpoint.
+		if ep.DatapathConfiguration.DisableSipVerification {
+			ep.updateAndOverrideEndpointOptions(option.OptionMap{option.SourceIPVerification: option.OptionDisabled})
+		}
 	}
 
 	if base.Labels != nil {
@@ -136,7 +144,7 @@ func (e *Endpoint) getModelEndpointIdentitiersRLocked() *models.EndpointIdentifi
 		ContainerName:    e.containerName,
 		DockerEndpointID: e.dockerEndpointID,
 		DockerNetworkID:  e.dockerNetworkID,
-		PodName:          e.getK8sNamespaceAndPodName(),
+		PodName:          e.GetK8sNamespaceAndPodName(),
 		K8sPodName:       e.K8sPodName,
 		K8sNamespace:     e.K8sNamespace,
 	}
@@ -145,8 +153,10 @@ func (e *Endpoint) getModelEndpointIdentitiersRLocked() *models.EndpointIdentifi
 func (e *Endpoint) getModelNetworkingRLocked() *models.EndpointNetworking {
 	return &models.EndpointNetworking{
 		Addressing: []*models.AddressPair{{
-			IPV4: e.GetIPv4Address(),
-			IPV6: e.GetIPv6Address(),
+			IPV4:         e.GetIPv4Address(),
+			IPV4PoolName: e.IPv4IPAMPool,
+			IPV6:         e.GetIPv6Address(),
+			IPV6PoolName: e.IPv6IPAMPool,
 		}},
 		InterfaceIndex: int64(e.ifIndex),
 		InterfaceName:  e.ifName,
@@ -289,10 +299,12 @@ func (e *Endpoint) GetHealthModel() *models.EndpointHealth {
 }
 
 // getNamedPortsModel returns the endpoint's NamedPorts object.
-//
-// Must be called with e.mutex RLock()ed.
 func (e *Endpoint) getNamedPortsModel() (np models.NamedPorts) {
-	k8sPorts := e.k8sPorts
+	var k8sPorts types.NamedPortMap
+	if p := e.k8sPorts.Load(); p != nil {
+		k8sPorts = *p
+	}
+
 	// keep named ports ordered to avoid the unnecessary updates to
 	// kube-apiserver
 	names := make([]string, 0, len(k8sPorts))
@@ -452,6 +464,9 @@ func (e *Endpoint) policyStatus() models.EndpointPolicyEnabled {
 // purposes should a caller choose to try to regenerate this endpoint, as well
 // as an error if the Endpoint is being deleted, since there is no point in
 // changing an Endpoint if it is going to be deleted.
+//
+// Before adding any new fields here, check to see if they are assumed to be mutable after
+// endpoint creation!
 func (e *Endpoint) ProcessChangeRequest(newEp *Endpoint, validPatchTransitionState bool) (string, error) {
 	var (
 		changed bool
@@ -499,11 +514,13 @@ func (e *Endpoint) ProcessChangeRequest(newEp *Endpoint, validPatchTransitionSta
 
 	if newEp.IPv6.IsValid() && e.IPv6 != newEp.IPv6 {
 		e.IPv6 = newEp.IPv6
+		e.IPv6IPAMPool = newEp.IPv6IPAMPool
 		changed = true
 	}
 
 	if newEp.IPv4.IsValid() && e.IPv4 != newEp.IPv4 {
 		e.IPv4 = newEp.IPv4
+		e.IPv4IPAMPool = newEp.IPv4IPAMPool
 		changed = true
 	}
 

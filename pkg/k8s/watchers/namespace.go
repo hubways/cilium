@@ -15,7 +15,6 @@ import (
 	"github.com/cilium/cilium/pkg/k8s/resource"
 	slim_corev1 "github.com/cilium/cilium/pkg/k8s/slim/k8s/api/core/v1"
 	slim_metav1 "github.com/cilium/cilium/pkg/k8s/slim/k8s/apis/meta/v1"
-	"github.com/cilium/cilium/pkg/k8s/watchers/resources"
 	"github.com/cilium/cilium/pkg/labels"
 	"github.com/cilium/cilium/pkg/labelsfilter"
 	"github.com/cilium/cilium/pkg/logging/logfields"
@@ -42,7 +41,7 @@ func (k *K8sWatcher) namespacesInit() {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	events := k.sharedResources.Namespaces.Events(ctx)
+	events := k.resources.Namespaces.Events(ctx)
 
 	go func() {
 		for {
@@ -59,7 +58,6 @@ func (k *K8sWatcher) namespacesInit() {
 					synced.Store(true)
 				case resource.Upsert:
 					err = nsUpdater.update(event.Object)
-					k.K8sEventProcessed(metricNS, resources.MetricUpdate, err == nil)
 				}
 				event.Done(err)
 			}
@@ -121,7 +119,7 @@ func (k *K8sWatcher) GetCachedNamespace(namespace string) (*slim_corev1.Namespac
 		},
 	}
 
-	store, err := k.sharedResources.Namespaces.Store(context.Background())
+	store, err := k.resources.Namespaces.Store(context.Background())
 	if err != nil {
 		return nil, err
 	}

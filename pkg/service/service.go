@@ -4,6 +4,7 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"strconv"
@@ -11,7 +12,6 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"go.uber.org/multierr"
 
 	"github.com/cilium/cilium/pkg/bpf"
 	"github.com/cilium/cilium/pkg/cidr"
@@ -84,9 +84,10 @@ type envoyCache interface {
 }
 
 type svcInfo struct {
-	hash          string
-	frontend      lb.L3n4AddrID
-	backends      []*lb.Backend
+	hash     string
+	frontend lb.L3n4AddrID
+	backends []*lb.Backend
+	// Hashed `backends`; pointing to the same objects.
 	backendByHash map[string]*lb.Backend
 
 	svcType                   lb.SVCType
@@ -239,7 +240,9 @@ type Service struct {
 	svcByID   map[lb.ID]*svcInfo
 
 	backendRefCount counter.StringCounter
-	backendByHash   map[string]*lb.Backend
+	// only used to keep track of the existing hash->ID mapping,
+	// not for loadbalancing decisions.
+	backendByHash map[string]*lb.Backend
 
 	healthServer  healthServer
 	monitorNotify monitorNotify
@@ -527,7 +530,7 @@ func (s *Service) InitMaps(ipv6, ipv4, sockMaps, restore bool) error {
 	}
 
 	for _, m := range toOpen {
-		if _, err := m.OpenOrCreate(); err != nil {
+		if err := m.OpenOrCreate(); err != nil {
 			return err
 		}
 	}
@@ -804,15 +807,13 @@ func (s *Service) UpdateBackendsState(backends []*lb.Backend) error {
 			// possible to receive an API call for a backend that's already deleted.
 			continue
 		}
-		if be.State == updatedB.State {
-			continue
-		}
 		if !lb.IsValidStateTransition(be.State, updatedB.State) {
 			currentState, _ := be.State.String()
 			newState, _ := updatedB.State.String()
-			e := fmt.Errorf("invalid state transition for backend"+
-				"[%s] (%s) -> (%s)", updatedB.String(), currentState, newState)
-			errs = multierr.Append(errs, e)
+			errs = errors.Join(errs,
+				fmt.Errorf("invalid state transition for backend[%s] (%s) -> (%s)",
+					updatedB.String(), currentState, newState),
+			)
 			continue
 		}
 		be.State = updatedB.State
@@ -823,6 +824,9 @@ func (s *Service) UpdateBackendsState(backends []*lb.Backend) error {
 			for i, b := range info.backends {
 				if b.L3n4Addr.String() != updatedB.L3n4Addr.String() {
 					continue
+				}
+				if b.State == updatedB.State {
+					break
 				}
 				info.backends[i].State = updatedB.State
 				info.backends[i].Preferred = updatedB.Preferred
@@ -872,16 +876,13 @@ func (s *Service) UpdateBackendsState(backends []*lb.Backend) error {
 			logfields.BackendPreferred: b.Preferred,
 		}).Info("Persisting updated backend state for backend")
 		if err := s.lbmap.UpdateBackendWithState(b); err != nil {
-			e := fmt.Errorf("failed to update backend %+v %w", b, err)
-			errs = multierr.Append(errs, e)
+			errs = errors.Join(errs, fmt.Errorf("failed to update backend %+v %w", b, err))
 		}
 	}
 
 	for i := range updateSvcs {
-		err := s.lbmap.UpsertService(updateSvcs[i])
-		errs = multierr.Append(errs, err)
+		errs = errors.Join(errs, s.lbmap.UpsertService(updateSvcs[i]))
 	}
-
 	return errs
 }
 
@@ -951,6 +952,18 @@ func (s *Service) GetDeepCopyServicesByName(name, namespace string) (svcs []*lb.
 	return svcs
 }
 
+// GetDeepCopyServiceByFrontend returns a deep-copy of the service that matches the Frontend address.
+func (s *Service) GetDeepCopyServiceByFrontend(frontend lb.L3n4Addr) (*lb.SVC, bool) {
+	s.RLock()
+	defer s.RUnlock()
+
+	if svc, found := s.svcByHash[frontend.Hash()]; found {
+		return svc.deepCopyToLBSVC(), true
+	}
+
+	return nil, false
+}
+
 // RestoreServices restores services from BPF maps.
 //
 // It first restores all the service entries, followed by backend entries.
@@ -962,28 +975,23 @@ func (s *Service) GetDeepCopyServicesByName(name, namespace string) (svcs []*lb.
 func (s *Service) RestoreServices() error {
 	s.Lock()
 	defer s.Unlock()
-	var errs error
 	backendsById := make(map[lb.BackendID]struct{})
 
+	var errs error
 	// Restore service cache from BPF maps
 	if err := s.restoreServicesLocked(backendsById); err != nil {
-		errs = multierr.Append(errs,
-			fmt.Errorf("error while restoring services: %w", err))
+		errs = errors.Join(errs, fmt.Errorf("error while restoring services: %w", err))
 	}
 
 	// Restore backend IDs
 	if err := s.restoreBackendsLocked(backendsById); err != nil {
-		errs = multierr.Append(errs,
-			fmt.Errorf("error while restoring backends: %w", err))
+		errs = errors.Join(errs, fmt.Errorf("error while restoring backends: %w", err))
 	}
 
 	// Remove LB source ranges for no longer existing services
 	if option.Config.EnableSVCSourceRangeCheck {
-		if err := s.restoreAndDeleteOrphanSourceRanges(); err != nil {
-			return err
-		}
+		errs = errors.Join(errs, s.restoreAndDeleteOrphanSourceRanges())
 	}
-
 	return errs
 }
 
@@ -1631,18 +1639,17 @@ func (s *Service) updateBackendsCacheLocked(svc *svcInfo, backends []*lb.Backend
 			if s.backendRefCount.Add(hash) {
 				id, err := AcquireBackendID(backend.L3n4Addr)
 				if err != nil {
+					s.backendRefCount.Delete(hash)
 					return nil, nil, nil, fmt.Errorf("Unable to acquire backend ID for %q: %s",
 						backend.L3n4Addr, err)
 				}
 				backends[i].ID = id
 				backends[i].Weight = backend.Weight
 				newBackends = append(newBackends, backends[i])
-				// TODO make backendByHash by value not by ref
-				s.backendByHash[hash] = backends[i]
+				s.backendByHash[hash] = backends[i].DeepCopy()
 			} else {
 				backends[i].ID = s.backendByHash[hash].ID
 			}
-			svc.backendByHash[hash] = backends[i]
 		} else {
 			backends[i].ID = b.ID
 			// Backend state can either be updated via kubernetes events,
@@ -1672,6 +1679,7 @@ func (s *Service) updateBackendsCacheLocked(svc *svcInfo, backends []*lb.Backend
 				backends[i].State = b.State
 			}
 		}
+		svc.backendByHash[hash] = backends[i]
 	}
 
 	for hash, backend := range svc.backendByHash {

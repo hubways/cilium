@@ -219,21 +219,21 @@ func (e *Endpoint) addNewRedirectsFromDesiredPolicy(ingress bool, desiredRedirec
 	}
 	mapState := e.desiredPolicy.PolicyMapState
 
-	insertedDesiredMapState := make(map[policy.Key]struct{})
-	updatedDesiredMapState := make(policy.MapState)
+	adds := make(policy.Keys)
+	old := make(policy.MapState)
 
 	for _, l4 := range m {
 		// Deny policies do not support redirects
 		if l4.IsRedirect() {
 
-			// Check if we are allowing this specific L4 first
-			if !mapState.AllowsL4(e, l4) {
+			// Check if we are denying this specific L4 first regardless the L3
+			if mapState.DeniesL4(e, l4) {
 				continue
 			}
 
 			var redirectPort uint16
 			// Only create a redirect if the proxy is NOT running in a sidecar container
-			// and the parser is HTTP. If running in a sidecar container and the parser
+			// or the parser is not HTTP. If running in a sidecar container and the parser
 			// is HTTP, just allow traffic to the port at L4 by setting the proxy port
 			// to 0.
 			if !e.hasSidecarProxy || l4.L7Parser != policy.ParserTypeHTTP {
@@ -302,22 +302,13 @@ func (e *Endpoint) addNewRedirectsFromDesiredPolicy(ingress bool, desiredRedirec
 				direction = trafficdirection.Egress
 			}
 
-			keysFromFilter := l4.ToMapState(e, direction, &policyIdentitiesLabelLookup{e})
-
+			idLookup := &policyIdentitiesLabelLookup{e}
+			keysFromFilter := l4.ToMapState(e, direction, idLookup)
 			for keyFromFilter, entry := range keysFromFilter {
-				if oldEntry, ok := e.desiredPolicy.PolicyMapState[keyFromFilter]; ok {
-					// Keep the original old entry for revert if there are duplicate keys,
-					// which are possible due to named ports resolving to the same number.
-					if _, isDup := updatedDesiredMapState[keyFromFilter]; !isDup {
-						updatedDesiredMapState[keyFromFilter] = oldEntry
-					}
-				} else {
-					insertedDesiredMapState[keyFromFilter] = struct{}{}
-				}
 				if entry.IsRedirectEntry() {
 					entry.ProxyPort = redirectPort
 				}
-				e.desiredPolicy.PolicyMapState[keyFromFilter] = entry
+				e.desiredPolicy.PolicyMapState.DenyPreferredInsertWithChanges(keyFromFilter, entry, adds, nil, old, idLookup)
 			}
 		}
 	}
@@ -330,13 +321,7 @@ func (e *Endpoint) addNewRedirectsFromDesiredPolicy(ingress bool, desiredRedirec
 		}
 		e.proxyStatisticsMutex.Unlock()
 
-		// Restore the desired policy map state.
-		for key := range insertedDesiredMapState {
-			delete(e.desiredPolicy.PolicyMapState, key)
-		}
-		for key, entry := range updatedDesiredMapState {
-			e.desiredPolicy.PolicyMapState[key] = entry
-		}
+		e.desiredPolicy.PolicyMapState.RevertChanges(adds, old)
 		return nil
 	})
 
@@ -735,8 +720,18 @@ func (e *Endpoint) runPreCompilationSteps(regenContext *regenerationContext, rul
 	stats := &regenContext.Stats
 	datapathRegenCtxt := regenContext.datapathRegenerationContext
 
+	// regenerate policy without holding the lock.
+	// This is because policy generation needs the ipcache to make progress, and the ipcache needs to call
+	// endpoint.ApplyPolicyMapChanges()
+	stats.policyCalculation.Start()
+	policyResult, err := e.regeneratePolicy()
+	stats.policyCalculation.End(err == nil)
+	if err != nil {
+		return false, fmt.Errorf("unable to regenerate policy for '%s': %w", e.StringID(), err)
+	}
+
 	stats.waitingForLock.Start()
-	err := e.lockAlive()
+	err = e.lockAlive()
 	stats.waitingForLock.End(err == nil)
 	if err != nil {
 		return false, err
@@ -769,6 +764,12 @@ func (e *Endpoint) runPreCompilationSteps(regenContext *regenerationContext, rul
 		close(datapathRegenCtxt.ctCleaned)
 	}
 
+	// Set the computed policy as the "incoming" policy. This can fail if
+	// the endpoint's security identity changed during or after policy calculation.
+	if err := e.setDesiredPolicy(policyResult); err != nil {
+		return false, err
+	}
+
 	// We cannot obtain the rules while e.mutex is held, because obtaining
 	// fresh DNSRules requires the IPCache lock (which must not be taken while
 	// holding e.mutex to avoid deadlocks). Therefore, rules are obtained
@@ -777,12 +778,6 @@ func (e *Endpoint) runPreCompilationSteps(regenContext *regenerationContext, rul
 
 	// If dry mode is enabled, no further changes to BPF maps are performed
 	if option.Config.DryMode {
-
-		// Compute policy for this endpoint.
-		if err = e.regeneratePolicy(); err != nil {
-			return false, fmt.Errorf("Unable to regenerate policy: %s", err)
-		}
-
 		_ = e.updateAndOverrideEndpointOptions(nil)
 
 		// Dry mode needs Network Policy Updates, but the proxy wait group must
@@ -800,7 +795,7 @@ func (e *Endpoint) runPreCompilationSteps(regenContext *regenerationContext, rul
 	}
 
 	if e.policyMap == nil {
-		e.policyMap, _, err = policymap.OpenOrCreate(e.policyMapPath())
+		e.policyMap, err = policymap.OpenOrCreate(e.policyMapPath())
 		if err != nil {
 			return false, err
 		}
@@ -819,12 +814,6 @@ func (e *Endpoint) runPreCompilationSteps(regenContext *regenerationContext, rul
 	// Only generate & populate policy map if a security identity is set up for
 	// this endpoint.
 	if e.SecurityIdentity != nil {
-		stats.policyCalculation.Start()
-		err = e.regeneratePolicy()
-		stats.policyCalculation.End(err == nil)
-		if err != nil {
-			return false, fmt.Errorf("unable to regenerate policy for '%s': %s", e.StringID(), err)
-		}
 
 		_ = e.updateAndOverrideEndpointOptions(nil)
 
@@ -855,6 +844,7 @@ func (e *Endpoint) runPreCompilationSteps(regenContext *regenerationContext, rul
 		//
 		// Do this before updating the bpf policy maps below, so that the proxy listeners have a chance to be
 		// ready when new traffic is redirected to them.
+		// note: unlike regeneratePolicy, updateNetworkPolicy requires the endpoint read lock
 		stats.proxyPolicyCalculation.Start()
 		err, networkPolicyRevertFunc := e.updateNetworkPolicy(datapathRegenCtxt.proxyWaitGroup)
 		stats.proxyPolicyCalculation.End(err == nil)
@@ -951,8 +941,7 @@ func (e *Endpoint) finalizeProxyState(regenContext *regenerationContext, err err
 
 // InitMap creates the policy map in the kernel.
 func (e *Endpoint) InitMap() error {
-	_, err := policymap.Create(e.policyMapPath())
-	return err
+	return policymap.Create(e.policyMapPath())
 }
 
 // deleteMaps releases references to all BPF maps associated with this
@@ -1064,7 +1053,7 @@ func (e *Endpoint) SkipStateClean() {
 }
 
 func (e *Endpoint) initPolicyMapPressureMetric() {
-	if !option.Config.MetricsConfig.BPFMapPressure {
+	if !metrics.BPFMapPressure {
 		return
 	}
 
@@ -1080,14 +1069,11 @@ func (e *Endpoint) updatePolicyMapPressureMetric() {
 		return
 	}
 
-	value := float64(len(e.realizedPolicy.PolicyMapState)) / float64(e.policyMap.MapInfo.MaxEntries)
+	value := float64(len(e.realizedPolicy.PolicyMapState)) / float64(e.policyMap.MaxEntries())
 	e.policyMapPressureGauge.Set(value)
 }
 
-// The bool pointed by hadProxy, if not nil, will be set to 'true' if
-// the deleted entry had a proxy port assigned to it.  *hadProxy is
-// not otherwise changed (e.g., it is never set to 'false').
-func (e *Endpoint) deletePolicyKey(keyToDelete policy.Key, incremental bool, hadProxy *bool) bool {
+func (e *Endpoint) deletePolicyKey(keyToDelete policy.Key, incremental bool) bool {
 	// Convert from policy.Key to policymap.Key
 	policymapKey := policymap.NewKey(keyToDelete.Identity, keyToDelete.DestPort,
 		keyToDelete.Nexthdr, keyToDelete.TrafficDirection)
@@ -1106,11 +1092,7 @@ func (e *Endpoint) deletePolicyKey(keyToDelete policy.Key, incremental bool, had
 		return false
 	}
 
-	var entry policy.MapStateEntry
-	var ok bool
-	if entry, ok = e.realizedPolicy.PolicyMapState[keyToDelete]; ok && entry.ProxyPort != 0 && hadProxy != nil {
-		*hadProxy = true
-	}
+	entry := e.realizedPolicy.PolicyMapState[keyToDelete]
 
 	// Operation was successful, remove from realized state.
 	delete(e.realizedPolicy.PolicyMapState, keyToDelete)
@@ -1168,25 +1150,20 @@ func (e *Endpoint) ApplyPolicyMapChanges(proxyWaitGroup *completion.WaitGroup) e
 
 	e.PolicyDebug(nil, "ApplyPolicyMapChanges")
 
-	proxyChanges, err := e.applyPolicyMapChanges()
+	err := e.applyPolicyMapChanges()
 	if err != nil {
 		return err
 	}
 
-	if proxyChanges {
-		// Ignoring the revertFunc; keep all successful changes even if some fail.
-		err, _ = e.updateNetworkPolicy(proxyWaitGroup)
-	} else {
-		// Allow caller to wait for the current network policy to be acked
-		e.useCurrentNetworkPolicy(proxyWaitGroup)
-	}
+	// Ignoring the revertFunc; keep all successful changes even if some fail.
+	err, _ = e.updateNetworkPolicy(proxyWaitGroup)
 
 	return err
 }
 
 // applyPolicyMapChanges applies any incremental policy map changes
 // collected on the desired policy.
-func (e *Endpoint) applyPolicyMapChanges() (proxyChanges bool, err error) {
+func (e *Endpoint) applyPolicyMapChanges() error {
 	errors := 0
 
 	e.PolicyDebug(nil, "applyPolicyMapChanges")
@@ -1238,9 +1215,6 @@ func (e *Endpoint) applyPolicyMapChanges() (proxyChanges bool, err error) {
 		// policy is first instantiated.
 		if entry.IsRedirectEntry() {
 			entry.ProxyPort = e.realizedRedirects[policy.ProxyIDFromKey(e.ID, keyToAdd)]
-			if entry.ProxyPort != 0 {
-				proxyChanges = true
-			}
 		}
 		if !e.addPolicyKey(keyToAdd, entry, true) {
 			errors++
@@ -1248,21 +1222,22 @@ func (e *Endpoint) applyPolicyMapChanges() (proxyChanges bool, err error) {
 	}
 
 	for keyToDelete := range deletes {
-		if !e.deletePolicyKey(keyToDelete, true, &proxyChanges) {
+		if !e.deletePolicyKey(keyToDelete, true) {
 			errors++
 		}
 	}
 
 	if errors > 0 {
-		return proxyChanges, fmt.Errorf("updating desired PolicyMap state failed")
-	} else if len(adds)+len(deletes) > 0 {
+		return fmt.Errorf("updating desired PolicyMap state failed")
+	}
+	if len(adds)+len(deletes) > 0 {
 		e.getLogger().WithFields(logrus.Fields{
 			logfields.AddedPolicyID:   adds,
 			logfields.DeletedPolicyID: deletes,
 		}).Debug("Applied policy map updates due identity changes")
 	}
 
-	return proxyChanges, nil
+	return nil
 }
 
 // syncPolicyMap updates the bpf policy map state based on the
@@ -1271,7 +1246,7 @@ func (e *Endpoint) applyPolicyMapChanges() (proxyChanges bool, err error) {
 func (e *Endpoint) syncPolicyMap() error {
 	// Apply pending policy map changes first so that desired map is up-to-date before
 	// we diff the maps below.
-	_, err := e.applyPolicyMapChanges()
+	err := e.applyPolicyMapChanges()
 	if err != nil {
 		return err
 	}
@@ -1319,7 +1294,7 @@ func (e *Endpoint) syncPolicyMapsWith(realized policy.MapState, withDiffs bool) 
 	for keyToDelete := range realized {
 		// If key that is in realized state is not in desired state, just remove it.
 		if entry, ok := e.desiredPolicy.PolicyMapState[keyToDelete]; !ok {
-			if !e.deletePolicyKey(keyToDelete, false, nil) {
+			if !e.deletePolicyKey(keyToDelete, false) {
 				errors++
 			}
 			diffCount++
@@ -1352,6 +1327,7 @@ func (e *Endpoint) dumpPolicyMapToMapState() (policy.MapState, error) {
 		policyEntry := policy.MapStateEntry{
 			ProxyPort: policymapEntry.GetProxyPort(),
 			IsDeny:    policymapEntry.IsDeny(),
+			AuthType:  policy.AuthType(policymapEntry.AuthType),
 		}
 		currentMap[policyKey] = policyEntry
 	}
@@ -1376,7 +1352,7 @@ func (e *Endpoint) syncPolicyMapWithDump() error {
 
 	// Apply pending policy map changes first so that desired map is up-to-date before
 	// we diff the maps below.
-	_, err := e.applyPolicyMapChanges()
+	err := e.applyPolicyMapChanges()
 	if err != nil {
 		return err
 	}
@@ -1396,7 +1372,7 @@ func (e *Endpoint) syncPolicyMapWithDump() error {
 			e.getLogger().WithError(err).Error("unable to close PolicyMap which was not able to be dumped")
 		}
 
-		e.policyMap, _, err = policymap.OpenOrCreate(e.policyMapPath())
+		e.policyMap, err = policymap.OpenOrCreate(e.policyMapPath())
 		if err != nil {
 			return fmt.Errorf("unable to open PolicyMap for endpoint: %s", err)
 		}
@@ -1467,12 +1443,6 @@ func (e *Endpoint) RequireRouting() (required bool) {
 // RequireEndpointRoute returns if the endpoint wants a per endpoint route
 func (e *Endpoint) RequireEndpointRoute() bool {
 	return e.DatapathConfiguration.InstallEndpointRoute
-}
-
-// DisableSIPVerification returns true if the endpoint wants to skip
-// srcIP verification
-func (e *Endpoint) DisableSIPVerification() bool {
-	return e.DatapathConfiguration.DisableSipVerification
 }
 
 // GetPolicyVerdictLogFilter returns the PolicyVerdictLogFilter that would control

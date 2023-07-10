@@ -17,87 +17,63 @@ limitations under the License.
 package suite
 
 import (
+	"embed"
 	"testing"
 
+	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"sigs.k8s.io/gateway-api/apis/v1beta1"
+	"sigs.k8s.io/gateway-api/conformance"
 	"sigs.k8s.io/gateway-api/conformance/utils/config"
 	"sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
 	"sigs.k8s.io/gateway-api/conformance/utils/roundtripper"
 )
 
-// SupportedFeature allows opting in to additional conformance tests at an
-// individual feature granularity.
-type SupportedFeature string
-
-const (
-	// This option indicates support for ReferenceGrant (core conformance).
-	// Opting out of this requires an implementation to have clearly implemented
-	// and documented equivalent safeguards.
-	SupportReferenceGrant SupportedFeature = "ReferenceGrant"
-
-	// This option indicates support for TLSRoute (extended conformance).
-	SupportTLSRoute SupportedFeature = "TLSRoute"
-
-	// This option indicates support for HTTPRoute query param matching (extended conformance).
-	SupportHTTPRouteQueryParamMatching SupportedFeature = "HTTPRouteQueryParamMatching"
-
-	// This option indicates support for HTTPRoute method matching (extended conformance).
-	SupportHTTPRouteMethodMatching SupportedFeature = "HTTPRouteMethodMatching"
-
-	// This option indicates support for HTTPRoute response header modification (extended conformance).
-	SupportHTTPResponseHeaderModification SupportedFeature = "HTTPResponseHeaderModification"
-
-	// This option indicates support for Destination Port matching (extended conformance).
-	SupportRouteDestinationPortMatching SupportedFeature = "RouteDestinationPortMatching"
-
-	// This option indicates GatewayClass will update the observedGeneration in it's conditions when reconciling
-	SupportGatewayClassObservedGenerationBump SupportedFeature = "GatewayClassObservedGenerationBump"
-)
-
-// StandardCoreFeatures are the features that are required to be conformant with
-// the Core API features that are part of the Standard release channel.
-var StandardCoreFeatures = map[SupportedFeature]bool{
-	SupportReferenceGrant: true,
-}
-
 // ConformanceTestSuite defines the test suite used to run Gateway API
 // conformance tests.
 type ConformanceTestSuite struct {
 	Client            client.Client
+	RESTClient        *rest.RESTClient
+	RestConfig        *rest.Config
 	RoundTripper      roundtripper.RoundTripper
 	GatewayClassName  string
 	ControllerName    string
 	Debug             bool
 	Cleanup           bool
 	BaseManifests     string
+	MeshManifests     string
 	Applier           kubernetes.Applier
-	SupportedFeatures map[SupportedFeature]bool
+	SupportedFeatures sets.Set[SupportedFeature]
 	TimeoutConfig     config.TimeoutConfig
+	SkipTests         sets.Set[string]
+	FS                embed.FS
 }
 
 // Options can be used to initialize a ConformanceTestSuite.
 type Options struct {
 	Client           client.Client
+	RESTClient       *rest.RESTClient
+	RestConfig       *rest.Config
 	GatewayClassName string
 	Debug            bool
 	RoundTripper     roundtripper.RoundTripper
 	BaseManifests    string
+	MeshManifests    string
 	NamespaceLabels  map[string]string
-	// ValidUniqueListenerPorts maps each listener port of each Gateway in the
-	// manifests to a valid, unique port. There must be as many
-	// ValidUniqueListenerPorts as there are listeners in the set of manifests.
-	// For example, given two Gateways, each with 2 listeners, there should be
-	// four ValidUniqueListenerPorts.
-	// If empty or nil, ports are not modified.
-	ValidUniqueListenerPorts []v1beta1.PortNumber
 
 	// CleanupBaseResources indicates whether or not the base test
 	// resources such as Gateways should be cleaned up after the run.
-	CleanupBaseResources bool
-	SupportedFeatures    map[SupportedFeature]bool
-	TimeoutConfig        config.TimeoutConfig
+	CleanupBaseResources       bool
+	SupportedFeatures          sets.Set[SupportedFeature]
+	ExemptFeatures             sets.Set[SupportedFeature]
+	EnableAllSupportedFeatures bool
+	TimeoutConfig              config.TimeoutConfig
+	// SkipTests contains all the tests not to be run and can be used to opt out
+	// of specific tests
+	SkipTests []string
+
+	FS *embed.FS
 }
 
 // New returns a new ConformanceTestSuite.
@@ -109,34 +85,49 @@ func New(s Options) *ConformanceTestSuite {
 		roundTripper = &roundtripper.DefaultRoundTripper{Debug: s.Debug, TimeoutConfig: s.TimeoutConfig}
 	}
 
-	if s.SupportedFeatures == nil {
+	if s.EnableAllSupportedFeatures == true {
+		s.SupportedFeatures = AllFeatures
+	} else if s.SupportedFeatures == nil {
 		s.SupportedFeatures = StandardCoreFeatures
 	} else {
-		for feature, val := range StandardCoreFeatures {
-			if _, ok := s.SupportedFeatures[feature]; !ok {
-				s.SupportedFeatures[feature] = val
-			}
+		for feature := range StandardCoreFeatures {
+			s.SupportedFeatures.Insert(feature)
 		}
+	}
+
+	for feature := range s.ExemptFeatures {
+		s.SupportedFeatures.Delete(feature)
+	}
+
+	if s.FS == nil {
+		s.FS = &conformance.Manifests
 	}
 
 	suite := &ConformanceTestSuite{
 		Client:           s.Client,
+		RESTClient:       s.RESTClient,
+		RestConfig:       s.RestConfig,
 		RoundTripper:     roundTripper,
 		GatewayClassName: s.GatewayClassName,
 		Debug:            s.Debug,
 		Cleanup:          s.CleanupBaseResources,
 		BaseManifests:    s.BaseManifests,
+		MeshManifests:    s.MeshManifests,
 		Applier: kubernetes.Applier{
-			NamespaceLabels:          s.NamespaceLabels,
-			ValidUniqueListenerPorts: s.ValidUniqueListenerPorts,
+			NamespaceLabels: s.NamespaceLabels,
 		},
 		SupportedFeatures: s.SupportedFeatures,
 		TimeoutConfig:     s.TimeoutConfig,
+		SkipTests:         sets.New(s.SkipTests...),
+		FS:                *s.FS,
 	}
 
 	// apply defaults
 	if suite.BaseManifests == "" {
 		suite.BaseManifests = "base/manifests.yaml"
+	}
+	if suite.MeshManifests == "" {
+		suite.MeshManifests = "mesh/manifests.yaml"
 	}
 
 	return suite
@@ -146,27 +137,43 @@ func New(s Options) *ConformanceTestSuite {
 // in the cluster. It also ensures that all relevant resources are ready.
 func (suite *ConformanceTestSuite) Setup(t *testing.T) {
 	t.Logf("Test Setup: Ensuring GatewayClass has been accepted")
-	suite.ControllerName = kubernetes.GWCMustBeAccepted(t, suite.Client, suite.TimeoutConfig, suite.GatewayClassName)
+	suite.ControllerName = kubernetes.GWCMustHaveAcceptedConditionTrue(t, suite.Client, suite.TimeoutConfig, suite.GatewayClassName)
 
 	suite.Applier.GatewayClass = suite.GatewayClassName
 	suite.Applier.ControllerName = suite.ControllerName
+	suite.Applier.FS = suite.FS
 
-	t.Logf("Test Setup: Applying base manifests")
-	suite.Applier.MustApplyWithCleanup(t, suite.Client, suite.TimeoutConfig, suite.BaseManifests, suite.Cleanup)
+	if suite.SupportedFeatures.Has(SupportGateway) {
+		t.Logf("Test Setup: Applying base manifests")
+		suite.Applier.MustApplyWithCleanup(t, suite.Client, suite.TimeoutConfig, suite.BaseManifests, suite.Cleanup)
 
-	t.Logf("Test Setup: Applying programmatic resources")
-	secret := kubernetes.MustCreateSelfSignedCertSecret(t, "gateway-conformance-web-backend", "certificate", []string{"*"})
-	suite.Applier.MustApplyObjectsWithCleanup(t, suite.Client, suite.TimeoutConfig, []client.Object{secret}, suite.Cleanup)
-	secret = kubernetes.MustCreateSelfSignedCertSecret(t, "gateway-conformance-infra", "tls-validity-checks-certificate", []string{"*"})
-	suite.Applier.MustApplyObjectsWithCleanup(t, suite.Client, suite.TimeoutConfig, []client.Object{secret}, suite.Cleanup)
+		t.Logf("Test Setup: Applying programmatic resources")
+		secret := kubernetes.MustCreateSelfSignedCertSecret(t, "gateway-conformance-web-backend", "certificate", []string{"*"})
+		suite.Applier.MustApplyObjectsWithCleanup(t, suite.Client, suite.TimeoutConfig, []client.Object{secret}, suite.Cleanup)
+		secret = kubernetes.MustCreateSelfSignedCertSecret(t, "gateway-conformance-infra", "tls-validity-checks-certificate", []string{"*"})
+		suite.Applier.MustApplyObjectsWithCleanup(t, suite.Client, suite.TimeoutConfig, []client.Object{secret}, suite.Cleanup)
+		secret = kubernetes.MustCreateSelfSignedCertSecret(t, "gateway-conformance-infra", "tls-passthrough-checks-certificate", []string{"abc.example.com"})
+		suite.Applier.MustApplyObjectsWithCleanup(t, suite.Client, suite.TimeoutConfig, []client.Object{secret}, suite.Cleanup)
 
-	t.Logf("Test Setup: Ensuring Gateways and Pods from base manifests are ready")
-	namespaces := []string{
-		"gateway-conformance-infra",
-		"gateway-conformance-app-backend",
-		"gateway-conformance-web-backend",
+		t.Logf("Test Setup: Ensuring Gateways and Pods from base manifests are ready")
+		namespaces := []string{
+			"gateway-conformance-infra",
+			"gateway-conformance-app-backend",
+			"gateway-conformance-web-backend",
+		}
+		kubernetes.NamespacesMustBeReady(t, suite.Client, suite.TimeoutConfig, namespaces)
 	}
-	kubernetes.NamespacesMustBeAccepted(t, suite.Client, suite.TimeoutConfig, namespaces)
+	if suite.SupportedFeatures.Has(SupportMesh) {
+		t.Logf("Test Setup: Applying base manifests")
+		suite.Applier.MustApplyWithCleanup(t, suite.Client, suite.TimeoutConfig, suite.MeshManifests, suite.Cleanup)
+		t.Logf("Test Setup: Ensuring Gateways and Pods from base manifests are ready")
+		namespaces := []string{
+			"gateway-conformance-mesh",
+			"gateway-conformance-app-backend",
+			"gateway-conformance-web-backend",
+		}
+		kubernetes.NamespacesMustBeReady(t, suite.Client, suite.TimeoutConfig, namespaces)
+	}
 }
 
 // Run runs the provided set of conformance tests.
@@ -199,9 +206,15 @@ func (test *ConformanceTest) Run(t *testing.T, suite *ConformanceTestSuite) {
 	// Check that all features exercised by the test have been opted into by
 	// the suite.
 	for _, feature := range test.Features {
-		if supported, ok := suite.SupportedFeatures[feature]; !ok || !supported {
+		if !suite.SupportedFeatures.Has(feature) {
 			t.Skipf("Skipping %s: suite does not support %s", test.ShortName, feature)
 		}
+	}
+
+	// check that the test should not be skipped
+	if suite.SkipTests.Has(test.ShortName) {
+		t.Logf("Skipping %s", test.ShortName)
+		return
 	}
 
 	for _, manifestLocation := range test.Manifests {

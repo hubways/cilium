@@ -4,15 +4,17 @@
 package envoy
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
-	"path/filepath"
 	"syscall"
 	"time"
 
 	cilium "github.com/cilium/proxy/go/cilium/api"
+	kafka_api "github.com/cilium/proxy/pkg/policy/api/kafka"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 	"google.golang.org/protobuf/proto"
@@ -20,44 +22,45 @@ import (
 	"github.com/cilium/cilium/pkg/flowdebug"
 	"github.com/cilium/cilium/pkg/identity"
 	"github.com/cilium/cilium/pkg/option"
-	kafka_api "github.com/cilium/cilium/pkg/policy/api/kafka"
 	"github.com/cilium/cilium/pkg/proxy/accesslog"
 	"github.com/cilium/cilium/pkg/proxy/logger"
 )
 
-func getAccessLogPath(stateDir string) string {
-	return filepath.Join(stateDir, "access_log.sock")
-}
-
-type accessLogServer struct {
+type AccessLogServer struct {
 	xdsServer *XDSServer
+	stopCh    chan struct{}
 }
 
 // StartAccessLogServer starts the access log server.
-func StartAccessLogServer(stateDir string, xdsServer *XDSServer) {
-	accessLogPath := getAccessLogPath(stateDir)
+func StartAccessLogServer(envoySocketDir string, xdsServer *XDSServer) (*AccessLogServer, error) {
+	accessLogPath := getAccessLogSocketPath(envoySocketDir)
+
+	// Remove/Unlink the old unix domain socket, if any.
+	_ = os.Remove(accessLogPath)
 
 	// Create the access log listener
-	os.Remove(accessLogPath) // Remove/Unlink the old unix domain socket, if any.
 	accessLogListener, err := net.ListenUnix("unixpacket", &net.UnixAddr{Name: accessLogPath, Net: "unixpacket"})
 	if err != nil {
-		log.WithError(err).Fatalf("Envoy: Failed to open access log listen socket at %s", accessLogPath)
+		return nil, fmt.Errorf("failed to open access log listen socket at %s: %w", accessLogPath, err)
 	}
 	accessLogListener.SetUnlinkOnClose(true)
 
 	// Make the socket accessible by owner and group only. Group access is needed for Istio
 	// sidecar proxies.
 	if err = os.Chmod(accessLogPath, 0660); err != nil {
-		log.WithError(err).Fatalf("Envoy: Failed to change mode of access log listen socket at %s", accessLogPath)
+		return nil, fmt.Errorf("failed to change mode of access log listen socket at %s: %w", accessLogPath, err)
 	}
 	// Change the group to ProxyGID allowing access from any process from that group.
 	if err = os.Chown(accessLogPath, -1, option.Config.ProxyGID); err != nil {
 		log.WithError(err).Warningf("Envoy: Failed to change the group of access log listen socket at %s, sidecar proxies may not work", accessLogPath)
 	}
 
-	server := accessLogServer{
+	server := &AccessLogServer{
 		xdsServer: xdsServer,
+		stopCh:    make(chan struct{}),
 	}
+
+	ctx, cancel := context.WithCancel(context.Background())
 
 	go func() {
 		for {
@@ -76,22 +79,45 @@ func StartAccessLogServer(stateDir string, xdsServer *XDSServer) {
 
 			// Serve this access log socket in a goroutine, so we can serve multiple
 			// connections concurrently.
-			go server.accessLogger(uc)
+			go server.handleConn(ctx, uc)
 		}
 	}()
+
+	go func() {
+		<-server.stopCh
+		accessLogListener.Close()
+		cancel()
+	}()
+
+	return server, nil
 }
 
-func (s *accessLogServer) accessLogger(conn *net.UnixConn) {
+func (s *AccessLogServer) Stop() {
+	s.stopCh <- struct{}{}
+}
+
+func (s *AccessLogServer) handleConn(ctx context.Context, conn *net.UnixConn) {
+	stopCh := make(chan struct{})
+
+	go func() {
+		select {
+		case <-stopCh:
+		case <-ctx.Done():
+			conn.Close()
+		}
+	}()
+
 	defer func() {
 		log.Info("Envoy: Closing access log connection")
 		conn.Close()
+		stopCh <- struct{}{}
 	}()
 
 	buf := make([]byte, 4096)
 	for {
 		n, _, flags, _, err := conn.ReadMsgUnix(buf, nil)
 		if err != nil {
-			if !isEOF(err) {
+			if !errors.Is(err, io.EOF) {
 				log.WithError(err).Error("Envoy: Error while reading from access log connection")
 			}
 			break

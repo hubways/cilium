@@ -7,6 +7,8 @@
 #include <linux/if_ether.h>
 #include <linux/byteorder.h>
 
+#define __section_entry	__section("xdp")
+
 #define __ctx_buff			xdp_md
 #define __ctx_is			__ctx_xdp
 
@@ -101,7 +103,6 @@ xdp_store_bytes(const struct xdp_md *ctx, __u64 off, const void *from,
 #define ctx_set_tunnel_key		xdp_set_tunnel_key__stub
 
 #define ctx_get_tunnel_opt		xdp_get_tunnel_opt__stub
-#define ctx_set_tunnel_opt		xdp_set_tunnel_opt__stub
 
 #define ctx_event_output		xdp_event_output
 
@@ -109,6 +110,29 @@ xdp_store_bytes(const struct xdp_md *ctx, __u64 off, const void *from,
 
 #define get_hash(ctx)			({ 0; })
 #define get_hash_recalc(ctx)		get_hash(ctx)
+
+#define DEFINE_FUNC_CTX_POINTER(FIELD)						\
+static __always_inline void *							\
+ctx_ ## FIELD(const struct xdp_md *ctx)						\
+{										\
+	void *ptr;								\
+										\
+	/* LLVM may generate u32 assignments of ctx->{data,data_end,data_meta}.	\
+	 * With this inline asm, LLVM loses track of the fact this field is on	\
+	 * 32 bits.								\
+	 */									\
+	asm volatile("%0 = *(u32 *)(%1 + %2)"					\
+		     : "=r"(ptr)						\
+		     : "r"(ctx), "i"(offsetof(struct xdp_md, FIELD)));		\
+	return ptr;								\
+}
+/* This defines ctx_data(). */
+DEFINE_FUNC_CTX_POINTER(data)
+/* This defines ctx_data_end(). */
+DEFINE_FUNC_CTX_POINTER(data_end)
+/* This defines ctx_data_meta(). */
+DEFINE_FUNC_CTX_POINTER(data_meta)
+#undef DEFINE_FUNC_CTX_POINTER
 
 static __always_inline __maybe_unused void
 __csum_replace_by_diff(__sum16 *sum, __wsum diff)
@@ -246,12 +270,14 @@ static __always_inline __maybe_unused int
 ctx_adjust_hroom(struct xdp_md *ctx, const __s32 len_diff, const __u32 mode,
 		 const __u64 flags __maybe_unused)
 {
+	const __u32 move_len_v4_geneve = 14 + 20 + 8 + 8; /* eth, ipv4, udp, geneve */
 	const __u32 move_len_v4 = 14 + 20;
 	const __u32 move_len_v6 = 14 + 40;
 	void *data, *data_end;
 	int ret;
 
-	build_bug_on(len_diff <= 0 || len_diff >= 64);
+	/* Note: when bumping len_diff, consider headroom on popular NICs. */
+	build_bug_on(len_diff <= 0 || len_diff >= 128);
 	build_bug_on(mode != BPF_ADJ_ROOM_NET);
 
 	ret = xdp_adjust_head(ctx, -len_diff);
@@ -266,6 +292,13 @@ ctx_adjust_hroom(struct xdp_md *ctx, const __s32 len_diff, const __u32 mode,
 		switch (len_diff) {
 		case 28: /* struct {iphdr + icmphdr} */
 			break;
+		case 12: /* struct geneve_dsr_opt4 */
+			if (data + move_len_v4_geneve + len_diff <= data_end)
+				__bpf_memmove_fwd(data, data + len_diff,
+						  move_len_v4_geneve);
+			else
+				ret = -EFAULT;
+			break;
 		case 20: /* struct iphdr */
 		case 8:  /* __u32 opt[2] */
 			if (data + move_len_v4 + len_diff <= data_end)
@@ -273,6 +306,10 @@ ctx_adjust_hroom(struct xdp_md *ctx, const __s32 len_diff, const __u32 mode,
 						  move_len_v4);
 			else
 				ret = -EFAULT;
+			break;
+		case 50: /* struct {ethhdr + iphdr + udphdr + genevehdr / vxlanhdr} */
+		case 50 + 12: /* geneve with IPv4 DSR option */
+		case 50 + 24: /* geneve with IPv6 DSR option */
 			break;
 		case 48: /* struct {ipv6hdr + icmp6hdr} */
 			break;

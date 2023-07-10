@@ -18,7 +18,7 @@ import (
 	"github.com/cilium/cilium/api/v1/models"
 	. "github.com/cilium/cilium/api/v1/server/restapi/policy"
 	"github.com/cilium/cilium/pkg/api"
-	"github.com/cilium/cilium/pkg/auth"
+	"github.com/cilium/cilium/pkg/clustermesh"
 	"github.com/cilium/cilium/pkg/crypto/certificatemanager"
 	datapath "github.com/cilium/cilium/pkg/datapath/types"
 	"github.com/cilium/cilium/pkg/endpoint"
@@ -42,13 +42,12 @@ import (
 	policyAPI "github.com/cilium/cilium/pkg/policy/api"
 	"github.com/cilium/cilium/pkg/safetime"
 	"github.com/cilium/cilium/pkg/source"
+	"github.com/cilium/cilium/pkg/stream"
 	"github.com/cilium/cilium/pkg/trigger"
 )
 
 // initPolicy initializes the core policy components of the daemon.
-func (d *Daemon) initPolicy(
-	authManager auth.Manager,
-) error {
+func (d *Daemon) initPolicy() error {
 	// Reuse policy.TriggerMetrics and PolicyTriggerInterval here since
 	// this is only triggered by agent configuration changes for now and
 	// should be counted in pol.TriggerMetrics.
@@ -63,7 +62,6 @@ func (d *Daemon) initPolicy(
 	}
 	d.datapathRegenTrigger = rt
 
-	d.monitorAgent.RegisterNewConsumer(authManager)
 	return nil
 }
 
@@ -83,9 +81,12 @@ type policyOut struct {
 
 	IdentityAllocator      CachingIdentityAllocator
 	CacheIdentityAllocator cache.IdentityAllocator
-	Repository             *policy.Repository
-	Updater                *policy.Updater
-	IPCache                *ipcache.IPCache
+	RemoteIdentityWatcher  clustermesh.RemoteIdentityWatcher
+	IdentityObservable     stream.Observable[cache.IdentityChange]
+
+	Repository *policy.Repository
+	Updater    *policy.Updater
+	IPCache    *ipcache.IPCache
 }
 
 // newPolicyTrifecta instantiates CachingIdentityAllocator, Repository and IPCache.
@@ -120,7 +121,7 @@ func newPolicyTrifecta(params policyParams) (policyOut, error) {
 		IdentityAllocator: idAlloc,
 		PolicyHandler:     iao.policy.GetSelectorCache(),
 		DatapathHandler:   params.EndpointManager,
-		NodeHandler:       params.Datapath.Node(),
+		NodeIDHandler:     params.Datapath.NodeIDs(),
 		CacheStatus:       params.CacheStatus,
 	})
 	idAlloc.ipcache = ipc
@@ -146,6 +147,8 @@ func newPolicyTrifecta(params policyParams) (policyOut, error) {
 	return policyOut{
 		IdentityAllocator:      idAlloc,
 		CacheIdentityAllocator: idAlloc,
+		RemoteIdentityWatcher:  idAlloc,
+		IdentityObservable:     idAlloc,
 		Repository:             iao.policy,
 		Updater:                policyUpdater,
 		IPCache:                ipc,
@@ -421,7 +424,7 @@ func (r *PolicyReactionEvent) Handle(res chan interface{}) {
 //   - regenerate all endpoints in epsToRegen
 //   - bump the policy revision of all endpoints not in epsToRegen, but which are
 //     in allEps, to revision rev.
-//   - wait for the regenerations to be finished
+//   - wait for the all endpoint regenerations to be _queued_.
 //   - upsert or delete CIDR identities to the ipcache, as needed.
 func (r *PolicyReactionEvent) reactToRuleUpdates(epsToBumpRevision, epsToRegen *policy.EndpointSet, rev uint64, upsertPrefixes, releasePrefixes []netip.Prefix) {
 	var enqueueWaitGroup sync.WaitGroup
@@ -617,16 +620,7 @@ func (d *Daemon) policyDelete(labels labels.LabelArray, opts *policy.DeleteOptio
 	return
 }
 
-type deletePolicy struct {
-	daemon *Daemon
-}
-
-func newDeletePolicyHandler(d *Daemon) DeletePolicyHandler {
-	return &deletePolicy{daemon: d}
-}
-
-func (h *deletePolicy) Handle(params DeletePolicyParams) middleware.Responder {
-	d := h.daemon
+func deletePolicyHandler(d *Daemon, params DeletePolicyParams) middleware.Responder {
 	lbls := labels.ParseSelectLabelArrayFromArray(params.Labels)
 	rev, err := d.PolicyDelete(lbls, &policy.DeleteOptions{Source: source.LocalAPI})
 	if err != nil {
@@ -641,17 +635,7 @@ func (h *deletePolicy) Handle(params DeletePolicyParams) middleware.Responder {
 	return NewDeletePolicyOK().WithPayload(policy)
 }
 
-type putPolicy struct {
-	daemon *Daemon
-}
-
-func newPutPolicyHandler(d *Daemon) PutPolicyHandler {
-	return &putPolicy{daemon: d}
-}
-
-func (h *putPolicy) Handle(params PutPolicyParams) middleware.Responder {
-	d := h.daemon
-
+func putPolicyHandler(d *Daemon, params PutPolicyParams) middleware.Responder {
 	var rules policyAPI.Rules
 	if err := json.Unmarshal([]byte(params.Policy), &rules); err != nil {
 		metrics.PolicyImportErrorsTotal.Inc() // Deprecated in Cilium 1.14, to be removed in 1.15.
@@ -684,16 +668,8 @@ func (h *putPolicy) Handle(params PutPolicyParams) middleware.Responder {
 	return NewPutPolicyOK().WithPayload(policy)
 }
 
-type getPolicy struct {
-	repo *policy.Repository
-}
-
-func newGetPolicyHandler(r *policy.Repository) GetPolicyHandler {
-	return &getPolicy{repo: r}
-}
-
-func (h *getPolicy) Handle(params GetPolicyParams) middleware.Responder {
-	repository := h.repo
+func getPolicyHandler(d *Daemon, params GetPolicyParams) middleware.Responder {
+	repository := d.policy
 	repository.Mutex.RLock()
 	defer repository.Mutex.RUnlock()
 
@@ -713,14 +689,6 @@ func (h *getPolicy) Handle(params GetPolicyParams) middleware.Responder {
 	return NewGetPolicyOK().WithPayload(policy)
 }
 
-type getPolicySelectors struct {
-	daemon *Daemon
-}
-
-func newGetPolicyCacheHandler(d *Daemon) GetPolicySelectorsHandler {
-	return &getPolicySelectors{daemon: d}
-}
-
-func (h *getPolicySelectors) Handle(params GetPolicySelectorsParams) middleware.Responder {
-	return NewGetPolicySelectorsOK().WithPayload(h.daemon.policy.GetSelectorCache().GetModel())
+func getPolicySelectorsHandler(d *Daemon, params GetPolicySelectorsParams) middleware.Responder {
+	return NewGetPolicySelectorsOK().WithPayload(d.policy.GetSelectorCache().GetModel())
 }

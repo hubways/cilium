@@ -74,7 +74,9 @@ production workloads that require high availability.
 
        .. code-block:: shell-session
 
-          cilium install --encryption wireguard
+          cilium install \
+             --set encryption.enabled=true \
+             --set encryption.type=wireguard
 
     .. group-tab:: Helm
 
@@ -232,7 +234,10 @@ options:
 
        .. code-block:: shell-session
 
-          cilium install --encryption wireguard --node-encryption
+          cilium install \
+             --set encryption.enabled=true \
+             --set encryption.type=wireguard \
+             --set encryption.nodeEncryption=true
 
     .. group-tab:: Helm
 
@@ -282,6 +287,12 @@ options:
   recommended, as it will require you to always manually update a node's public
   key in its corresponding ``CiliumNode`` CRD when a worker node's public key
   changes, given that the worker node will be unable to do so itself.
+
+  N/S load balancer traffic isn't encrypted when an intermediate node redirects
+  a request to a different node with the following load balancer configuration:
+
+  - LoadBalancer & NodePort XDP Acceleration
+  - Direct Server Return (DSR)
 
 Legal
 =====

@@ -26,17 +26,16 @@ import (
 	"github.com/cilium/cilium/pkg/kvstore"
 	"github.com/cilium/cilium/pkg/lock"
 	"github.com/cilium/cilium/pkg/logging/logfields"
-	"github.com/cilium/cilium/pkg/maps/eventsmap"
 	ipcachemap "github.com/cilium/cilium/pkg/maps/ipcache"
 	ipmasqmap "github.com/cilium/cilium/pkg/maps/ipmasq"
 	"github.com/cilium/cilium/pkg/maps/lbmap"
 	"github.com/cilium/cilium/pkg/maps/lxcmap"
 	"github.com/cilium/cilium/pkg/maps/metricsmap"
-	"github.com/cilium/cilium/pkg/maps/signalmap"
 	tunnelmap "github.com/cilium/cilium/pkg/maps/tunnel"
 	"github.com/cilium/cilium/pkg/node"
 	nodeTypes "github.com/cilium/cilium/pkg/node/types"
 	"github.com/cilium/cilium/pkg/option"
+	"github.com/cilium/cilium/pkg/promise"
 	"github.com/cilium/cilium/pkg/rand"
 	"github.com/cilium/cilium/pkg/status"
 	"github.com/cilium/cilium/pkg/version"
@@ -148,6 +147,18 @@ func (d *Daemon) getMasqueradingStatus() *models.Masquerading {
 func (d *Daemon) getIPV6BigTCPStatus() *models.IPV6BigTCP {
 	s := &models.IPV6BigTCP{
 		Enabled: option.Config.EnableIPv6BIGTCP,
+		MaxGRO:  int64(d.bigTCPConfig.GetGROIPv6MaxSize()),
+		MaxGSO:  int64(d.bigTCPConfig.GetGSOIPv6MaxSize()),
+	}
+
+	return s
+}
+
+func (d *Daemon) getIPV4BigTCPStatus() *models.IPV4BigTCP {
+	s := &models.IPV4BigTCP{
+		Enabled: option.Config.EnableIPv4BIGTCP,
+		MaxGRO:  int64(d.bigTCPConfig.GetGROIPv4MaxSize()),
+		MaxGSO:  int64(d.bigTCPConfig.GetGSOIPv4MaxSize()),
 	}
 
 	return s
@@ -212,6 +223,10 @@ func (d *Daemon) getCNIChainingStatus() *models.CNIChainingStatus {
 func (d *Daemon) getKubeProxyReplacementStatus() *models.KubeProxyReplacement {
 	var mode string
 	switch option.Config.KubeProxyReplacement {
+	case option.KubeProxyReplacementTrue:
+		mode = models.KubeProxyReplacementModeTrue
+	case option.KubeProxyReplacementFalse:
+		mode = models.KubeProxyReplacementModeFalse
 	case option.KubeProxyReplacementStrict:
 		mode = models.KubeProxyReplacementModeStrict
 	case option.KubeProxyReplacementPartial:
@@ -331,16 +346,16 @@ func (d *Daemon) getBPFMapStatus() *models.BPFMapStatus {
 				Size: int64(lxcmap.MaxEntries),
 			},
 			{
-				Name: "Events",
-				Size: int64(eventsmap.MaxEntries),
-			},
-			{
 				Name: "IP cache",
 				Size: int64(ipcachemap.MaxEntries),
 			},
 			{
-				Name: "IP masquerading agent",
-				Size: int64(ipmasqmap.MaxEntries),
+				Name: "IPv4 masquerading agent",
+				Size: int64(ipmasqmap.MaxEntriesIPv4),
+			},
+			{
+				Name: "IPv6 masquerading agent",
+				Size: int64(ipmasqmap.MaxEntriesIPv6),
 			},
 			{
 				Name: "IPv4 fragmentation",
@@ -391,10 +406,6 @@ func (d *Daemon) getBPFMapStatus() *models.BPFMapStatus {
 				Size: int64(lbmap.AffinityMapMaxEntries),
 			},
 			{
-				Name: "Signal",
-				Size: int64(signalmap.MaxEntries),
-			},
-			{
 				Name: "Sock reverse NAT",
 				Size: int64(option.Config.SockRevNatEntries),
 			},
@@ -406,12 +417,10 @@ func (d *Daemon) getBPFMapStatus() *models.BPFMapStatus {
 	}
 }
 
-type getHealthz struct {
-	daemon *Daemon
-}
-
-func NewGetHealthzHandler(d *Daemon) GetHealthzHandler {
-	return &getHealthz{daemon: d}
+func getHealthzHandler(d *Daemon, params GetHealthzParams) middleware.Responder {
+	brief := params.Brief != nil && *params.Brief
+	sr := d.getStatus(brief)
+	return NewGetHealthzOK().WithPayload(&sr)
 }
 
 func (d *Daemon) getNodeStatus() *models.ClusterStatus {
@@ -424,26 +433,20 @@ func (d *Daemon) getNodeStatus() *models.ClusterStatus {
 	return &clusterStatus
 }
 
-func (h *getHealthz) Handle(params GetHealthzParams) middleware.Responder {
-	brief := params.Brief != nil && *params.Brief
-	sr := h.daemon.getStatus(brief)
-
-	return NewGetHealthzOK().WithPayload(&sr)
-}
-
 type getNodes struct {
-	d *Daemon
 	// mutex to protect the clients map against concurrent access
 	lock.RWMutex
 	// clients maps a client ID to a clusterNodesClient
 	clients map[int64]*clusterNodesClient
 }
 
-func NewGetClusterNodesHandler(d *Daemon) GetClusterNodesHandler {
-	return &getNodes{
-		d:       d,
+func NewGetClusterNodesHandler(dp promise.Promise[*Daemon]) *apiHandler[GetClusterNodesParams] {
+	h := &apiHandler[GetClusterNodesParams]{dp: dp}
+	gn := &getNodes{
 		clients: map[int64]*clusterNodesClient{},
 	}
+	h.handler = gn.Handle
+	return h
 }
 
 // clientGCTimeout is the time for which the clients are kept. After timeout
@@ -532,6 +535,11 @@ func (c *clusterNodesClient) AllocateNodeID(_ net.IP) uint16 {
 	return 0
 }
 
+func (c *clusterNodesClient) GetNodeIP(_ uint16) string {
+	// no-op
+	return ""
+}
+
 func (c *clusterNodesClient) DumpNodeIDs() []*models.NodeID {
 	// no-op
 	return nil
@@ -542,23 +550,23 @@ func (c *clusterNodesClient) RestoreNodeIDs() {
 	return
 }
 
-func (h *getNodes) cleanupClients() {
+func (h *getNodes) cleanupClients(d *Daemon) {
 	past := time.Now().Add(-clientGCTimeout)
 	for k, v := range h.clients {
 		if v.lastSync.Before(past) {
-			h.d.nodeDiscovery.Manager.Unsubscribe(v)
+			d.nodeDiscovery.Manager.Unsubscribe(v)
 			delete(h.clients, k)
 		}
 	}
 }
 
-func (h *getNodes) Handle(params GetClusterNodesParams) middleware.Responder {
+func (h *getNodes) Handle(d *Daemon, params GetClusterNodesParams) middleware.Responder {
 	var cns *models.ClusterNodeStatus
 	// If ClientID is not set then we send all nodes, otherwise we will store
 	// the client ID in the list of clients and we subscribe this new client
 	// to the list of clients.
 	if params.ClientID == nil {
-		ns := h.d.getNodeStatus()
+		ns := d.getNodeStatus()
 		cns = &models.ClusterNodeStatus{
 			Self:       ns.Self,
 			NodesAdded: ns.Nodes,
@@ -580,7 +588,7 @@ func (h *getNodes) Handle(params GetClusterNodesParams) middleware.Responder {
 		// clientID 0.
 		_, exists := h.clients[clientID]
 		if exists || clientID == 0 {
-			ns := h.d.getNodeStatus()
+			ns := d.getNodeStatus()
 			cns = &models.ClusterNodeStatus{
 				ClientID:   0,
 				Self:       ns.Self,
@@ -595,10 +603,10 @@ func (h *getNodes) Handle(params GetClusterNodesParams) middleware.Responder {
 				Self:     nodeTypes.GetAbsoluteNodeName(),
 			},
 		}
-		h.d.nodeDiscovery.Manager.Subscribe(c)
+		d.nodeDiscovery.Manager.Subscribe(c)
 
 		// Clean up other clients before adding a new one
-		h.cleanupClients()
+		h.cleanupClients(d)
 		h.clients[clientID] = c
 	}
 	c.Lock()
@@ -675,13 +683,13 @@ func (d *Daemon) getStatus(brief bool) models.StatusResponse {
 			Msg:   fmt.Sprintf("%s    %s", ciliumVer, msg),
 		}
 	case d.statusResponse.Kvstore != nil && d.statusResponse.Kvstore.State != models.StatusStateOk:
-		msg := "Kvstore service is not ready"
+		msg := "Kvstore service is not ready: " + d.statusResponse.Kvstore.Msg
 		sr.Cilium = &models.Status{
 			State: d.statusResponse.Kvstore.State,
 			Msg:   fmt.Sprintf("%s    %s", ciliumVer, msg),
 		}
 	case d.statusResponse.ContainerRuntime != nil && d.statusResponse.ContainerRuntime.State != models.StatusStateOk:
-		msg := "Container runtime is not ready"
+		msg := "Container runtime is not ready: " + d.statusResponse.ContainerRuntime.Msg
 		if d.statusResponse.ContainerRuntime.State == models.StatusStateDisabled {
 			msg = "Container runtime is disabled"
 		}
@@ -690,13 +698,13 @@ func (d *Daemon) getStatus(brief bool) models.StatusResponse {
 			Msg:   fmt.Sprintf("%s    %s", ciliumVer, msg),
 		}
 	case d.clientset.IsEnabled() && d.statusResponse.Kubernetes != nil && d.statusResponse.Kubernetes.State != models.StatusStateOk:
-		msg := "Kubernetes service is not ready"
+		msg := "Kubernetes service is not ready: " + d.statusResponse.Kubernetes.Msg
 		sr.Cilium = &models.Status{
 			State: d.statusResponse.Kubernetes.State,
 			Msg:   fmt.Sprintf("%s    %s", ciliumVer, msg),
 		}
 	case d.statusResponse.CniFile != nil && d.statusResponse.CniFile.State == models.StatusStateFailure:
-		msg := "Could not write CNI config file"
+		msg := "Could not write CNI config file: " + d.statusResponse.CniFile.Msg
 		sr.Cilium = &models.Status{
 			State: models.StatusStateFailure,
 			Msg:   fmt.Sprintf("%s    %s", ciliumVer, msg),
@@ -1041,6 +1049,7 @@ func (d *Daemon) startStatusCollector(cleaner *daemonCleanup) {
 
 	d.statusResponse.Masquerading = d.getMasqueradingStatus()
 	d.statusResponse.IPV6BigTCP = d.getIPV6BigTCPStatus()
+	d.statusResponse.IPV4BigTCP = d.getIPV4BigTCPStatus()
 	d.statusResponse.BandwidthManager = d.getBandwidthManagerStatus()
 	d.statusResponse.HostFirewall = d.getHostFirewallStatus()
 	d.statusResponse.HostRouting = d.getHostRoutingStatus()

@@ -63,6 +63,18 @@ linters-settings:
   gosec:
     includes:
       - G402
+  gomodguard:
+    blocked:
+      modules:
+        - gopkg.in/check.v1:
+            recommendations:
+              - testing
+              - github.com/stretchr/testify/assert
+            reason: "gocheck has been deprecated, see https://docs.cilium.io/en/latest/contributing/testing/unit/#migrating-tests-off-of-gopkg-in-check-v1"
+        - go.uber.org/multierr:
+            recommendations:
+              - errors
+            reason: "Go 1.20+ has support for combining multiple errors, see https://go.dev/doc/go1.20#errors"
 
 issues:
   # Excluding configuration per-path, per-linter, per-text and per-source
@@ -79,6 +91,11 @@ issues:
     - path: \\.(generated\\.deepcopy|pb)\\.go$
       linters:
         - goimports
+    # Skip goheader check on files imported and modified from upstream k8s
+    - path: "pkg/ipam/(cidrset|service)/.+\\.go"
+      linters:
+        - goheader
+
 linters:
   disable-all: true
   enable:
@@ -92,6 +109,7 @@ linters:
     - unused
     - goheader
     - gosec
+    - gomodguard
 
 # To enable later if makes sense
 #    - deadcode

@@ -32,6 +32,20 @@ const (
 	// CESSlicingModeDefault is default method for grouping CEP in a CES.
 	CESSlicingModeDefault = "cesSliceModeIdentity"
 
+	// CESWriteQPSLimitDefault is the default rate limit for the CES work queue.
+	CESWriteQPSLimitDefault = 10
+
+	// CESWriteQPSLimitMax is the maximum rate limit for the CES work queue.
+	// CES work queue QPS limit cannot exceed this value, regardless of other config.
+	CESWriteQPSLimitMax = 50
+
+	// CESWriteQPSBurstDefault is the default burst rate for the CES work queue.
+	CESWriteQPSBurstDefault = 20
+
+	// CESWriteQPSBurstMax is the maximum burst rate for the CES work queue.
+	// CES work queue QPS burst cannot exceed this value, regardless of other config.
+	CESWriteQPSBurstMax = 100
+
 	// CNPStatusCleanupQPSDefault is the default rate for the CNP NodeStatus updates GC.
 	CNPStatusCleanupQPSDefault = 10
 
@@ -43,6 +57,9 @@ const (
 
 	// PprofPortOperator is the default value for pprof in the operator
 	PprofPortOperator = 6061
+
+	// DefaultProxyIdleTimeoutSeconds is the default value for the proxy idle timeout
+	DefaultProxyIdleTimeoutSeconds = 60
 )
 
 const (
@@ -116,6 +133,9 @@ const (
 
 	// IPAMInstanceTagFilter are optional tags used to filter instances for ENI discovery ; only used with AWS IPAM mode for now
 	IPAMInstanceTags = "instance-tags-filter"
+
+	// IPAMAutoCreateCiliumPodIPPools contains pre-defined IP pools to be auto-created on startup.
+	IPAMAutoCreateCiliumPodIPPools = "auto-create-cilium-pod-ip-pools"
 
 	// ClusterPoolIPv4CIDR is the cluster's IPv4 CIDR to allocate
 	// individual PodCIDR ranges from when using the ClusterPool ipam mode.
@@ -228,6 +248,16 @@ const (
 	// CESSlicingMode instructs how CEPs are grouped in a CES.
 	CESSlicingMode = "ces-slice-mode"
 
+	// CESWriteQPSLimit is the rate limit per second for the CES work queue to
+	// process  CES events that result in CES write (Create, Update, Delete)
+	// requests to the kube-apiserver.
+	CESWriteQPSLimit = "ces-write-qps-limit"
+
+	// CESWriteQPSBurst is the burst rate per second used with CESWriteQPSLimit
+	// for the CES work queue to process CES events that result in CES write
+	// (Create, Update, Delete) requests to the kube-apiserver.
+	CESWriteQPSBurst = "ces-write-qps-burst"
+
 	// LoadBalancerL7 enables loadbalancer capabilities for services via envoy proxy
 	LoadBalancerL7 = "loadbalancer-l7"
 
@@ -258,6 +288,9 @@ const (
 
 	// GatewayAPISecretsNamespace is the namespace having tls secrets used by GatewayAPI and CEC.
 	GatewayAPISecretsNamespace = "gateway-api-secrets-namespace"
+
+	// ProxyIdleTimeoutSeconds is the idle timeout for proxy connections to upstream clusters
+	ProxyIdleTimeoutSeconds = "proxy-idle-timeout-seconds"
 
 	// EnableGatewayAPI enables support of Gateway API
 	// This must be enabled along with enable-envoy-config in cilium agent.
@@ -292,6 +325,12 @@ const (
 	// IngressDefaultLoadbalancerMode is the default loadbalancer mode for Ingress.
 	// Applicable values: dedicated, shared
 	IngressDefaultLoadbalancerMode = "ingress-default-lb-mode"
+
+	// IngressDefaultSecretNamespace is the default secret namespace for Ingress.
+	IngressDefaultSecretNamespace = "ingress-default-secret-namespace"
+
+	// IngressDefaultSecretName is the default secret name for Ingress.
+	IngressDefaultSecretName = "ingress-default-secret-name"
 
 	// PodRestartSelector specify the labels contained in the pod that needs to be restarted before the node can be de-stained
 	// default values: k8s-app=kube-dns
@@ -399,6 +438,9 @@ type OperatorConfig struct {
 	// per node.
 	NodeCIDRMaskSizeIPv6 int
 
+	// IPAMAutoCreateCiliumPodIPPools contains pre-defined IP pools to be auto-created on startup.
+	IPAMAutoCreateCiliumPodIPPools map[string]string
+
 	// AWS options
 
 	// ENITags are the tags that will be added to every ENI created by the AWS ENI IPAM
@@ -482,6 +524,16 @@ type OperatorConfig struct {
 	// CESSlicingMode instructs how CEPs are grouped in a CES.
 	CESSlicingMode string
 
+	// CESWriteQPSLimit is the rate limit per second for the CES work queue to
+	// process  CES events that result in CES write (Create, Update, Delete)
+	// requests to the kube-apiserver.
+	CESWriteQPSLimit float64
+
+	// CESWriteQPSBurst is the burst rate per second used with CESWriteQPSLimit
+	// for the CES work queue to process CES events that result in CES write
+	// (Create, Update, Delete) requests to the kube-apiserver.
+	CESWriteQPSBurst int
+
 	// LoadBalancerL7 enables loadbalancer capabilities for services.
 	LoadBalancerL7 string
 
@@ -512,6 +564,9 @@ type OperatorConfig struct {
 	// GatewayAPISecretsNamespace is the namespace having tls secrets used by CEC for Gateway API.
 	GatewayAPISecretsNamespace string
 
+	// ProxyIdleTimeoutSeconds is the idle timeout for the proxy to upstream cluster
+	ProxyIdleTimeoutSeconds int
+
 	// CiliumK8sNamespace is the namespace where Cilium pods are running.
 	CiliumK8sNamespace string
 
@@ -541,6 +596,12 @@ type OperatorConfig struct {
 	// IngressDefaultLoadbalancerMode is the default loadbalancer mode for Ingress.
 	// Applicable values: dedicated, shared
 	IngressDefaultLoadbalancerMode string
+
+	// IngressDefaultLSecretNamespace is the default secret namespace for Ingress.
+	IngressDefaultSecretNamespace string
+
+	// IngressDefaultLSecretName is the default secret name for Ingress.
+	IngressDefaultSecretName string
 
 	// PodRestartSelector specify the labels contained in the pod that needs to be restarted before the node can be de-stained
 	PodRestartSelector string
@@ -577,6 +638,10 @@ func (c *OperatorConfig) Populate(vp *viper.Viper) {
 	c.EnforceIngressHTTPS = vp.GetBool(EnforceIngressHttps)
 	c.IngressSecretsNamespace = vp.GetString(IngressSecretsNamespace)
 	c.GatewayAPISecretsNamespace = vp.GetString(GatewayAPISecretsNamespace)
+	c.ProxyIdleTimeoutSeconds = vp.GetInt(ProxyIdleTimeoutSeconds)
+	if c.ProxyIdleTimeoutSeconds == 0 {
+		c.ProxyIdleTimeoutSeconds = DefaultProxyIdleTimeoutSeconds
+	}
 	c.EnableIngressSecretsSync = vp.GetBool(EnableIngressSecretsSync)
 	c.EnableGatewayAPISecretsSync = vp.GetBool(EnableGatewayAPISecretsSync)
 	c.CiliumPodLabels = vp.GetString(CiliumPodLabels)
@@ -586,6 +651,8 @@ func (c *OperatorConfig) Populate(vp *viper.Viper) {
 	c.IngressLBAnnotationPrefixes = vp.GetStringSlice(IngressLBAnnotationPrefixes)
 	c.IngressSharedLBServiceName = vp.GetString(IngressSharedLBServiceName)
 	c.IngressDefaultLoadbalancerMode = vp.GetString(IngressDefaultLoadbalancerMode)
+	c.IngressDefaultSecretNamespace = vp.GetString(IngressDefaultSecretNamespace)
+	c.IngressDefaultSecretName = vp.GetString(IngressDefaultSecretName)
 	c.PodRestartSelector = vp.GetString(PodRestartSelector)
 
 	c.CiliumK8sNamespace = vp.GetString(CiliumK8sNamespace)
@@ -635,6 +702,8 @@ func (c *OperatorConfig) Populate(vp *viper.Viper) {
 	// CiliumEndpointSlice options
 	c.CESMaxCEPsInCES = vp.GetInt(CESMaxCEPsInCES)
 	c.CESSlicingMode = vp.GetString(CESSlicingMode)
+	c.CESWriteQPSLimit = vp.GetFloat64(CESWriteQPSLimit)
+	c.CESWriteQPSBurst = vp.GetInt(CESWriteQPSBurst)
 
 	// Option maps and slices
 
@@ -671,14 +740,21 @@ func (c *OperatorConfig) Populate(vp *viper.Viper) {
 	} else {
 		c.ENIGarbageCollectionTags = m
 	}
+
+	if m, err := command.GetStringMapStringE(vp, IPAMAutoCreateCiliumPodIPPools); err != nil {
+		log.Fatalf("unable to parse %s: %s", IPAMAutoCreateCiliumPodIPPools, err)
+	} else {
+		c.IPAMAutoCreateCiliumPodIPPools = m
+	}
 }
 
 // Config represents the operator configuration.
 var Config = &OperatorConfig{
-	IPAMSubnetsIDs:           make([]string, 0),
-	IPAMSubnetsTags:          make(map[string]string),
-	IPAMInstanceTags:         make(map[string]string),
-	AWSInstanceLimitMapping:  make(map[string]string),
-	ENITags:                  make(map[string]string),
-	ENIGarbageCollectionTags: make(map[string]string),
+	IPAMSubnetsIDs:                 make([]string, 0),
+	IPAMSubnetsTags:                make(map[string]string),
+	IPAMInstanceTags:               make(map[string]string),
+	IPAMAutoCreateCiliumPodIPPools: make(map[string]string),
+	AWSInstanceLimitMapping:        make(map[string]string),
+	ENITags:                        make(map[string]string),
+	ENIGarbageCollectionTags:       make(map[string]string),
 }

@@ -8,6 +8,7 @@ import (
 	"net"
 	"sync"
 
+	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/cilium/cilium/pkg/identity"
@@ -20,7 +21,9 @@ import (
 	"github.com/cilium/cilium/pkg/k8s/utils"
 	"github.com/cilium/cilium/pkg/k8s/watchers/resources"
 	"github.com/cilium/cilium/pkg/kvstore"
+	"github.com/cilium/cilium/pkg/logging/logfields"
 	"github.com/cilium/cilium/pkg/node"
+	"github.com/cilium/cilium/pkg/option"
 	"github.com/cilium/cilium/pkg/source"
 	ciliumTypes "github.com/cilium/cilium/pkg/types"
 	"github.com/cilium/cilium/pkg/u8proto"
@@ -51,8 +54,8 @@ func (k *K8sWatcher) ciliumEndpointsInit(ciliumNPClient client.Clientset, asyncC
 				UpdateFunc: func(oldObj, newObj interface{}) {
 					var valid, equal bool
 					defer func() { k.K8sEventReceived(apiGroup, metricCiliumEndpoint, resources.MetricUpdate, valid, equal) }()
-					if oldCE := k8s.ObjToCiliumEndpoint(oldObj); oldCE != nil {
-						if newCE := k8s.ObjToCiliumEndpoint(newObj); newCE != nil {
+					if oldCE := k8s.CastInformerEvent[types.CiliumEndpoint](oldObj); oldCE != nil {
+						if newCE := k8s.CastInformerEvent[types.CiliumEndpoint](newObj); newCE != nil {
 							valid = true
 							if oldCE.DeepEqual(newCE) {
 								equal = true
@@ -66,7 +69,7 @@ func (k *K8sWatcher) ciliumEndpointsInit(ciliumNPClient client.Clientset, asyncC
 				DeleteFunc: func(obj interface{}) {
 					var valid, equal bool
 					defer func() { k.K8sEventReceived(apiGroup, metricCiliumEndpoint, resources.MetricDelete, valid, equal) }()
-					ciliumEndpoint := k8s.ObjToCiliumEndpoint(obj)
+					ciliumEndpoint := k8s.CastInformerEvent[types.CiliumEndpoint](obj)
 					if ciliumEndpoint == nil {
 						return
 					}
@@ -74,7 +77,7 @@ func (k *K8sWatcher) ciliumEndpointsInit(ciliumNPClient client.Clientset, asyncC
 					k.endpointDeleted(ciliumEndpoint)
 				},
 			},
-			k8s.ConvertToCiliumEndpoint,
+			k8s.TransformToCiliumEndpoint,
 			cache.Indexers{
 				"localNode": CreateCiliumEndpointLocalPodIndexFunc(),
 			},
@@ -169,6 +172,17 @@ func (k *K8sWatcher) endpointUpdated(oldEndpoint, endpoint *types.CiliumEndpoint
 	nodeIP := net.ParseIP(endpoint.Networking.NodeIP)
 	if nodeIP == nil {
 		log.WithField("nodeIP", endpoint.Networking.NodeIP).Warning("Unable to parse node IP while processing CiliumEndpoint update")
+		return
+	}
+
+	if option.Config.EnableHighScaleIPcache &&
+		!identity.IsWellKnownIdentity(id) {
+		// Well-known identities are kept in the high-scale ipcache because we
+		// need to be able to connect to the DNS pods to resolve FQDN policies.
+		scopedLog := log.WithFields(logrus.Fields{
+			logfields.Identity: id,
+		})
+		scopedLog.Debug("Endpoint is not well-known; skipping ipcache upsert")
 		return
 	}
 

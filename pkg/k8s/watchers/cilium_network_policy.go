@@ -87,8 +87,8 @@ func (r *ruleImportMetadataCache) get(cnp *types.SlimCNP) (policyImportMetadata,
 func (k *K8sWatcher) ciliumNetworkPoliciesInit(ctx context.Context, cs client.Clientset) {
 	var cnpSynced, ccnpSynced, cidrGroupSynced atomic.Bool
 	go func() {
-		cnpEvents := k.sharedResources.CiliumNetworkPolicies.Events(ctx)
-		ccnpEvents := k.sharedResources.CiliumClusterwideNetworkPolicies.Events(ctx)
+		cnpEvents := k.resources.CiliumNetworkPolicies.Events(ctx)
+		ccnpEvents := k.resources.CiliumClusterwideNetworkPolicies.Events(ctx)
 
 		// cnpCache contains both CNPs and CCNPs, stored using a common intermediate
 		// representation (*types.SlimCNP). The cache is indexed on resource.Key,
@@ -99,7 +99,7 @@ func (k *K8sWatcher) ciliumNetworkPoliciesInit(ctx context.Context, cs client.Cl
 		cnpCache := make(map[resource.Key]*types.SlimCNP)
 
 		cidrGroupCache := make(map[string]*cilium_v2_alpha1.CiliumCIDRGroup)
-		cidrGroupEvents := k.sharedResources.CIDRGroups.Events(ctx)
+		cidrGroupEvents := k.resources.CIDRGroups.Events(ctx)
 
 		// cidrGroupPolicies is the set of policies that are referencing CiliumCIDRGroup objects.
 		cidrGroupPolicies := make(map[resource.Key]struct{})
@@ -227,23 +227,13 @@ func (k *K8sWatcher) onUpsert(
 ) error {
 	initialRecvTime := time.Now()
 
-	var (
-		equal  bool
-		action string
-	)
-
-	// wrap k.K8sEventReceived call into a naked func() to capture equal in the closure
 	defer func() {
-		k.K8sEventReceived(apiGroup, metricLabel, action, true, equal)
+		k.k8sResourceSynced.SetEventTimestamp(apiGroup)
 	}()
 
 	oldCNP, ok := cnpCache[key]
-	if !ok {
-		action = resources.MetricCreate
-	} else {
-		action = resources.MetricUpdate
+	if ok {
 		if oldCNP.DeepEqual(cnp) {
-			equal = true
 			return nil
 		}
 	}
@@ -252,9 +242,11 @@ func (k *K8sWatcher) onUpsert(
 		return nil
 	}
 
-	// check if this cnp was referencing or is now referencing a
+	// check if this cnp was referencing or is now referencing at least one non-empty
 	// CiliumCIDRGroup and update the relevant metric accordingly.
-	if len(getCIDRGroupRefs(cnp)) > 0 {
+	cidrGroupRefs := getCIDRGroupRefs(cnp)
+	cidrsSets, _ := cidrGroupRefsToCIDRsSets(cidrGroupRefs, cidrGroupCache)
+	if len(cidrsSets) > 0 {
 		cidrGroupPolicies[key] = struct{}{}
 	} else {
 		delete(cidrGroupPolicies, key)
@@ -280,8 +272,6 @@ func (k *K8sWatcher) onUpsert(
 		cnpCache[key] = cnpCpy
 	}
 
-	k.K8sEventProcessed(metricLabel, action, err == nil)
-
 	return err
 }
 
@@ -300,8 +290,7 @@ func (k *K8sWatcher) onDelete(
 	delete(cidrGroupPolicies, key)
 	metrics.CIDRGroupPolicies.Set(float64(len(cidrGroupPolicies)))
 
-	k.K8sEventProcessed(metricLabel, resources.MetricDelete, err == nil)
-	k.K8sEventReceived(apiGroup, metricLabel, resources.MetricDelete, true, true)
+	k.k8sResourceSynced.SetEventTimestamp(apiGroup)
 
 	return err
 }
@@ -319,7 +308,7 @@ func (k *K8sWatcher) addCiliumNetworkPolicyV2(ciliumNPClient clientset.Interface
 
 	rules, policyImportErr := cnp.Parse()
 	if policyImportErr == nil {
-		policyImportErr = k8s.PreprocessRules(rules, &k.K8sSvcCache)
+		policyImportErr = k8s.PreprocessRules(rules, k.K8sSvcCache)
 		// Replace all rules with the same name, namespace and
 		// resourceTypeCiliumNetworkPolicy
 		if policyImportErr == nil {

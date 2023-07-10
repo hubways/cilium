@@ -42,7 +42,6 @@ import (
 	"github.com/cilium/cilium/pkg/proxy"
 	"github.com/cilium/cilium/pkg/proxy/accesslog"
 	"github.com/cilium/cilium/pkg/proxy/logger"
-	"github.com/cilium/cilium/pkg/slices"
 	"github.com/cilium/cilium/pkg/u8proto"
 )
 
@@ -197,8 +196,7 @@ func (d *Daemon) bootstrapFQDN(possibleEndpoints map[uint16]*endpoint.Endpoint, 
 		RunInterval: dnsGCJobInterval,
 		DoFunc: func(ctx context.Context) error {
 			var (
-				GCStart      = time.Now()
-				namesToClean []string
+				GCStart = time.Now()
 
 				// activeConnections holds DNSName -> single IP entries that have been
 				// marked active by the CT GC. Since we expire in this controller, we
@@ -207,23 +205,29 @@ func (d *Daemon) bootstrapFQDN(possibleEndpoints map[uint16]*endpoint.Endpoint, 
 				activeConnectionsTTL = int(2 * dnsGCJobInterval.Seconds())
 				activeConnections    = fqdn.NewDNSCache(activeConnectionsTTL)
 			)
+			namesToClean := make(map[string]struct{})
 
 			// Cleanup each endpoint cache, deferring deletions via DNSZombies.
 			endpoints := d.endpointManager.GetEndpoints()
 			for _, ep := range endpoints {
 				epID := ep.StringID()
-				if option.Config.MetricsConfig.FQDNActiveNames || option.Config.MetricsConfig.FQDNActiveIPs {
+				if metrics.FQDNActiveNames.IsEnabled() || metrics.FQDNActiveIPs.IsEnabled() {
 					countFQDNs, countIPs := ep.DNSHistory.Count()
-					if option.Config.MetricsConfig.FQDNActiveNames {
+					if metrics.FQDNActiveNames.IsEnabled() {
 						metrics.FQDNActiveNames.WithLabelValues(epID).Set(float64(countFQDNs))
 					}
-					if option.Config.MetricsConfig.FQDNActiveIPs {
+					if metrics.FQDNActiveIPs.IsEnabled() {
 						metrics.FQDNActiveIPs.WithLabelValues(epID).Set(float64(countIPs))
 					}
 				}
-				namesToClean = append(namesToClean, ep.DNSHistory.GC(GCStart, ep.DNSZombies)...)
+				affectedNames := ep.DNSHistory.GC(GCStart, ep.DNSZombies)
+				for _, name := range affectedNames {
+					if _, found := namesToClean[name]; !found {
+						namesToClean[name] = struct{}{}
+					}
+				}
 				alive, dead := ep.DNSZombies.GC()
-				if option.Config.MetricsConfig.FQDNActiveZombiesConnections {
+				if metrics.FQDNAliveZombieConnections.IsEnabled() {
 					metrics.FQDNAliveZombieConnections.WithLabelValues(epID).Set(float64(len(alive)))
 				}
 
@@ -241,8 +245,10 @@ func (d *Daemon) bootstrapFQDN(possibleEndpoints map[uint16]*endpoint.Endpoint, 
 				//
 				lookupTime := time.Now()
 				for _, zombie := range alive {
-					namesToClean = slices.Unique(append(namesToClean, zombie.Names...))
 					for _, name := range zombie.Names {
+						if _, found := namesToClean[name]; !found {
+							namesToClean[name] = struct{}{}
+						}
 						activeConnections.Update(lookupTime, name, []netip.Addr{zombie.IP}, activeConnectionsTTL)
 					}
 				}
@@ -251,11 +257,14 @@ func (d *Daemon) bootstrapFQDN(possibleEndpoints map[uint16]*endpoint.Endpoint, 
 				// Entries here have been evicted from the DNS cache (via .GC due to
 				// TTL expiration or overlimit) and are no longer active connections.
 				for _, zombie := range dead {
-					namesToClean = slices.Unique(append(namesToClean, zombie.Names...))
+					for _, name := range zombie.Names {
+						if _, found := namesToClean[name]; !found {
+							namesToClean[name] = struct{}{}
+						}
+					}
 				}
 			}
 
-			namesToClean = slices.Unique(namesToClean)
 			if len(namesToClean) == 0 {
 				return nil
 			}
@@ -272,18 +281,24 @@ func (d *Daemon) bootstrapFQDN(possibleEndpoints map[uint16]*endpoint.Endpoint, 
 			for _, ep := range endpoints {
 				caches = append(caches, ep.DNSHistory)
 			}
-			cfg.Cache.ReplaceFromCacheByNames(namesToClean, caches...)
 
-			metrics.FQDNGarbageCollectorCleanedTotal.Add(float64(len(namesToClean)))
-			_, err := d.dnsNameManager.ForceGenerateDNS(context.TODO(), namesToClean)
-			namesCount := len(namesToClean)
+			namesToCleanSlice := make([]string, 0, len(namesToClean))
+			for name := range namesToClean {
+				namesToCleanSlice = append(namesToCleanSlice, name)
+			}
+
+			cfg.Cache.ReplaceFromCacheByNames(namesToCleanSlice, caches...)
+
+			metrics.FQDNGarbageCollectorCleanedTotal.Add(float64(len(namesToCleanSlice)))
+			_, err := d.dnsNameManager.ForceGenerateDNS(context.TODO(), namesToCleanSlice)
+			namesCount := len(namesToCleanSlice)
 			// Limit the amount of info level logging to some sane amount
 			if namesCount > 20 {
 				// namedsToClean is only used for logging after this so we can reslice it in place
-				namesToClean = namesToClean[:20]
+				namesToCleanSlice = namesToCleanSlice[:20]
 			}
 			log.WithField(logfields.Controller, dnsGCJobName).Infof(
-				"FQDN garbage collector work deleted %d name entries: %s", namesCount, strings.Join(namesToClean, ","))
+				"FQDN garbage collector work deleted %d name entries: %s", namesCount, strings.Join(namesToCleanSlice, ","))
 			return err
 		},
 		Context: d.ctx,
@@ -348,8 +363,12 @@ func (d *Daemon) bootstrapFQDN(possibleEndpoints map[uint16]*endpoint.Endpoint, 
 	if option.Config.ToFQDNsProxyPort != 0 {
 		port = uint16(option.Config.ToFQDNsProxyPort)
 	} else if port == 0 {
-		// Try locate old DNS proxy port number from the datapath
-		port = d.datapath.GetProxyPort(proxy.DNSProxyName)
+		// Try locate old DNS proxy port number from the datapath, and reuse it if it's not open
+		oldPort := d.datapath.GetProxyPort(proxy.DNSProxyName)
+		openLocalPorts := proxy.OpenLocalPorts()
+		if _, alreadyOpen := openLocalPorts[oldPort]; !alreadyOpen {
+			port = oldPort
+		}
 	}
 	if err := re.InitRegexCompileLRU(option.Config.FQDNRegexCompileLRUSize); err != nil {
 		return fmt.Errorf("could not initialize regex LRU cache: %w", err)
@@ -693,17 +712,9 @@ func ipToInt(addr net.IP) *big.Int {
 	return i
 }
 
-type getFqdnCache struct {
-	daemon *Daemon
-}
-
-func NewGetFqdnCacheHandler(d *Daemon) GetFqdnCacheHandler {
-	return &getFqdnCache{daemon: d}
-}
-
-func (h *getFqdnCache) Handle(params GetFqdnCacheParams) middleware.Responder {
+func getFqdnCacheHandler(d *Daemon, params GetFqdnCacheParams) middleware.Responder {
 	// endpoints we want data from
-	endpoints := h.daemon.endpointManager.GetEndpoints()
+	endpoints := d.endpointManager.GetEndpoints()
 
 	CIDRStr := ""
 	if params.Cidr != nil {
@@ -731,17 +742,9 @@ func (h *getFqdnCache) Handle(params GetFqdnCacheParams) middleware.Responder {
 	return NewGetFqdnCacheOK().WithPayload(lookups)
 }
 
-type deleteFqdnCache struct {
-	daemon *Daemon
-}
-
-func NewDeleteFqdnCacheHandler(d *Daemon) DeleteFqdnCacheHandler {
-	return &deleteFqdnCache{daemon: d}
-}
-
-func (h *deleteFqdnCache) Handle(params DeleteFqdnCacheParams) middleware.Responder {
+func deleteFqdnCacheHandler(d *Daemon, params DeleteFqdnCacheParams) middleware.Responder {
 	// endpoints we want to modify
-	endpoints := h.daemon.endpointManager.GetEndpoints()
+	endpoints := d.endpointManager.GetEndpoints()
 
 	matchPatternStr := ""
 	if params.Matchpattern != nil {
@@ -749,29 +752,21 @@ func (h *deleteFqdnCache) Handle(params DeleteFqdnCacheParams) middleware.Respon
 	}
 
 	namesToRegen, err := deleteDNSLookups(
-		h.daemon.dnsNameManager.GetDNSCache(),
+		d.dnsNameManager.GetDNSCache(),
 		endpoints,
 		time.Now(),
 		matchPatternStr)
 	if err != nil {
 		return api.Error(DeleteFqdnCacheBadRequestCode, err)
 	}
-	h.daemon.dnsNameManager.ForceGenerateDNS(context.TODO(), namesToRegen)
+	d.dnsNameManager.ForceGenerateDNS(context.TODO(), namesToRegen)
 	return NewDeleteFqdnCacheOK()
 }
 
-type getFqdnCacheID struct {
-	daemon *Daemon
-}
-
-func NewGetFqdnCacheIDHandler(d *Daemon) GetFqdnCacheIDHandler {
-	return &getFqdnCacheID{daemon: d}
-}
-
-func (h *getFqdnCacheID) Handle(params GetFqdnCacheIDParams) middleware.Responder {
+func getFqdnCacheIDHandler(d *Daemon, params GetFqdnCacheIDParams) middleware.Responder {
 	var endpoints []*endpoint.Endpoint
 	if params.ID != "" {
-		ep, err := h.daemon.endpointManager.Lookup(params.ID)
+		ep, err := d.endpointManager.Lookup(params.ID)
 		switch {
 		case err != nil:
 			return api.Error(GetFqdnCacheIDBadRequestCode, err)
@@ -808,16 +803,8 @@ func (h *getFqdnCacheID) Handle(params GetFqdnCacheIDParams) middleware.Responde
 	return NewGetFqdnCacheIDOK().WithPayload(lookups)
 }
 
-type getFqdnNamesHandler struct {
-	daemon *Daemon
-}
-
-func NewGetFqdnNamesHandler(d *Daemon) GetFqdnNamesHandler {
-	return &getFqdnNamesHandler{daemon: d}
-}
-
-func (h *getFqdnNamesHandler) Handle(params GetFqdnNamesParams) middleware.Responder {
-	payload := h.daemon.dnsNameManager.GetModel()
+func getFqdnNamesHandler(d *Daemon, params GetFqdnNamesParams) middleware.Responder {
+	payload := d.dnsNameManager.GetModel()
 	return NewGetFqdnNamesOK().WithPayload(payload)
 }
 

@@ -4,8 +4,6 @@
 package threefour
 
 import (
-	"bytes"
-	"encoding/binary"
 	"fmt"
 	"net/netip"
 	"strings"
@@ -15,6 +13,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
+	"github.com/cilium/cilium/api/v1/flow"
 	pb "github.com/cilium/cilium/api/v1/flow"
 	"github.com/cilium/cilium/pkg/byteorder"
 	"github.com/cilium/cilium/pkg/hubble/parser/common"
@@ -105,11 +104,12 @@ func (p *Parser) Decode(data []byte, decoded *pb.Flow) error {
 	var pvn *monitor.PolicyVerdictNotify
 	var dbg *monitor.DebugCapture
 	var eventSubType uint8
+	var authType flow.AuthType
 	switch eventType {
 	case monitorAPI.MessageTypeDrop:
 		packetOffset = monitor.DropNotifyLen
 		dn = &monitor.DropNotify{}
-		if err := binary.Read(bytes.NewReader(data), byteorder.Native, dn); err != nil {
+		if err := monitor.DecodeDropNotify(data, dn); err != nil {
 			return fmt.Errorf("failed to parse drop: %v", err)
 		}
 		eventSubType = dn.SubType
@@ -131,14 +131,15 @@ func (p *Parser) Decode(data []byte, decoded *pb.Flow) error {
 		packetOffset = (int)(tn.DataOffset())
 	case monitorAPI.MessageTypePolicyVerdict:
 		pvn = &monitor.PolicyVerdictNotify{}
-		if err := binary.Read(bytes.NewReader(data), byteorder.Native, pvn); err != nil {
+		if err := monitor.DecodePolicyVerdictNotify(data, pvn); err != nil {
 			return fmt.Errorf("failed to parse policy verdict: %v", err)
 		}
 		eventSubType = pvn.SubType
 		packetOffset = monitor.PolicyVerdictNotifyLen
+		authType = flow.AuthType(pvn.GetAuthType())
 	case monitorAPI.MessageTypeCapture:
 		dbg = &monitor.DebugCapture{}
-		if err := binary.Read(bytes.NewReader(data), byteorder.Native, dbg); err != nil {
+		if err := monitor.DecodeDebugCapture(data, dbg); err != nil {
 			return fmt.Errorf("failed to parse debug capture: %w", err)
 		}
 		eventSubType = dbg.SubType
@@ -192,6 +193,7 @@ func (p *Parser) Decode(data []byte, decoded *pb.Flow) error {
 	}
 
 	decoded.Verdict = decodeVerdict(dn, tn, pvn)
+	decoded.AuthType = authType
 	decoded.DropReason = decodeDropReason(dn, pvn)
 	decoded.DropReasonDesc = pb.DropReason(decoded.DropReason)
 	decoded.Ethernet = ether

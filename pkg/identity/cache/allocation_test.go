@@ -7,7 +7,7 @@ import (
 	"context"
 	"time"
 
-	. "gopkg.in/check.v1"
+	. "github.com/cilium/checkmate"
 
 	"github.com/cilium/cilium/pkg/allocator"
 	"github.com/cilium/cilium/pkg/checker"
@@ -35,7 +35,7 @@ func (s *IdentityCacheTestSuite) TestAllocateIdentityReserved(c *C) {
 	}
 
 	mgr := NewCachingIdentityAllocator(newDummyOwner())
-	<-mgr.InitIdentityAllocator(nil, nil)
+	<-mgr.InitIdentityAllocator(nil)
 
 	c.Assert(identity.IdentityAllocationIsLocal(lbls), Equals, true)
 	i, isNew, err = mgr.AllocateIdentity(context.Background(), lbls, false, identity.InvalidIdentity)
@@ -80,7 +80,7 @@ func (s *IdentityCacheTestSuite) TestAllocateIdentityReserved(c *C) {
 type IdentityAllocatorSuite struct{}
 
 func (ias *IdentityAllocatorSuite) SetUpSuite(c *C) {
-	testutils.IntegrationCheck(c)
+	testutils.IntegrationTest(c)
 }
 
 type IdentityAllocatorEtcdSuite struct {
@@ -90,15 +90,11 @@ type IdentityAllocatorEtcdSuite struct {
 var _ = Suite(&IdentityAllocatorEtcdSuite{})
 
 func (e *IdentityAllocatorEtcdSuite) SetUpSuite(c *C) {
-	testutils.IntegrationCheck(c)
+	testutils.IntegrationTest(c)
 }
 
 func (e *IdentityAllocatorEtcdSuite) SetUpTest(c *C) {
-	kvstore.SetupDummy("etcd")
-}
-
-func (e *IdentityAllocatorEtcdSuite) TearDownTest(c *C) {
-	kvstore.Client().Close(context.TODO())
+	kvstore.SetupDummy(c, "etcd")
 }
 
 type IdentityAllocatorConsulSuite struct {
@@ -108,15 +104,11 @@ type IdentityAllocatorConsulSuite struct {
 var _ = Suite(&IdentityAllocatorConsulSuite{})
 
 func (e *IdentityAllocatorConsulSuite) SetUpSuite(c *C) {
-	testutils.IntegrationCheck(c)
+	testutils.IntegrationTest(c)
 }
 
 func (e *IdentityAllocatorConsulSuite) SetUpTest(c *C) {
-	kvstore.SetupDummy("consul")
-}
-
-func (e *IdentityAllocatorConsulSuite) TearDownTest(c *C) {
-	kvstore.Client().Close(context.TODO())
+	kvstore.SetupDummy(c, "consul")
 }
 
 type dummyOwner struct {
@@ -239,7 +231,7 @@ func (ias *IdentityAllocatorSuite) TestGetIdentityCache(c *C) {
 	identity.InitWellKnownIdentities(&fakeConfig.Config{})
 	// The nils are only used by k8s CRD identities. We default to kvstore.
 	mgr := NewCachingIdentityAllocator(newDummyOwner())
-	<-mgr.InitIdentityAllocator(nil, nil)
+	<-mgr.InitIdentityAllocator(nil)
 	defer mgr.Close()
 	defer mgr.IdentityAllocator.DeleteAllKeys()
 
@@ -257,7 +249,7 @@ func (ias *IdentityAllocatorSuite) TestAllocator(c *C) {
 	identity.InitWellKnownIdentities(&fakeConfig.Config{})
 	// The nils are only used by k8s CRD identities. We default to kvstore.
 	mgr := NewCachingIdentityAllocator(owner)
-	<-mgr.InitIdentityAllocator(nil, nil)
+	<-mgr.InitIdentityAllocator(nil)
 	defer mgr.Close()
 	defer mgr.IdentityAllocator.DeleteAllKeys()
 
@@ -342,7 +334,7 @@ func (ias *IdentityAllocatorSuite) TestLocalAllocation(c *C) {
 	identity.InitWellKnownIdentities(&fakeConfig.Config{})
 	// The nils are only used by k8s CRD identities. We default to kvstore.
 	mgr := NewCachingIdentityAllocator(owner)
-	<-mgr.InitIdentityAllocator(nil, nil)
+	<-mgr.InitIdentityAllocator(nil)
 	defer mgr.Close()
 	defer mgr.IdentityAllocator.DeleteAllKeys()
 
@@ -397,4 +389,27 @@ func (ias *IdentityAllocatorSuite) TestLocalAllocation(c *C) {
 
 	mgr.IdentityAllocator.DeleteAllKeys()
 	c.Assert(owner.WaitUntilID(id.ID), Not(Equals), 0)
+}
+
+// Test that we can close and reopen the allocator successfully.
+func (s *IdentityCacheTestSuite) TestAllocatorReset(c *C) {
+	labels := labels.NewLabelsFromSortedList("id=bar;user=anna")
+	owner := newDummyOwner()
+	mgr := NewCachingIdentityAllocator(owner)
+	testAlloc := func() {
+		id1a, _, err := mgr.AllocateIdentity(context.Background(), labels, false, identity.InvalidIdentity)
+		c.Assert(id1a, Not(IsNil))
+		c.Assert(err, IsNil)
+
+		queued, ok := <-owner.updated
+		c.Assert(ok, Equals, true)
+		c.Assert(queued, Equals, id1a.ID)
+	}
+
+	<-mgr.InitIdentityAllocator(nil)
+	testAlloc()
+	mgr.Close()
+	<-mgr.InitIdentityAllocator(nil)
+	testAlloc()
+	mgr.Close()
 }
