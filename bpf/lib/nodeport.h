@@ -72,6 +72,39 @@ bpf_skip_recirculation(const struct __ctx_buff *ctx __maybe_unused)
 #endif
 }
 
+#ifdef HAVE_ENCAP
+static __always_inline int
+nodeport_add_tunnel_encap(struct __ctx_buff *ctx, __u32 src_ip, __be16 src_port,
+			  __be32 dst_ip, __u32 src_sec_identity, __u32 dst_sec_identity,
+			  enum trace_reason ct_reason, __u32 monitor, int *ifindex)
+{
+	/* Let kernel choose the outer source ip */
+	if (ctx_is_skb())
+		src_ip = 0;
+
+	return __encap_with_nodeid(ctx, src_ip, src_port, dst_ip,
+				   src_sec_identity, dst_sec_identity, NOT_VTEP_DST,
+				   ct_reason, monitor, ifindex);
+}
+
+# if defined(ENABLE_DSR) && DSR_ENCAP_MODE == DSR_ENCAP_GENEVE
+static __always_inline int
+nodeport_add_tunnel_encap_opt(struct __ctx_buff *ctx, __u32 src_ip, __be16 src_port,
+			      __be32 dst_ip, __u32 src_sec_identity, __u32 dst_sec_identity,
+			      void *opt, __u32 opt_len, enum trace_reason ct_reason,
+			      __u32 monitor, int *ifindex)
+{
+	/* Let kernel choose the outer source ip */
+	if (ctx_is_skb())
+		src_ip = 0;
+
+	return __encap_with_nodeid_opt(ctx, src_ip, src_port, dst_ip,
+				       src_sec_identity, dst_sec_identity, NOT_VTEP_DST,
+				       opt, opt_len, ct_reason, monitor, ifindex);
+}
+# endif
+#endif /* HAVE_ENCAP */
+
 static __always_inline bool dsr_fail_needs_reply(int code __maybe_unused)
 {
 #ifdef ENABLE_DSR_ICMP_ERRORS
@@ -97,6 +130,35 @@ static __always_inline bool nodeport_uses_dsr6(const struct ipv6_ct_tuple *tuple
 	return nodeport_uses_dsr(tuple->nexthdr);
 }
 
+static __always_inline bool
+nodeport_has_nat_conflict_ipv6(const struct ipv6hdr *ip6 __maybe_unused,
+			       struct ipv6_nat_target *target __maybe_unused)
+{
+#if defined(TUNNEL_MODE) && defined(IS_BPF_OVERLAY)
+	union v6addr router_ip;
+
+	BPF_V6(router_ip, ROUTER_IP);
+	if (ipv6_addr_equals((union v6addr *)&ip6->saddr, &router_ip)) {
+		ipv6_addr_copy(&target->addr, &router_ip);
+		return true;
+	}
+#endif /* TUNNEL_MODE && IS_BPF_OVERLAY */
+
+#if defined(IS_BPF_HOST)
+	const union v6addr dr_addr = IPV6_DIRECT_ROUTING;
+	__u32 dr_ifindex = DIRECT_ROUTING_DEV_IFINDEX;
+
+	/* See comment in nodeport_has_nat_conflict_ipv4(). */
+	if (dr_ifindex == NATIVE_DEV_IFINDEX &&
+	    ipv6_addr_equals((union v6addr *)&ip6->saddr, &dr_addr)) {
+		ipv6_addr_copy(&target->addr, &dr_addr);
+		return true;
+	}
+#endif /* IS_BPF_HOST */
+
+	return false;
+}
+
 static __always_inline int nodeport_snat_fwd_ipv6(struct __ctx_buff *ctx,
 						  __s8 *ext_err)
 {
@@ -104,11 +166,35 @@ static __always_inline int nodeport_snat_fwd_ipv6(struct __ctx_buff *ctx,
 		.min_port = NODEPORT_PORT_MIN_NAT,
 		.max_port = NODEPORT_PORT_MAX_NAT,
 	};
-	int ret;
+	struct ipv6_ct_tuple tuple = {};
+	int hdrlen, l4_off, ret;
+	void *data, *data_end;
+	struct ipv6hdr *ip6;
 
-	ret = snat_v6_prepare_state(ctx, &target);
-	if (ret == NAT_NEEDED)
-		ret = snat_v6_nat(ctx, &target, ext_err);
+	if (!revalidate_data(ctx, &data, &data_end, &ip6))
+		return DROP_INVALID;
+
+	tuple.nexthdr = ip6->nexthdr;
+	hdrlen = ipv6_hdrlen(ctx, &tuple.nexthdr);
+	if (hdrlen < 0)
+		return hdrlen;
+
+	snat_v6_init_tuple(ip6, NAT_DIR_EGRESS, &tuple);
+	l4_off = ETH_HLEN + hdrlen;
+
+	if (lb_is_svc_proto(tuple.nexthdr) &&
+	    !nodeport_uses_dsr6(&tuple) &&
+	    nodeport_has_nat_conflict_ipv6(ip6, &target))
+		goto apply_snat;
+
+	ret = snat_v6_needs_masquerade(ctx, ip6, &target);
+	if (IS_ERR(ret))
+		goto out;
+
+apply_snat:
+	ret = snat_v6_nat(ctx, &tuple, l4_off, &target, ext_err);
+
+out:
 	if (ret == NAT_PUNT_TO_STACK)
 		ret = CTX_ACT_OK;
 
@@ -262,6 +348,8 @@ static __always_inline int encap_geneve_dsr_opt6(struct __ctx_buff *ctx,
 	__be16 src_port;
 	int l4_off, ret;
 
+	build_bug_on((sizeof(gopt) % 4) != 0);
+
 	dst = (union v6addr *)&ip6->daddr;
 	info = ipcache_lookup6(&IPCACHE_MAP, dst, V6_CACHE_KEY_LEN, 0);
 	if (!info || info->tunnel_endpoint == 0)
@@ -300,29 +388,27 @@ static __always_inline int encap_geneve_dsr_opt6(struct __ctx_buff *ctx,
 	}
 
 	if (need_opt)
-		return  __encap_with_nodeid_opt(ctx,
-						IPV4_DIRECT_ROUTING,
-						src_port,
-						tunnel_endpoint,
-						WORLD_ID,
-						dst_sec_identity,
-						NOT_VTEP_DST,
-						&gopt,
-						sizeof(gopt),
-						(enum trace_reason)CT_NEW,
-						TRACE_PAYLOAD_LEN,
-						ifindex);
+		return nodeport_add_tunnel_encap_opt(ctx,
+						     IPV4_DIRECT_ROUTING,
+						     src_port,
+						     tunnel_endpoint,
+						     WORLD_ID,
+						     dst_sec_identity,
+						     &gopt,
+						     sizeof(gopt),
+						     (enum trace_reason)CT_NEW,
+						     TRACE_PAYLOAD_LEN,
+						     ifindex);
 
-	return __encap_with_nodeid(ctx,
-				   IPV4_DIRECT_ROUTING,
-				   src_port,
-				   tunnel_endpoint,
-				   WORLD_ID,
-				   dst_sec_identity,
-				   NOT_VTEP_DST,
-				   (enum trace_reason)CT_NEW,
-				   TRACE_PAYLOAD_LEN,
-				   ifindex);
+	return nodeport_add_tunnel_encap(ctx,
+					 IPV4_DIRECT_ROUTING,
+					 src_port,
+					 tunnel_endpoint,
+					 WORLD_ID,
+					 dst_sec_identity,
+					 (enum trace_reason)CT_NEW,
+					 TRACE_PAYLOAD_LEN,
+					 ifindex);
 }
 #endif /* DSR_ENCAP_MODE */
 
@@ -898,15 +984,14 @@ int tail_nodeport_nat_egress_ipv6(struct __ctx_buff *ctx)
 
 		src_port = tunnel_gen_src_port_v6(&tuple);
 
-		ret = __encap_with_nodeid(ctx,
-					  IPV4_DIRECT_ROUTING,
-					  src_port,
-					  tunnel_endpoint,
-					  WORLD_ID,
-					  dst_sec_identity,
-					  NOT_VTEP_DST,
-					  (enum trace_reason)CT_NEW,
-					  TRACE_PAYLOAD_LEN, &oif);
+		ret = nodeport_add_tunnel_encap(ctx,
+						IPV4_DIRECT_ROUTING,
+						src_port,
+						tunnel_endpoint,
+						WORLD_ID,
+						dst_sec_identity,
+						(enum trace_reason)CT_NEW,
+						TRACE_PAYLOAD_LEN, &oif);
 		if (IS_ERR(ret))
 			goto drop_err;
 
@@ -1261,9 +1346,9 @@ out:
 encap_redirect:
 	src_port = tunnel_gen_src_port_v6(&tuple);
 
-	ret = __encap_with_nodeid(ctx, IPV4_DIRECT_ROUTING, src_port,
-				  tunnel_endpoint, SECLABEL, dst_sec_identity,
-				  NOT_VTEP_DST, reason, monitor, &ifindex);
+	ret = nodeport_add_tunnel_encap(ctx, IPV4_DIRECT_ROUTING, src_port,
+					tunnel_endpoint, SECLABEL, dst_sec_identity,
+					reason, monitor, &ifindex);
 	if (IS_ERR(ret))
 		return ret;
 
@@ -1424,6 +1509,34 @@ static __always_inline bool nodeport_uses_dsr4(const struct ipv4_ct_tuple *tuple
 	return nodeport_uses_dsr(tuple->nexthdr);
 }
 
+static __always_inline bool
+nodeport_has_nat_conflict_ipv4(const struct iphdr *ip4 __maybe_unused,
+			       struct ipv4_nat_target *target __maybe_unused)
+{
+#if defined(TUNNEL_MODE) && defined(IS_BPF_OVERLAY)
+	if (ip4->saddr == IPV4_GATEWAY) {
+		target->addr = IPV4_GATEWAY;
+		return true;
+	}
+#endif /* TUNNEL_MODE && IS_BPF_OVERLAY */
+
+#if defined(IS_BPF_HOST)
+	__u32 dr_ifindex = DIRECT_ROUTING_DEV_IFINDEX;
+
+	/* NATIVE_DEV_IFINDEX == DIRECT_ROUTING_DEV_IFINDEX cannot be moved into
+	 * preprocessor, as the former is known only during load time (templating).
+	 * This checks whether bpf_host is running on the direct routing device.
+	 */
+	if (dr_ifindex == NATIVE_DEV_IFINDEX &&
+	    ip4->saddr == IPV4_DIRECT_ROUTING) {
+		target->addr = IPV4_DIRECT_ROUTING;
+		return true;
+	}
+#endif /* IS_BPF_HOST */
+
+	return false;
+}
+
 static __always_inline int nodeport_snat_fwd_ipv4(struct __ctx_buff *ctx,
 						  __u32 cluster_id __maybe_unused,
 						  __s8 *ext_err)
@@ -1437,11 +1550,31 @@ static __always_inline int nodeport_snat_fwd_ipv4(struct __ctx_buff *ctx,
 		.cluster_id = cluster_id,
 #endif
 	};
-	int ret;
+	struct ipv4_ct_tuple tuple = {};
+	void *data, *data_end;
+	struct iphdr *ip4;
+	int l4_off, ret;
 
-	ret = snat_v4_prepare_state(ctx, &target);
-	if (ret == NAT_NEEDED)
-		ret = snat_v4_nat(ctx, &target, ext_err);
+	if (!revalidate_data(ctx, &data, &data_end, &ip4))
+		return DROP_INVALID;
+
+	snat_v4_init_tuple(ip4, NAT_DIR_EGRESS, &tuple);
+	l4_off = ETH_HLEN + ipv4_hdrlen(ip4);
+
+	if (lb_is_svc_proto(tuple.nexthdr) &&
+	    !nodeport_uses_dsr4(&tuple) &&
+	    nodeport_has_nat_conflict_ipv4(ip4, &target))
+		goto apply_snat;
+
+	ret = snat_v4_needs_masquerade(ctx, ip4, &target);
+	if (IS_ERR(ret))
+		goto out;
+
+apply_snat:
+	ret = snat_v4_nat(ctx, &tuple, l4_off, ipv4_has_l4_header(ip4),
+			  &target, ext_err);
+
+out:
 	if (ret == NAT_PUNT_TO_STACK)
 		ret = CTX_ACT_OK;
 
@@ -1602,6 +1735,8 @@ static __always_inline int encap_geneve_dsr_opt4(struct __ctx_buff *ctx, int l3_
 	struct iphdr *outer_ip4 = ip4;
 	void *data, *data_end;
 
+	build_bug_on((sizeof(gopt) % 4) != 0);
+
 	if (has_encap) {
 		/* point at the inner IPv4 header */
 		if (!revalidate_data_l3_off(ctx, &data, &data_end, &ip4, encap_len + ETH_HLEN))
@@ -1719,29 +1854,27 @@ static __always_inline int encap_geneve_dsr_opt4(struct __ctx_buff *ctx, int l3_
 #endif
 
 	if (need_opt)
-		return  __encap_with_nodeid_opt(ctx,
-						IPV4_DIRECT_ROUTING,
-						src_port,
-						tunnel_endpoint,
-						src_sec_identity,
-						dst_sec_identity,
-						NOT_VTEP_DST,
-						&gopt,
-						sizeof(gopt),
-						(enum trace_reason)CT_NEW,
-						TRACE_PAYLOAD_LEN,
-						ifindex);
+		return nodeport_add_tunnel_encap_opt(ctx,
+						     IPV4_DIRECT_ROUTING,
+						     src_port,
+						     tunnel_endpoint,
+						     src_sec_identity,
+						     dst_sec_identity,
+						     &gopt,
+						     sizeof(gopt),
+						     (enum trace_reason)CT_NEW,
+						     TRACE_PAYLOAD_LEN,
+						     ifindex);
 
-	return __encap_with_nodeid(ctx,
-				   IPV4_DIRECT_ROUTING,
-				   src_port,
-				   tunnel_endpoint,
-				   src_sec_identity,
-				   dst_sec_identity,
-				   NOT_VTEP_DST,
-				   (enum trace_reason)CT_NEW,
-				   TRACE_PAYLOAD_LEN,
-				   ifindex);
+	return nodeport_add_tunnel_encap(ctx,
+					 IPV4_DIRECT_ROUTING,
+					 src_port,
+					 tunnel_endpoint,
+					 src_sec_identity,
+					 dst_sec_identity,
+					 (enum trace_reason)CT_NEW,
+					 TRACE_PAYLOAD_LEN,
+					 ifindex);
 }
 #endif /* DSR_ENCAP_MODE */
 
@@ -2240,15 +2373,14 @@ int tail_nodeport_nat_egress_ipv4(struct __ctx_buff *ctx)
 		 * bypass any netpol which disallows LB requests from
 		 * outside.
 		 */
-		ret = __encap_with_nodeid(ctx,
-					  IPV4_DIRECT_ROUTING,
-					  src_port,
-					  tunnel_endpoint,
-					  WORLD_ID,
-					  dst_sec_identity,
-					  NOT_VTEP_DST,
-					  (enum trace_reason)CT_NEW,
-					  TRACE_PAYLOAD_LEN, &oif);
+		ret = nodeport_add_tunnel_encap(ctx,
+						IPV4_DIRECT_ROUTING,
+						src_port,
+						tunnel_endpoint,
+						WORLD_ID,
+						dst_sec_identity,
+						(enum trace_reason)CT_NEW,
+						TRACE_PAYLOAD_LEN, &oif);
 		if (IS_ERR(ret))
 			goto drop_err;
 
@@ -2660,9 +2792,9 @@ out:
 encap_redirect:
 	src_port = tunnel_gen_src_port_v4(&tuple);
 
-	ret = __encap_with_nodeid(ctx, IPV4_DIRECT_ROUTING, src_port,
-				  tunnel_endpoint, SECLABEL, dst_sec_identity,
-				  NOT_VTEP_DST, reason, monitor, &ifindex);
+	ret = nodeport_add_tunnel_encap(ctx, IPV4_DIRECT_ROUTING, src_port,
+					tunnel_endpoint, SECLABEL, dst_sec_identity,
+					reason, monitor, &ifindex);
 	if (IS_ERR(ret))
 		return ret;
 
