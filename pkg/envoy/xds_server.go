@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	cilium "github.com/cilium/proxy/go/cilium/api"
 	envoy_mysql_proxy "github.com/cilium/proxy/go/contrib/envoy/extensions/filters/network/mysql_proxy/v3"
@@ -224,7 +223,7 @@ func (s *xdsServer) start() error {
 
 	resourceConfig := s.initializeXdsConfigs()
 
-	s.stopFunc = startXDSGRPCServer(socketListener, resourceConfig, 5*time.Second)
+	s.stopFunc = startXDSGRPCServer(socketListener, resourceConfig)
 
 	return nil
 }
@@ -1609,8 +1608,8 @@ func getNetworkPolicy(ep endpoint.EndpointUpdater, vis *policy.VisibilityPolicy,
 			visIngress = vis.Ingress
 			visEgress = vis.Egress
 		}
-		p.IngressPerPortPolicies = getDirectionNetworkPolicy(ep, l4Policy.Ingress, ingressPolicyEnforced, visIngress, "ingress")
-		p.EgressPerPortPolicies = getDirectionNetworkPolicy(ep, l4Policy.Egress, egressPolicyEnforced, visEgress, "egress")
+		p.IngressPerPortPolicies = getDirectionNetworkPolicy(ep, l4Policy.Ingress.PortRules, ingressPolicyEnforced, visIngress, "ingress")
+		p.EgressPerPortPolicies = getDirectionNetworkPolicy(ep, l4Policy.Egress.PortRules, egressPolicyEnforced, visEgress, "egress")
 	}
 	return p
 }
@@ -1755,7 +1754,7 @@ func (s *xdsServer) RemoveAllNetworkPolicies() {
 }
 
 func (s *xdsServer) GetNetworkPolicies(resourceNames []string) (map[string]*cilium.NetworkPolicy, error) {
-	resources, err := s.networkPolicyCache.GetResources(context.Background(), NetworkPolicyTypeURL, 0, "", resourceNames)
+	resources, err := s.networkPolicyCache.GetResources(NetworkPolicyTypeURL, 0, "", resourceNames)
 	if err != nil {
 		return nil, err
 	}
