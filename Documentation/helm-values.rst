@@ -48,6 +48,10 @@
      - Interval for garbage collection of auth map entries.
      - string
      - ``"5m0s"``
+   * - :spelling:ignore:`authentication.mutual.connectTimeout`
+     - Timeout for connecting to the remote node TCP socket
+     - string
+     - ``"5s"``
    * - :spelling:ignore:`authentication.mutual.port`
      - Port on the agent where mutual authentication handshakes between agents will be performed
      - int
@@ -1031,7 +1035,7 @@
    * - :spelling:ignore:`envoy.image`
      - Envoy container image.
      - object
-     - ``{"digest":"sha256:7edab48930186cc988baa6fb2ef6c352325306f0d6a0c89e43bef28941189095","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.25.7-8fddead4e52c704a6b189e3f80a69403c6cdc997","useDigest":true}``
+     - ``{"digest":"sha256:5fd7b2af56c6c645c976323dc43f4d042628e40be172d263c6d51345556f58f3","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.26.2-46b594d97d198be594f80a83efc701de57ac5724","useDigest":true}``
    * - :spelling:ignore:`envoy.livenessProbe.failureThreshold`
      - failure threshold of liveness probe
      - int

@@ -316,22 +316,22 @@ ct_lookup_select_tuple_type(enum ct_dir dir, enum ct_scope scope)
  * flow is a reply.
  */
 #define DEFINE_FUNC_CT_IS_REPLY(FAMILY)						\
-static __always_inline int							\
-ct_is_reply ## FAMILY(const void *map, struct __ctx_buff *ctx, int off,		\
-		      struct ipv ## FAMILY ## _ct_tuple *tuple,			\
-		      bool *is_reply)						\
+static __always_inline bool							\
+ct_is_reply ## FAMILY(const void *map,						\
+		      struct ipv ## FAMILY ## _ct_tuple *tuple)			\
 {										\
-	int err = 0;								\
-										\
-	err = ct_extract_ports ## FAMILY(ctx, off, CT_EGRESS, tuple, NULL);	\
-	if (err < 0)								\
-		return err;							\
+	__u8 flags = tuple->flags;						\
+	bool is_reply = false;							\
 										\
 	tuple->flags = TUPLE_F_IN;						\
 										\
-	*is_reply = map_lookup_elem(map, tuple) != NULL;			\
+	if (map_lookup_elem(map, tuple))					\
+		is_reply = true;						\
 										\
-	return 0;								\
+	/* restore initial flags */						\
+	tuple->flags = flags;							\
+										\
+	return is_reply;							\
 }
 
 static __always_inline int
@@ -415,9 +415,7 @@ ipv6_ct_tuple_reverse(struct ipv6_ct_tuple *tuple)
 }
 
 static __always_inline int
-ct_extract_ports6(struct __ctx_buff *ctx, int off,
-		  enum ct_dir dir __maybe_unused, struct ipv6_ct_tuple *tuple,
-		  bool *has_l4_header __maybe_unused)
+ct_extract_ports6(struct __ctx_buff *ctx, int off, struct ipv6_ct_tuple *tuple)
 {
 	switch (tuple->nexthdr) {
 	case IPPROTO_ICMPV6:
@@ -558,7 +556,7 @@ static __always_inline int ct_lookup6(const void *map,
 
 	tuple->flags = ct_lookup_select_tuple_type(dir, SCOPE_BIDIR);
 
-	action = ct_extract_ports6(ctx, l4_off, dir, tuple, NULL);
+	action = ct_extract_ports6(ctx, l4_off, tuple);
 	if (action < 0)
 		return action;
 
@@ -1021,6 +1019,19 @@ err_ct_fill_up:
 	return DROP_CT_CREATE_FAILED;
 }
 
+static __always_inline bool
+__ct_has_nodeport_egress_entry(const struct ct_entry *entry,
+			       __u16 *rev_nat_index, bool check_dsr)
+{
+	if (entry->node_port) {
+		if (rev_nat_index)
+			*rev_nat_index = entry->rev_nat_index;
+		return true;
+	}
+
+	return check_dsr && entry->dsr;
+}
+
 /* The function tries to determine whether the flow identified by the given
  * CT_INGRESS tuple belongs to a NodePort traffic (i.e., outside client => N/S
  * LB => local backend).
@@ -1033,7 +1044,7 @@ err_ct_fill_up:
 static __always_inline bool
 ct_has_nodeport_egress_entry4(const void *map,
 			      struct ipv4_ct_tuple *ingress_tuple,
-			      bool check_dsr)
+			      __u16 *rev_nat_index, bool check_dsr)
 {
 	__u8 prev_flags = ingress_tuple->flags;
 	struct ct_entry *entry;
@@ -1042,10 +1053,10 @@ ct_has_nodeport_egress_entry4(const void *map,
 	entry = map_lookup_elem(map, ingress_tuple);
 	ingress_tuple->flags = prev_flags;
 
-	if (entry)
-		return entry->node_port || (check_dsr && entry->dsr);
+	if (!entry)
+		return false;
 
-	return 0;
+	return __ct_has_nodeport_egress_entry(entry, rev_nat_index, check_dsr);
 }
 
 static __always_inline bool
@@ -1067,7 +1078,7 @@ ct_has_dsr_egress_entry4(const void *map, struct ipv4_ct_tuple *ingress_tuple)
 static __always_inline bool
 ct_has_nodeport_egress_entry6(const void *map,
 			      struct ipv6_ct_tuple *ingress_tuple,
-			      bool check_dsr)
+			      __u16 *rev_nat_index, bool check_dsr)
 {
 	__u8 prev_flags = ingress_tuple->flags;
 	struct ct_entry *entry;
@@ -1076,10 +1087,10 @@ ct_has_nodeport_egress_entry6(const void *map,
 	entry = map_lookup_elem(map, ingress_tuple);
 	ingress_tuple->flags = prev_flags;
 
-	if (entry)
-		return entry->node_port || (check_dsr && entry->dsr);
+	if (!entry)
+		return false;
 
-	return 0;
+	return __ct_has_nodeport_egress_entry(entry, rev_nat_index, check_dsr);
 }
 
 static __always_inline bool

@@ -15,6 +15,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/pflag"
 	"github.com/vishvananda/netlink"
+	"golang.org/x/sys/unix"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/workqueue"
 
@@ -656,44 +657,62 @@ func (manager *Manager) addMissingIpRulesAndRoutes(isRetry bool) (shouldRetry bo
 		return false
 	}
 
-	addIPRulesForConfig := func(endpointIP net.IP, dstCIDR *net.IPNet, gwc *gatewayConfig) {
-		logger := log.WithFields(logrus.Fields{
-			logfields.SourceIP:        endpointIP,
-			logfields.DestinationCIDR: dstCIDR.String(),
-			logfields.EgressIP:        gwc.egressIP.IP,
-			logfields.LinkIndex:       gwc.ifaceIndex,
-		})
-
-		if err := addEgressIpRule(endpointIP, dstCIDR, gwc.egressIP.IP, gwc.ifaceIndex); err != nil {
-			if isRetry {
-				logger.WithError(err).Warn("Can't add IP rule")
-			} else {
-				logger.WithError(err).Debug("Can't add IP rule, will retry")
-				shouldRetry = true
-			}
-		} else {
-			logger.Debug("Added IP rule")
-		}
-	}
-
 	for _, policyConfig := range manager.policyConfigs {
 		gwc := &policyConfig.gatewayConfig
 
-		if gwc.localNodeConfiguredAsGateway &&
-			len(policyConfig.matchedEndpoints) > 0 {
+		if !gwc.localNodeConfiguredAsGateway || len(policyConfig.matchedEndpoints) == 0 {
+			continue
+		}
 
-			policyConfig.forEachEndpointAndDestination(addIPRulesForConfig)
+		logger := log.WithFields(logrus.Fields{
+			logfields.EgressIP:  gwc.egressIP.IP,
+			logfields.LinkIndex: gwc.ifaceIndex,
+		})
 
+		routingTableIdx := egressGatewayRoutingTableIdx(gwc.ifaceIndex)
+
+		ipRules, err := listEgressIpRulesForRoutingTable(routingTableIdx)
+		if err != nil {
+			logger.WithError(err).Warn("Can't fetch IP rules")
+			continue
+		}
+
+		addIPRulesForConfig := func(endpointIP net.IP, dstCIDR *net.IPNet, gwc *gatewayConfig) {
 			logger := log.WithFields(logrus.Fields{
-				logfields.EgressIP:  gwc.egressIP.IP,
-				logfields.LinkIndex: gwc.ifaceIndex,
+				logfields.SourceIP:        endpointIP,
+				logfields.DestinationCIDR: dstCIDR.String(),
+				logfields.EgressIP:        gwc.egressIP.IP,
+				logfields.LinkIndex:       gwc.ifaceIndex,
 			})
 
-			if err := addEgressIpRoutes(gwc.egressIP, gwc.ifaceIndex); err != nil {
-				logger.WithError(err).Warn("Can't add IP routes")
-			} else {
-				logger.Debug("Added IP routes")
+			// check if the corresponding IP rule already exists
+			for _, ipRule := range ipRules {
+				if egressIPRuleMatches(&ipRule, endpointIP, dstCIDR) {
+					return
+				}
 			}
+
+			// insert the missing rule
+			newRule := newEgressIpRule(endpointIP, dstCIDR, routingTableIdx)
+
+			if err := netlink.RuleAdd(newRule); err != nil {
+				if isRetry {
+					logger.WithError(err).Warn("Can't add IP rule")
+				} else {
+					logger.WithError(err).Debug("Can't add IP rule, will retry")
+					shouldRetry = true
+				}
+			} else {
+				logger.Debug("Added IP rule")
+			}
+		}
+
+		policyConfig.forEachEndpointAndDestination(addIPRulesForConfig)
+
+		if err := addEgressIpRoutes(gwc.egressIP, gwc.ifaceIndex); err != nil {
+			logger.WithError(err).Warn("Can't add IP routes")
+		} else {
+			logger.Debug("Added IP routes")
 		}
 	}
 
@@ -718,6 +737,10 @@ nextIpRule:
 			}
 
 			if !gwc.localNodeConfiguredAsGateway {
+				return false
+			}
+
+			if ipRule.Table != egressGatewayRoutingTableIdx(gwc.ifaceIndex) {
 				return false
 			}
 
@@ -746,7 +769,10 @@ nextIpRule:
 	}
 
 	// Fetch all IP routes, and delete the unused EgressGW-specific routes:
-	routes, err := netlink.RouteList(nil, netlink.FAMILY_V4)
+	routes, err := netlink.RouteListFiltered(netlink.FAMILY_V4, &netlink.Route{
+		Table: unix.RT_TABLE_UNSPEC,
+	}, netlink.RT_FILTER_TABLE)
+
 	if err != nil {
 		logger.WithError(err).Error("Cannot list IP routes")
 		return
