@@ -2174,7 +2174,9 @@ int cil_to_container(struct __ctx_buff *ctx)
 #if defined(ENABLE_L7_LB)
 	else if (magic == MARK_MAGIC_PROXY_EGRESS_EPID) {
 		tail_call_dynamic(ctx, &POLICY_EGRESSCALL_MAP, identity);
-		return DROP_MISSED_TAIL_CALL;
+		return send_drop_notify(ctx, identity, SECLABEL, LXC_ID,
+					DROP_MISSED_TAIL_CALL, CTX_ACT_DROP,
+					METRIC_INGRESS);
 	}
 #endif
 
@@ -2194,7 +2196,9 @@ int cil_to_container(struct __ctx_buff *ctx)
 		ctx_store_meta(ctx, CB_FROM_HOST, 1);
 		ctx_store_meta(ctx, CB_DST_ENDPOINT_ID, LXC_ID);
 		tail_call_static(ctx, &POLICY_CALL_MAP, HOST_EP_ID);
-		return DROP_MISSED_TAIL_CALL;
+		return send_drop_notify(ctx, identity, SECLABEL, LXC_ID,
+					DROP_MISSED_TAIL_CALL, CTX_ACT_DROP,
+					METRIC_INGRESS);
 	}
 #endif /* ENABLE_HOST_FIREWALL && !ENABLE_ROUTING */
 
@@ -2213,8 +2217,10 @@ int cil_to_container(struct __ctx_buff *ctx)
 		void *data, *data_end;
 		struct ipv6hdr *ip6;
 
-		if (!revalidate_data(ctx, &data, &data_end, &ip6))
-			return DROP_INVALID;
+		if (!revalidate_data(ctx, &data, &data_end, &ip6)) {
+			ret = DROP_INVALID;
+			goto out;
+		}
 
 		ep = __lookup_ip6_endpoint((union v6addr *)&ip6->saddr);
 		if (ep)
@@ -2234,8 +2240,10 @@ int cil_to_container(struct __ctx_buff *ctx)
 		void *data, *data_end;
 		struct iphdr *ip4;
 
-		if (!revalidate_data(ctx, &data, &data_end, &ip4))
-			return DROP_INVALID;
+		if (!revalidate_data(ctx, &data, &data_end, &ip4)) {
+			ret = DROP_INVALID;
+			goto out;
+		}
 
 		ep = __lookup_ip4_endpoint(ip4->saddr);
 		if (ep)

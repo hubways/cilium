@@ -18,7 +18,6 @@ import (
 	"github.com/cilium/cilium/api/v1/server/restapi/prefilter"
 	"github.com/cilium/cilium/api/v1/server/restapi/recorder"
 	"github.com/cilium/cilium/api/v1/server/restapi/service"
-	"github.com/cilium/cilium/api/v1/server/restapi/statedb"
 	"github.com/cilium/cilium/pkg/api"
 	datapathOption "github.com/cilium/cilium/pkg/datapath/option"
 	"github.com/cilium/cilium/pkg/hive/cell"
@@ -33,6 +32,7 @@ type handlersOut struct {
 	DaemonGetClusterNodesHandler       daemon.GetClusterNodesHandler
 	DaemonGetConfigHandler             daemon.GetConfigHandler
 	DaemonGetDebuginfoHandler          daemon.GetDebuginfoHandler
+	DaemonGetHealthHandler             daemon.GetHealthHandler
 	DaemonGetHealthzHandler            daemon.GetHealthzHandler
 	DaemonGetMapHandler                daemon.GetMapHandler
 	DaemonGetMapNameEventsHandler      daemon.GetMapNameEventsHandler
@@ -87,8 +87,6 @@ type handlersOut struct {
 	ServiceGetServiceIDHandler    service.GetServiceIDHandler
 	ServicePutServiceIDHandler    service.PutServiceIDHandler
 
-	StatedbGetStatedbDumpHandler statedb.GetStatedbDumpHandler
-
 	BgpGetBgpPeersHandler bgp.GetBgpPeersHandler
 }
 
@@ -130,6 +128,9 @@ func wrapAPIHandler[Params any](dp promise.Promise[*Daemon], handler func(d *Dae
 func ciliumAPIHandlers(dp promise.Promise[*Daemon], cfg *option.DaemonConfig, _ *deletionQueue) (out handlersOut) {
 	// /healthz/
 	out.DaemonGetHealthzHandler = wrapAPIHandler(dp, getHealthzHandler)
+
+	// /heath
+	out.DaemonGetHealthHandler = wrapAPIHandler(dp, getHealthHandler)
 
 	// /cluster/nodes
 	out.DaemonGetClusterNodesHandler = NewGetClusterNodesHandler(dp)
@@ -240,9 +241,6 @@ func ciliumAPIHandlers(dp promise.Promise[*Daemon], cfg *option.DaemonConfig, _ 
 
 	// /bgp
 	out.BgpGetBgpPeersHandler = wrapAPIHandler(dp, getBGPPeersHandler)
-
-	// /statedb/dump
-	out.StatedbGetStatedbDumpHandler = wrapAPIHandler(dp, getStateDBDump)
 
 	return
 }
