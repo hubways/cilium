@@ -424,9 +424,6 @@ bpf:
   # -- Configure the mount point for the BPF filesystem
   root: /sys/fs/bpf
 
-  # -- Enable BPF clock source probing for more efficient tick retrieval.
-  clockProbe: false
-
   # -- Enables pre-allocation of eBPF map values. This increases
   # memory usage but can reduce latency.
   preallocateMaps: false
@@ -500,6 +497,9 @@ bpf:
   # [0] will allow all VLAN id's without any filtering.
   # @default -- `[]`
   vlanBypass: ~
+
+# -- Enable BPF clock source probing for more efficient tick retrieval.
+bpfClockProbe: false
 
 # -- Clean all eBPF datapath state from the initContainer of the cilium-agent
 # DaemonSet.
@@ -655,7 +655,7 @@ enableRuntimeDeviceDetection: false
 # -- Chains to ignore when installing feeder rules.
 # disableIptablesFeederRules: ""
 
-# -- Limit egress masquerading to interface selector.
+# -- Limit iptables-based egress masquerading to interface selector.
 # egressMasqueradeInterfaces: ""
 
 # -- Whether to enable CNP status updates.
@@ -1353,8 +1353,8 @@ hubble:
       image:
         override: ~
         repository: "quay.io/cilium/hubble-ui-backend"
-        tag: "v0.11.0"
-        digest: "sha256:14c04d11f78da5c363f88592abae8d2ecee3cbe009f443ef11df6ac5f692d839"
+        tag: "v0.12.0"
+        digest: "sha256:8a79a1aad4fc9c2aa2b3e4379af0af872a89fcec9d99e117188190671c66fc2e"
         useDigest: true
         pullPolicy: "Always"
 
@@ -1384,8 +1384,8 @@ hubble:
       image:
         override: ~
         repository: "quay.io/cilium/hubble-ui"
-        tag: "v0.11.0"
-        digest: "sha256:bcb369c47cada2d4257d63d3749f7f87c91dde32e010b223597306de95d1ecc8"
+        tag: "v0.12.0"
+        digest: "sha256:1c876cfa1d5e35bc91e1025c9314f922041592a88b03313c22c1f97a5d2ba88f"
         useDigest: true
         pullPolicy: "Always"
 
@@ -3100,7 +3100,7 @@ sctp:
   # -- Enable SCTP support. NOTE: Currently, SCTP support does not support rewriting ports or multihoming.
   enabled: false
 
-# Configuration for types of authentication for Cilium
+# Configuration for types of authentication for Cilium (beta)
 authentication:
   # -- Enable authentication processing and garbage collection.
   # Note that if disabled, policy enforcement will still block requests that require authentication.
@@ -3122,7 +3122,7 @@ authentication:
     connectTimeout: 5s
     # Settings for SPIRE
     spire:
-      # -- Enable SPIRE integration
+      # -- Enable SPIRE integration (beta)
       enabled: false
       # Settings to control the SPIRE installation and configuration
       install:
@@ -3202,15 +3202,3 @@ authentication:
       agentSocketPath: /run/spire/sockets/agent/agent.sock
       # -- SPIRE connection timeout
       connectionTimeout: 30s
-
-# -- Configure the client side rate limit for the agent and operator
-#
-# If the amount of requests to the Kubernetes API server exceeds the configured
-# rate limit, the agent and operator will start to throttle requests by delaying
-# them until there is budget or the request times out.
-k8sClientRateLimit:
-  # -- The sustained request rate in requests per second.
-  qps: 5
-  # -- The burst request rate in requests per second.
-  # The rate limiter will allow short bursts with a higher rate.
-  burst: 10

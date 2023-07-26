@@ -4277,6 +4277,14 @@ func init() {
     "RemoteCluster": {
       "description": "Status of remote cluster\n\n+k8s:deepcopy-gen=true",
       "properties": {
+        "config": {
+          "description": "Cluster configuration exposed by the remote cluster",
+          "$ref": "#/definitions/RemoteClusterConfig"
+        },
+        "connected": {
+          "description": "Indicates whether the connection to the remote kvstore is established",
+          "type": "boolean"
+        },
         "last-failure": {
           "description": "Time of last failure that occurred while attempting to reach the cluster",
           "type": "string",
@@ -4285,6 +4293,10 @@ func init() {
         "name": {
           "description": "Name of the cluster",
           "type": "string"
+        },
+        "num-endpoints": {
+          "description": "Number of endpoints in the cluster",
+          "type": "integer"
         },
         "num-failures": {
           "description": "Number of failures reaching the cluster",
@@ -4303,12 +4315,62 @@ func init() {
           "type": "integer"
         },
         "ready": {
-          "description": "Indicates readiness of the remote cluser",
+          "description": "Indicates readiness of the remote cluster",
           "type": "boolean"
         },
         "status": {
           "description": "Status of the control plane",
           "type": "string"
+        },
+        "synced": {
+          "description": "Synchronization status about each resource type",
+          "$ref": "#/definitions/RemoteClusterSynced"
+        }
+      }
+    },
+    "RemoteClusterConfig": {
+      "description": "Cluster configuration exposed by the remote cluster\n\n+k8s:deepcopy-gen=true",
+      "properties": {
+        "cluster-id": {
+          "description": "The Cluster ID advertised by the remote cluster",
+          "type": "integer"
+        },
+        "kvstoremesh": {
+          "description": "Whether the remote cluster information is locally cached by kvstoremesh",
+          "type": "boolean"
+        },
+        "required": {
+          "description": "Whether the configuration is required to be present",
+          "type": "boolean"
+        },
+        "retrieved": {
+          "description": "Whether the configuration has been correctly retrieved",
+          "type": "boolean"
+        },
+        "sync-canaries": {
+          "description": "Whether the remote cluster supports per-prefix \"synced\" canaries",
+          "type": "boolean"
+        }
+      }
+    },
+    "RemoteClusterSynced": {
+      "description": "Status of the synchronization with the remote cluster, about each resource\ntype. A given resource is considered to be synchronized if the initial\nlist of entries has been completely received from the remote cluster, and\nnew events are currently being watched.\n\n+k8s:deepcopy-gen=true",
+      "properties": {
+        "endpoints": {
+          "description": "Endpoints synchronization status",
+          "type": "boolean"
+        },
+        "identities": {
+          "description": "Identities synchronization status",
+          "type": "boolean"
+        },
+        "nodes": {
+          "description": "Nodes synchronization status",
+          "type": "boolean"
+        },
+        "services": {
+          "description": "Services synchronization status",
+          "type": "boolean"
         }
       }
     },
@@ -9797,6 +9859,14 @@ func init() {
     "RemoteCluster": {
       "description": "Status of remote cluster\n\n+k8s:deepcopy-gen=true",
       "properties": {
+        "config": {
+          "description": "Cluster configuration exposed by the remote cluster",
+          "$ref": "#/definitions/RemoteClusterConfig"
+        },
+        "connected": {
+          "description": "Indicates whether the connection to the remote kvstore is established",
+          "type": "boolean"
+        },
         "last-failure": {
           "description": "Time of last failure that occurred while attempting to reach the cluster",
           "type": "string",
@@ -9805,6 +9875,10 @@ func init() {
         "name": {
           "description": "Name of the cluster",
           "type": "string"
+        },
+        "num-endpoints": {
+          "description": "Number of endpoints in the cluster",
+          "type": "integer"
         },
         "num-failures": {
           "description": "Number of failures reaching the cluster",
@@ -9823,12 +9897,62 @@ func init() {
           "type": "integer"
         },
         "ready": {
-          "description": "Indicates readiness of the remote cluser",
+          "description": "Indicates readiness of the remote cluster",
           "type": "boolean"
         },
         "status": {
           "description": "Status of the control plane",
           "type": "string"
+        },
+        "synced": {
+          "description": "Synchronization status about each resource type",
+          "$ref": "#/definitions/RemoteClusterSynced"
+        }
+      }
+    },
+    "RemoteClusterConfig": {
+      "description": "Cluster configuration exposed by the remote cluster\n\n+k8s:deepcopy-gen=true",
+      "properties": {
+        "cluster-id": {
+          "description": "The Cluster ID advertised by the remote cluster",
+          "type": "integer"
+        },
+        "kvstoremesh": {
+          "description": "Whether the remote cluster information is locally cached by kvstoremesh",
+          "type": "boolean"
+        },
+        "required": {
+          "description": "Whether the configuration is required to be present",
+          "type": "boolean"
+        },
+        "retrieved": {
+          "description": "Whether the configuration has been correctly retrieved",
+          "type": "boolean"
+        },
+        "sync-canaries": {
+          "description": "Whether the remote cluster supports per-prefix \"synced\" canaries",
+          "type": "boolean"
+        }
+      }
+    },
+    "RemoteClusterSynced": {
+      "description": "Status of the synchronization with the remote cluster, about each resource\ntype. A given resource is considered to be synchronized if the initial\nlist of entries has been completely received from the remote cluster, and\nnew events are currently being watched.\n\n+k8s:deepcopy-gen=true",
+      "properties": {
+        "endpoints": {
+          "description": "Endpoints synchronization status",
+          "type": "boolean"
+        },
+        "identities": {
+          "description": "Identities synchronization status",
+          "type": "boolean"
+        },
+        "nodes": {
+          "description": "Nodes synchronization status",
+          "type": "boolean"
+        },
+        "services": {
+          "description": "Services synchronization status",
+          "type": "boolean"
         }
       }
     },
