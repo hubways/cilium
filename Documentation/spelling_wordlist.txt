@@ -178,6 +178,7 @@ cardinality
 cass
 cassandra
 cassandraparser
+cep
 certgen
 certmanager
 cgroup
@@ -275,6 +276,7 @@ endianness
 endpointSelector
 endpointmanager
 etcd
+eth
 ethernet
 ethtool
 extTrafficPolicy
