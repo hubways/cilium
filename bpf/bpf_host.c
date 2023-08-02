@@ -47,6 +47,7 @@
 #include "lib/nodeport.h"
 #include "lib/eps.h"
 #include "lib/host_firewall.h"
+#include "lib/egress_gateway.h"
 #include "lib/egress_policies.h"
 #include "lib/overloadable.h"
 #include "lib/encrypt.h"
@@ -1521,6 +1522,9 @@ out:
 			return send_drop_notify_error(ctx, 0, ret,
 						      CTX_ACT_DROP,
 						      METRIC_EGRESS);
+
+		if (ret == CTX_ACT_REDIRECT)
+			return ret;
 	}
 #endif
 
