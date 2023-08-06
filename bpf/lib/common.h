@@ -47,7 +47,7 @@
 #define CONDITIONAL_PREALLOC BPF_F_NO_PREALLOC
 #endif
 
-#if defined(ENCAP_IFINDEX) || defined(ENABLE_EGRESS_GATEWAY) || \
+#if defined(ENCAP_IFINDEX) || defined(ENABLE_EGRESS_GATEWAY_COMMON) || \
     (defined(ENABLE_DSR) && DSR_ENCAP_MODE == DSR_ENCAP_GENEVE)
 #define HAVE_ENCAP
 
@@ -67,11 +67,6 @@ enum {
 /* For use in ctx_get_xfer(), after XDP called ctx_move_xfer(). */
 enum {
 	XFER_FLAGS = 0,		/* XFER_PKT_* */
-	XFER_ENCAP_NODEID = 1,
-	XFER_ENCAP_SECLABEL = 2,
-	XFER_ENCAP_DSTID = 3,
-	XFER_ENCAP_PORT = 4,
-	XFER_ENCAP_ADDR = 5,
 };
 
 /* FIB errors from BPF neighbor map. */

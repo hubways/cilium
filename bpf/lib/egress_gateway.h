@@ -8,7 +8,11 @@
 
 #include "maps.h"
 
-#ifdef ENABLE_EGRESS_GATEWAY
+#if defined(ENABLE_EGRESS_GATEWAY)
+#define ENABLE_EGRESS_GATEWAY_COMMON
+#endif
+
+#ifdef ENABLE_EGRESS_GATEWAY_COMMON
 
 /* EGRESS_STATIC_PREFIX represents the size in bits of the static prefix part of
  * an egress policy key (i.e. the source IP).
@@ -34,10 +38,20 @@ struct egress_gw_policy_entry *lookup_ip4_egress_gw_policy(__be32 saddr, __be32 
 }
 
 static __always_inline
-bool egress_gw_request_needs_redirect(struct iphdr *ip4, __u32 *tunnel_endpoint)
+bool egress_gw_request_needs_redirect(struct iphdr *ip4, int ct_status,
+				      __u32 *tunnel_endpoint)
 {
+#if defined(ENABLE_EGRESS_GATEWAY)
 	struct egress_gw_policy_entry *egress_gw_policy;
 	struct endpoint_info *gateway_node_ep;
+
+	/* If the packet is a reply or is related, it means that outside
+	* has initiated the connection, and so we should skip egress
+	* gateway, since an egress policy is only matching connections
+	* originating from a pod.
+	*/
+	if (ct_status == CT_REPLY || ct_status == CT_RELATED)
+		return false;
 
 	egress_gw_policy = lookup_ip4_egress_gw_policy(ip4->saddr, ip4->daddr);
 	if (!egress_gw_policy)
@@ -65,11 +79,15 @@ bool egress_gw_request_needs_redirect(struct iphdr *ip4, __u32 *tunnel_endpoint)
 
 	*tunnel_endpoint = egress_gw_policy->gateway_ip;
 	return true;
+#else
+	return false;
+#endif /* ENABLE_EGRESS_GATEWAY */
 }
 
 static __always_inline
 bool egress_gw_snat_needed(__be32 saddr, __be32 daddr, __be32 *snat_addr)
 {
+#if defined(ENABLE_EGRESS_GATEWAY)
 	struct egress_gw_policy_entry *egress_gw_policy;
 
 	egress_gw_policy = lookup_ip4_egress_gw_policy(saddr, daddr);
@@ -82,12 +100,16 @@ bool egress_gw_snat_needed(__be32 saddr, __be32 daddr, __be32 *snat_addr)
 
 	*snat_addr = egress_gw_policy->egress_ip;
 	return true;
+#else
+	return false;
+#endif /* ENABLE_EGRESS_GATEWAY */
 }
 
 static __always_inline
 bool egress_gw_reply_needs_redirect(struct iphdr *ip4, __u32 *tunnel_endpoint,
 				    __u32 *dst_sec_identity)
 {
+#if defined(ENABLE_EGRESS_GATEWAY)
 	struct egress_gw_policy_entry *egress_policy;
 	struct remote_endpoint_info *info;
 
@@ -107,7 +129,10 @@ bool egress_gw_reply_needs_redirect(struct iphdr *ip4, __u32 *tunnel_endpoint,
 	*tunnel_endpoint = info->tunnel_endpoint;
 	*dst_sec_identity = info->sec_identity;
 	return true;
+#else
+	return false;
+#endif /* ENABLE_EGRESS_GATEWAY */
 }
 
-#endif /* ENABLE_EGRESS_GATEWAY */
+#endif /* ENABLE_EGRESS_GATEWAY_COMMON */
 #endif /* __LIB_EGRESS_GATEWAY_H_ */
