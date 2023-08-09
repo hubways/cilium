@@ -226,22 +226,30 @@ requirements have been met:
    request description box there is a button for creating the pull request.
    Click the arrow and choose "Create draft pull request". If your PR is still a
    work in progress, please select this mode. You will still be able to run the
-   CI against it. Once the PR is ready for review you can click in "Ready for
-   review" button at the bottom of the page" and reviewers will start reviewing.
-   When you are actively changing your PR, set it back to draft PR mode to
-   signal that reviewers do not need to spend time reviewing the PR right now.
-   When it is ready for review again, mark it as such.
+   CI against it.
 
-.. image:: https://i1.wp.com/user-images.githubusercontent.com/3477155/52671177-5d0e0100-2ee8-11e9-8645-bdd923b7d93b.gif
-    :align: center
+   .. image:: https://i1.wp.com/user-images.githubusercontent.com/3477155/52671177-5d0e0100-2ee8-11e9-8645-bdd923b7d93b.gif
+       :align: center
+
+#. Once the PR is ready for review you can click the "Ready for review" button
+   at the bottom of the page and GitHub will notify reviewers that the PR is
+   ready to be reviewed.
+
+#. Engage in the discussions raised by reviewers and address any feedback where
+   changes are requested. When you are actively changing your PR, set the PR to
+   draft PR mode to signal that reviewers do not need to actively review the PR
+   right now. When it is ready for review again, click "Ready for review", and
+   re-request review from the reviewers:
+
+   .. image:: /images/cilium_request_review.png
 
 Getting a pull request merged
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 #. As you submit the pull request as described in the section :ref:`submit_pr`.
    One of the reviewers will start a CI run by replying with a comment
-   ``/test`` as described in :ref:`trigger_phrases`. If you are a core team
-   member, you may trigger the CI run yourself. CI consists of:
+   ``/test`` as described in :ref:`trigger_phrases`. If you are an
+   `organization member`_, you may trigger the CI run yourself. CI consists of:
 
    #. Static code analysis by Github Actions and Travis CI. Golang linter
       suggestions are added in-line on PRs. For other failed jobs, please refer
@@ -275,6 +283,8 @@ Getting a pull request merged
 #. Once the PR has been reviewed and the CI tests have passed, the PR will be
    merged by one of the repository owners. In case this does not happen, ping
    us on Slack in the #development channel.
+
+.. _organization member: https://github.com/cilium/community/blob/main/CONTRIBUTOR-LADDER.md#organization-member
 
 Handling large pull requests
 ----------------------------

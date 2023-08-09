@@ -98,6 +98,25 @@ Review process
    | ``upgrade-impact``       | The code changes have a potential upgrade impact                          |
    +--------------------------+---------------------------------------------------------------------------+
 
+#. When submitting a review, provide explicit approval or request for changes
+   whenever possible. This provides clear feedback to contributors about
+   whether they must take action to resolve the comments before the PR can be
+   merged.
+
+   If you are in doubt regarding the comments or review, you may leave comments
+   without explicit approval. If you do not explicitly approve or request
+   changes, it's best practice to raise awareness about the discussion so that
+   others can participate and clarify expectations to the contributor. Here are
+   some ways that you can raise awareness:
+
+   - Re-request the review of your codeowners in the PR
+   - Raise the topic for discussion in Slack or during community meetings
+
+   When requesting changes, consider leaving a summary comment for the overall
+   PR that provides an overview of your feedback, what you think may be
+   important for the contributor to consider, and/or encouragement regarding
+   aspects of the PR that are of benefit to the project.
+
 #. When all review objectives for all ``CODEOWNERS`` are met, all CI tests have
    passed, and all reviewers have approved the requested changes, you can merge
    the PR by clicking on the "Rebase and merge" button.
@@ -114,7 +133,8 @@ Reviewer Teams
 
 Every reviewer, including committers in the `committers team`_, belongs to `one
 or more teams in the Cilium organization <cilium_teams_>`_. If you would like
-to be added or removed from any team, please contact any of the `maintainers`_.
+to be added or removed from any team, please submit a PR against the
+`community repository`_.
 
 Once a contributor opens a PR, GitHub automatically picks which `teams
 <cilium_teams>`_ should review the PR using the ``CODEOWNERS`` file. Each
@@ -155,6 +175,7 @@ requirements were met.
 +--------------------------+---------------------------+
 
 .. _committers team: https://github.com/orgs/cilium/teams/committers/members
+.. _community repository: https://github.com/cilium/community
 .. _cilium_teams: https://github.com/orgs/cilium/teams/team/teams
 .. _maintainers: https://github.com/orgs/cilium/teams/cilium-maintainers/members
 .. _user_review_filter: https://github.com/cilium/cilium/pulls?q=is%3Apr+is%3Aopen+draft%3Afalse+user-review-requested%3A%40me+sort%3Aupdated-asc
