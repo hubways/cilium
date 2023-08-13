@@ -24,6 +24,7 @@ import (
 	"github.com/cilium/cilium/pkg/bpf"
 	"github.com/cilium/cilium/pkg/byteorder"
 	"github.com/cilium/cilium/pkg/datapath/link"
+	dpdef "github.com/cilium/cilium/pkg/datapath/linux/config/defines"
 	datapath "github.com/cilium/cilium/pkg/datapath/types"
 	"github.com/cilium/cilium/pkg/defaults"
 	"github.com/cilium/cilium/pkg/identity"
@@ -75,7 +76,9 @@ var (
 
 // HeaderfileWriter is a wrapper type which implements datapath.ConfigWriter.
 // It manages writing of configuration of datapath program headerfiles.
-type HeaderfileWriter struct{}
+type HeaderfileWriter struct {
+	nodeExtraDefines []dpdef.Fn
+}
 
 func writeIncludes(w io.Writer) (int, error) {
 	return fmt.Fprintf(w, "#include \"lib/utils.h\"\n\n")
@@ -83,8 +86,8 @@ func writeIncludes(w io.Writer) (int, error) {
 
 // WriteNodeConfig writes the local node configuration to the specified writer.
 func (h *HeaderfileWriter) WriteNodeConfig(w io.Writer, cfg *datapath.LocalNodeConfiguration) error {
-	extraMacrosMap := make(map[string]string)
-	cDefinesMap := make(map[string]string)
+	extraMacrosMap := make(dpdef.Map)
+	cDefinesMap := make(dpdef.Map)
 
 	fw := bufio.NewWriter(w)
 
@@ -152,6 +155,10 @@ func (h *HeaderfileWriter) WriteNodeConfig(w io.Writer, cfg *datapath.LocalNodeC
 
 	cDefinesMap["TUNNEL_PROTOCOL"] = fmt.Sprintf("%d", tunnelProtocols[encapProto])
 	cDefinesMap["TUNNEL_PORT"] = fmt.Sprintf("%d", option.Config.TunnelPort)
+
+	if tunnelDev, err := netlink.LinkByName(fmt.Sprintf("cilium_%s", encapProto)); err == nil {
+		cDefinesMap["ENCAP_IFINDEX"] = fmt.Sprintf("%d", tunnelDev.Attrs().Index)
+	}
 
 	cDefinesMap["HOST_ID"] = fmt.Sprintf("%d", identity.GetReservedID(labels.IDNameHost))
 	cDefinesMap["WORLD_ID"] = fmt.Sprintf("%d", identity.GetReservedID(labels.IDNameWorld))
@@ -719,6 +726,38 @@ func (h *HeaderfileWriter) WriteNodeConfig(w io.Writer, cfg *datapath.LocalNodeC
 		return err
 	}
 	cDefinesMap["EPHEMERAL_MIN"] = fmt.Sprintf("%d", ephemeralMin)
+
+	for _, fn := range h.nodeExtraDefines {
+		defines, err := fn()
+		if err != nil {
+			return err
+		}
+
+		for key, value := range defines {
+			if _, ok := cDefinesMap[key]; ok {
+				return fmt.Errorf("extra node define overwrites key %q", key)
+			}
+
+			cDefinesMap[key] = value
+		}
+	}
+
+	if option.Config.EnableHealthDatapath {
+		if option.Config.IPv4Enabled() {
+			ipip4, err := netlink.LinkByName(defaults.IPIPv4Device)
+			if err != nil {
+				return err
+			}
+			cDefinesMap["ENCAP4_IFINDEX"] = fmt.Sprintf("%d", ipip4.Attrs().Index)
+		}
+		if option.Config.IPv6Enabled() {
+			ipip6, err := netlink.LinkByName(defaults.IPIPv6Device)
+			if err != nil {
+				return err
+			}
+			cDefinesMap["ENCAP6_IFINDEX"] = fmt.Sprintf("%d", ipip6.Attrs().Index)
+		}
+	}
 
 	// Since golang maps are unordered, we sort the keys in the map
 	// to get a consistent written format to the writer. This maintains
