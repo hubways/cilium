@@ -789,7 +789,7 @@ encryption:
   strictMode:
     # -- Enable WireGuard Pod2Pod strict mode.
     enabled: false
-    
+
     # -- CIDR for the WireGuard Pod2Pod strict mode.
     cidr: ""
 
@@ -1652,14 +1652,17 @@ maglev: {}
 # -- Enables masquerading of IPv4 traffic leaving the node from endpoints.
 enableIPv4Masquerade: true
 
-# -- Enables IPv6 BIG TCP support which increases maximum IPv6 GSO/GRO limits for nodes and pods
-enableIPv6BIGTCP: false
+# -- Enables masquerading of IPv6 traffic leaving the node from endpoints.
+enableIPv6Masquerade: true
+
+# -- Enables masquerading to the source of the route for traffic leaving the node from endpoints.
+enableMasqueradeRouteSource: false
 
 # -- Enables IPv4 BIG TCP support which increases maximum IPv4 GSO/GRO limits for nodes and pods
 enableIPv4BIGTCP: false
 
-# -- Enables masquerading of IPv6 traffic leaving the node from endpoints.
-enableIPv6Masquerade: true
+# -- Enables IPv6 BIG TCP support which increases maximum IPv6 GSO/GRO limits for nodes and pods
+enableIPv6BIGTCP: false
 
 # -- Enables egress gateway to redirect and SNAT the traffic that leaves the
 # cluster.
@@ -3209,6 +3212,14 @@ authentication:
             accessMode: ReadWriteOnce
             # -- StorageClass of the SPIRE server data storage
             storageClass: null
+          # -- Security context to be added to spire server pods.
+          # SecurityContext holds pod-level security attributes and common container settings.
+          # ref: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-pod
+          podSecurityContext: {}
+          # -- Security context to be added to spire server containers.
+          # SecurityContext holds pod-level security attributes and common container settings.
+          # ref: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-container
+          securityContext: {}
           # SPIRE CA configuration
           ca:
             # -- SPIRE CA key type
