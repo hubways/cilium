@@ -449,6 +449,9 @@ static __always_inline int handle_ipv6_from_lxc(struct __ctx_buff *ctx, __u32 *d
 	if (ct_status == CT_REPLY || ct_status == CT_RELATED) {
 		/* Check if this is return traffic to an ingress proxy. */
 		if (ct_state->proxy_redirect) {
+			send_trace_notify(ctx, TRACE_TO_PROXY, SECLABEL_IPV6,
+					  0, 0, 0, trace.reason,
+					  trace.monitor);
 			/* Stack will do a socket match and deliver locally. */
 			return ctx_redirect_to_proxy6(ctx, tuple, 0, false);
 		}
@@ -806,7 +809,7 @@ static __always_inline int handle_ipv4_from_lxc(struct __ctx_buff *ctx, __u32 *d
 
 #ifdef ENABLE_PER_PACKET_LB
 	/* Restore ct_state from per packet lb handling in the previous tail call. */
-	lb4_ctx_restore_state(ctx, &ct_state_new, ip4->daddr, &proxy_port, &cluster_id);
+	lb4_ctx_restore_state(ctx, &ct_state_new, &proxy_port, &cluster_id);
 	hairpin_flow = ct_state_new.loopback;
 #endif /* ENABLE_PER_PACKET_LB */
 
@@ -854,6 +857,9 @@ static __always_inline int handle_ipv4_from_lxc(struct __ctx_buff *ctx, __u32 *d
 	if (ct_status == CT_REPLY || ct_status == CT_RELATED) {
 		/* Check if this is return traffic to an ingress proxy. */
 		if (ct_state->proxy_redirect) {
+			send_trace_notify(ctx, TRACE_TO_PROXY, SECLABEL_IPV4,
+					  0, 0, 0, trace.reason,
+					  trace.monitor);
 			/* Stack will do a socket match and deliver locally. */
 			return ctx_redirect_to_proxy4(ctx, tuple, 0, false);
 		}
@@ -1072,7 +1078,7 @@ ct_recreate4:
 		if (identity_is_cluster(*dst_sec_identity))
 			goto skip_egress_gateway;
 
-		if (egress_gw_request_needs_redirect(ip4, ct_status, &tunnel_endpoint)) {
+		if (egress_gw_request_needs_redirect(tuple, ct_status, &tunnel_endpoint)) {
 			if (tunnel_endpoint == EGRESS_GATEWAY_NO_GATEWAY) {
 				/* Special case for no gateway to drop the traffic */
 				return DROP_NO_EGRESS_GATEWAY;
