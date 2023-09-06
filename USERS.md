@@ -185,6 +185,11 @@ Users (Alphabetically)
       U: Networking, Security, Hubble UI for network visibility
       L: https://github.com/deckhouse/deckhouse
 
+    * N: Deezer
+      D: Deezer is using Cilium as CNI for all our on-prem clusters for its performance and security. We plan to leverage BGP features as well soon
+      U: CNI, Hubble, kube-proxy replacement, eBPF
+      L: https://github.com/deezer
+
     * N: DigitalOcean
       D: DigitalOcean is using Cilium as the CNI for Digital Ocean's managed Kubernetes Services (DOKS)
       U: Networking and network policy
@@ -510,6 +515,12 @@ Users (Alphabetically)
       U: CNI, Network Policies, Hubble, kube-proxy replacement
       L: https://sapian.com.co, https://arpagon.co/blog/k8s-edge
       Q: @arpagon
+
+    * N: Schenker AG
+      D: Land transportation unit of Schenker uses Cilium as default CNI in self-managed kubernetes clusters running in AWS
+      U: CNI, Monitoring, kube-proxy replacement
+      L: https://www.dbschenker.com/global
+      Q: @amirkkn
 
     * N: Seznam.cz
       D: Seznam.cz uses Cilium in multiple scenarios in on-prem DCs. At first as L4LB which loadbalances external traffic into k8s+openstack clusters then as CNI in multiple k8s and openstack clusters which are all connected in a clustermesh to enforce NetworkPolicies across pods/VMs.
