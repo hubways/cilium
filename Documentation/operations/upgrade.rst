@@ -315,6 +315,11 @@ Annotations:
   Upgrading from Cilium 1.14.x or earlier to 1.15.y or later does not
   trigger this problem. Downgrading from Cilium 1.15.y or later to Cilium
   1.14.x or earlier may trigger this problem.
+* ``CiliumNetworkPolicy`` cannot match the ``reserved:init`` labels any more.
+  If you have ``CiliumNetworkPolicy`` resources that have a match for
+  labels ``reserved:init``, these policies must be converted to
+  ``CiliumClusterwideNetworkPolicy`` by changing the resource type for the
+  policy.
 
 .. _upgrade_cilium_cli_helm_mode:
 
@@ -332,6 +337,13 @@ use Cilium CLI in Helm mode to manage classic mode installations, and vice versa
 To migrate a classic mode Cilium installation to Helm mode, you need to
 uninstall Cilium using classic mode Cilium CLI, and then re-install Cilium
 using Helm mode Cilium CLI.
+
+Removed Options
+~~~~~~~~~~~~~~~
+
+* The previously deprecated ``cluster-pool-v2beta`` IPAM mode has been removed.
+  The functionality to dynamically allocate Pod CIDRs is now provided by the more
+  flexible ``multi-pool`` IPAM mode.
 
 Helm Options
 ~~~~~~~~~~~~
