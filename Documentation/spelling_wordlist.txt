@@ -116,6 +116,7 @@ Vagrantfile
 Vagrantfiles
 Viljoen
 Wendlandt
+Wireguard
 Wireshark
 Xenial
 Yan
@@ -527,6 +528,7 @@ pluggable
 pmdabcc
 png
 podCIDR
+policyCIDRMatchMode
 policymap
 poller
 portmap

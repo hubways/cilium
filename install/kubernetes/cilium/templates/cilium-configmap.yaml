@@ -189,6 +189,11 @@ data:
   enable-policy: "{{ lower .Values.policyEnforcementMode }}"
 {{- end }}
 
+{{- if hasKey .Values "policyCIDRMatchMode" }}
+  policy-cidr-match-mode: {{ join " " .Values.policyCIDRMatchMode | quote }}
+{{- end}}
+
+
 {{- if .Values.prometheus.enabled }}
   # If you want metrics enabled in all of your Cilium agents, set the port for
   # which the Cilium agents will have their metrics exposed.
@@ -443,36 +448,34 @@ data:
 {{- else if .Values.aksbyocni.enabled }}
   routing-mode: "tunnel"
   tunnel-protocol: "vxlan"
-{{- end }}
-
-{{- if eq .Values.tunnel "disabled" }}
+{{- else if .Values.routingMode }}
+  routing-mode: {{ .Values.routingMode | quote }}
+{{- else }}
+  {{- if eq .Values.tunnel "disabled" }}
   routing-mode: "native"
-{{- else if eq .Values.tunnel "vxlan" }}
+  {{- else if eq .Values.tunnel "vxlan" }}
   routing-mode: "tunnel"
   tunnel-protocol: "vxlan"
-{{- else if eq .Values.tunnel "geneve" }}
+  {{- else if eq .Values.tunnel "geneve" }}
   routing-mode: "tunnel"
   tunnel-protocol: "geneve"
-{{- else if not (or .Values.gke.enabled .Values.aksbyocni.enabled) }}
+  {{- else }}
   # Default case
   routing-mode: "tunnel"
   tunnel-protocol: "vxlan"
-{{- end }}
-
-{{- if .Values.routingMode }}
-  routing-mode: "{{ .Values.routingMode }}"
+  {{- end }}
 {{- end }}
 
 {{- if .Values.tunnelProtocol }}
-  tunnel-protocol: "{{ .Values.tunnelProtocol }}"
+  tunnel-protocol: {{ .Values.tunnelProtocol | quote }}
 {{- end }}
 
 {{- if .Values.tunnelPort }}
-  tunnel-port: "{{ .Values.tunnelPort }}"
+  tunnel-port: {{ .Values.tunnelPort | quote }}
 {{- end }}
 
 {{- if .Values.MTU }}
-  mtu: "{{ .Values.MTU }}"
+  mtu: {{ .Values.MTU | quote }}
 {{- end }}
 
 {{- if .Values.eni.enabled }}
@@ -592,6 +595,9 @@ data:
   enable-wireguard: {{ .Values.encryption.enabled | quote }}
     {{- if .Values.encryption.wireguard.userspaceFallback }}
   enable-wireguard-userspace-fallback: {{ .Values.encryption.wireguard.userspaceFallback | quote }}
+    {{- end }}
+    {{- if .Values.encryption.wireguard.persistentKeepalive }}
+  wireguard-persistent-keepalive: {{ .Values.encryption.wireguard.persistentKeepalive | quote }}
     {{- end }}
   {{- end }}
   {{- if .Values.encryption.nodeEncryption }}

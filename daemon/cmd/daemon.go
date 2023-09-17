@@ -555,7 +555,8 @@ func newDaemon(ctx context.Context, cleaner *daemonCleanup, params *daemonParams
 			k := key.(*ipcachemap.Key)
 			v := value.(*ipcachemap.RemoteEndpointInfo)
 			nid := identity.NumericIdentity(v.SecurityIdentity)
-			if nid.HasLocalScope() {
+			if scope := nid.Scope(); scope == identity.IdentityScopeLocal ||
+				(scope == identity.IdentityScopeRemoteNode && option.Config.PolicyCIDRMatchesNodes()) {
 				d.restoredCIDRs = append(d.restoredCIDRs, k.Prefix())
 				oldNIDs = append(oldNIDs, nid)
 			} else if nid == identity.ReservedIdentityIngress && v.TunnelEndpoint.IsZero() {
@@ -899,7 +900,9 @@ func newDaemon(ctx context.Context, cleaner *daemonCleanup, params *daemonParams
 	// which can be modified after the device detection.
 	var devices []string
 	if d.deviceManager != nil {
-		if _, err := d.deviceManager.Detect(params.Clientset.IsEnabled()); err != nil {
+		if detected, err := d.deviceManager.Detect(params.Clientset.IsEnabled()); err == nil {
+			devices = append(devices, detected...)
+		} else {
 			if option.Config.AreDevicesRequired() {
 				// Fail hard if devices are required to function.
 				return nil, nil, fmt.Errorf("failed to detect devices: %w", err)
@@ -1270,6 +1273,7 @@ func (d *Daemon) Close() {
 	}
 	identitymanager.RemoveAll()
 	d.cgroupManager.Close()
+	d.controllers.RemoveAllAndWait()
 }
 
 // TriggerReloadWithoutCompile causes all BPF programs and maps to be reloaded,

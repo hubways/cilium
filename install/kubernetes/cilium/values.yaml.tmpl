@@ -824,6 +824,8 @@ encryption:
   wireguard:
     # -- Enables the fallback to the user-space implementation.
     userspaceFallback: false
+    # -- Controls Wireguard PersistentKeepalive option. Set 0s to disable.
+    persistentKeepalive: 0s
 
   # -- Deprecated in favor of encryption.ipsec.keyFile. To be removed in 1.15.
   # Name of the key file inside the Kubernetes secret configured via secretName.
@@ -1807,6 +1809,10 @@ nodePort:
 # default, always and never.
 # ref: https://docs.cilium.io/en/stable/security/policy/intro/#policy-enforcement-modes
 policyEnforcementMode: "default"
+
+# -- policyCIDRMatchMode is a list of entities that may be selected by CIDR selector.
+# The possible value is "nodes".
+policyCIDRMatchMode:
 
 pprof:
   # -- Enable pprof for cilium-agent
