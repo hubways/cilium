@@ -19,7 +19,6 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/cilium/cilium/api/v1/models"
-	"github.com/cilium/cilium/pkg/datapath/linux/probes"
 	"github.com/cilium/cilium/pkg/metrics/metric"
 	"github.com/cilium/cilium/pkg/promise"
 	"github.com/cilium/cilium/pkg/version"
@@ -299,11 +298,6 @@ var (
 
 	// PolicyRevision is the current policy revision number for this agent
 	PolicyRevision = NoOpGauge
-
-	// PolicyImportErrorsTotal is a count of failed policy imports.
-	// This metric was deprecated in Cilium 1.14 and is to be removed in 1.15.
-	// It is replaced by PolicyChangeTotal metric.
-	PolicyImportErrorsTotal = NoOpCounter
 
 	// PolicyChangeTotal is a count of policy changes by outcome ("success" or
 	// "failure")
@@ -652,7 +646,6 @@ type LegacyMetrics struct {
 	PolicyRegenerationCount          metric.Counter
 	PolicyRegenerationTimeStats      metric.Vec[metric.Observer]
 	PolicyRevision                   metric.Gauge
-	PolicyImportErrorsTotal          metric.Counter
 	PolicyChangeTotal                metric.Vec[metric.Counter]
 	PolicyEndpointStatus             metric.Vec[metric.Gauge]
 	PolicyImplementationDelay        metric.Vec[metric.Observer]
@@ -793,13 +786,6 @@ func NewLegacyMetrics() *LegacyMetrics {
 			Namespace:  Namespace,
 			Name:       "policy_max_revision",
 			Help:       "Highest policy revision number in the agent",
-		}),
-
-		PolicyImportErrorsTotal: metric.NewCounter(metric.CounterOpts{
-			ConfigName: Namespace + "_policy_import_errors_total",
-			Namespace:  Namespace,
-			Name:       "policy_import_errors_total",
-			Help:       "Number of times a policy import has failed",
 		}),
 
 		PolicyChangeTotal: metric.NewCounterVec(metric.CounterOpts{
@@ -1346,18 +1332,10 @@ func NewLegacyMetrics() *LegacyMetrics {
 
 	ifindexOpts := metric.GaugeOpts{
 		ConfigName: Namespace + "_endpoint_max_ifindex",
-		Disabled:   true,
+		Disabled:   !enableIfIndexMetric(),
 		Namespace:  Namespace,
 		Name:       "endpoint_max_ifindex",
 		Help:       "Maximum interface index observed for existing endpoints",
-	}
-	// On kernels which do not provide ifindex via the FIB, Cilium needs
-	// to store it in the CT map, with a field limit of max(uint16).
-	// The EndpointMaxIfindex metric can be used to determine if that
-	// limit is approaching. However, it should only be enabled by
-	// default if we observe that the FIB is not providing the ifindex.
-	if probes.HaveFibIfindex() != nil {
-		ifindexOpts.Disabled = false
 	}
 	lm.EndpointMaxIfindex = metric.NewGauge(ifindexOpts)
 
@@ -1379,7 +1357,6 @@ func NewLegacyMetrics() *LegacyMetrics {
 	PolicyRegenerationCount = lm.PolicyRegenerationCount
 	PolicyRegenerationTimeStats = lm.PolicyRegenerationTimeStats
 	PolicyRevision = lm.PolicyRevision
-	PolicyImportErrorsTotal = lm.PolicyImportErrorsTotal
 	PolicyChangeTotal = lm.PolicyChangeTotal
 	PolicyEndpointStatus = lm.PolicyEndpointStatus
 	PolicyImplementationDelay = lm.PolicyImplementationDelay
