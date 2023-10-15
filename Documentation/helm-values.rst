@@ -251,11 +251,23 @@
    * - :spelling:ignore:`bgpControlPlane`
      - This feature set enables virtual BGP routers to be created via CiliumBGPPeeringPolicy CRDs.
      - object
-     - ``{"enabled":false}``
+     - ``{"enabled":false,"secretsNamespace":{"create":true,"name":"cilium-bgp-secrets"}}``
    * - :spelling:ignore:`bgpControlPlane.enabled`
      - Enables the BGP control plane.
      - bool
      - ``false``
+   * - :spelling:ignore:`bgpControlPlane.secretsNamespace`
+     - SecretsNamespace is the namespace which BGP support will retrieve secrets from.
+     - object
+     - ``{"create":true,"name":"cilium-bgp-secrets"}``
+   * - :spelling:ignore:`bgpControlPlane.secretsNamespace.create`
+     - Create secrets namespace for BGP secrets.
+     - bool
+     - ``true``
+   * - :spelling:ignore:`bgpControlPlane.secretsNamespace.name`
+     - The name of the secret namespace to which Cilium agents are given read access
+     - string
+     - ``"cilium-bgp-secrets"``
    * - :spelling:ignore:`bpf.authMapMax`
      - Configure the maximum number of entries in auth map.
      - int
@@ -1099,7 +1111,7 @@
    * - :spelling:ignore:`envoy.image`
      - Envoy container image.
      - object
-     - ``{"digest":"sha256:960e1521210c0545265d1ae7230fac5fe68383fab9df127a3946274721ddf13b","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.27.0-8b22115c7fcef233c4c36aea18dd122ef8eabc3e","useDigest":true}``
+     - ``{"digest":"sha256:24091122211d39db39cec78cbf4adc90208716a6acc27c39a72ba325d7ff71ab","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.27.1-6eb501b537c53c76ab146d0fc868ec9357bd9593","useDigest":true}``
    * - :spelling:ignore:`envoy.livenessProbe.failureThreshold`
      - failure threshold of liveness probe
      - int
@@ -1767,7 +1779,7 @@
    * - :spelling:ignore:`hubble.ui.backend.image`
      - Hubble-ui backend image.
      - object
-     - ``{"digest":"sha256:8a79a1aad4fc9c2aa2b3e4379af0af872a89fcec9d99e117188190671c66fc2e","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/hubble-ui-backend","tag":"v0.12.0","useDigest":true}``
+     - ``{"digest":"sha256:1f86f3400827a0451e6332262467f894eeb7caf0eb8779bd951e2caa9d027cbe","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/hubble-ui-backend","tag":"v0.12.1","useDigest":true}``
    * - :spelling:ignore:`hubble.ui.backend.livenessProbe.enabled`
      - Enable liveness probe for Hubble-ui backend (requires Hubble-ui 0.12+)
      - bool
@@ -1807,7 +1819,7 @@
    * - :spelling:ignore:`hubble.ui.frontend.image`
      - Hubble-ui frontend image.
      - object
-     - ``{"digest":"sha256:1c876cfa1d5e35bc91e1025c9314f922041592a88b03313c22c1f97a5d2ba88f","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/hubble-ui","tag":"v0.12.0","useDigest":true}``
+     - ``{"digest":"sha256:9e5f81ee747866480ea1ac4630eb6975ff9227f9782b7c93919c081c33f38267","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/hubble-ui","tag":"v0.12.1","useDigest":true}``
    * - :spelling:ignore:`hubble.ui.frontend.resources`
      - Resource requests and limits for the 'frontend' container of the 'hubble-ui' deployment.
      - object
