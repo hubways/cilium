@@ -718,12 +718,6 @@ func InitGlobalFlags(cmd *cobra.Command, vp *viper.Viper) {
 	flags.MarkHidden(option.InstallIptRules)
 	option.BindEnv(vp, option.InstallIptRules)
 
-	flags.Duration(option.IPTablesLockTimeout, 5*time.Second, "Time to pass to each iptables invocation to wait for xtables lock acquisition")
-	option.BindEnv(vp, option.IPTablesLockTimeout)
-
-	flags.Bool(option.IPTablesRandomFully, false, "Set iptables flag random-fully on masquerading rules")
-	option.BindEnv(vp, option.IPTablesRandomFully)
-
 	flags.Int(option.MaxCtrlIntervalName, 0, "Maximum interval (in seconds) between controller runs. Zero is no limit.")
 	flags.MarkHidden(option.MaxCtrlIntervalName)
 	option.BindEnv(vp, option.MaxCtrlIntervalName)
@@ -769,11 +763,6 @@ func InitGlobalFlags(cmd *cobra.Command, vp *viper.Viper) {
 
 	flags.Bool(option.ExternalEnvoyProxy, false, "whether the Envoy is deployed externally in form of a DaemonSet or not")
 	option.BindEnv(vp, option.ExternalEnvoyProxy)
-
-	flags.StringP(option.TunnelName, "t", "", fmt.Sprintf("Tunnel mode {%s} (default \"vxlan\" for the \"veth\" datapath mode)", option.GetTunnelModes()))
-	option.BindEnv(vp, option.TunnelName)
-	flags.MarkDeprecated(option.TunnelName,
-		fmt.Sprintf("This option will be removed in v1.15. Please use --%s and --%s instead.", option.RoutingMode, option.TunnelProtocol))
 
 	flags.String(option.RoutingMode, defaults.RoutingMode, fmt.Sprintf("Routing mode (%q or %q)", option.RoutingModeNative, option.RoutingModeTunnel))
 	option.BindEnv(vp, option.RoutingMode)
@@ -1017,9 +1006,6 @@ func InitGlobalFlags(cmd *cobra.Command, vp *viper.Viper) {
 
 	flags.StringSlice(option.HubbleRedactHttpHeadersDeny, []string{}, "HTTP headers to redact from flows")
 	option.BindEnv(vp, option.HubbleRedactHttpHeadersDeny)
-
-	flags.StringSlice(option.DisableIptablesFeederRules, []string{}, "Chains to ignore when installing feeder rules.")
-	option.BindEnv(vp, option.DisableIptablesFeederRules)
 
 	flags.Bool(option.EnableIPv4FragmentsTrackingName, defaults.EnableIPv4FragmentsTracking, "Enable IPv4 fragments tracking for L4-based lookups")
 	option.BindEnv(vp, option.EnableIPv4FragmentsTrackingName)
@@ -1858,21 +1844,10 @@ func startDaemon(d *Daemon, restoredEndpoints *endpointRestoreState, cleaner *da
 		ms.CollectStaleMapGarbage()
 		ms.RemoveDisabledMaps()
 
-		if len(d.restoredCIDRs) > 0 {
-			// Release restored CIDR identities after a grace period (default 10
-			// minutes).  Any identities actually in use will still exist after
-			// this.
-			//
-			// This grace period is needed when running on an external workload
-			// where policy synchronization is not done via k8s. Also in k8s
-			// case it is prudent to allow concurrent endpoint regenerations to
-			// (re-)allocate the restored identities before we release them.
-			time.Sleep(option.Config.IdentityRestoreGracePeriod)
-			log.Debugf("Releasing reference counts for %d restored CIDR identities", len(d.restoredCIDRs))
-			d.ipcache.ReleaseCIDRIdentitiesByCIDR(d.restoredCIDRs)
-			// release the memory held by restored CIDRs
-			d.restoredCIDRs = nil
-		}
+		// Sleep for the --identity-restore-grace-period (default 10 minutes), allowing
+		// the normal allocation processes to finish, before releasing restored resources.
+		time.Sleep(option.Config.IdentityRestoreGracePeriod)
+		d.releaseRestoredCIDRs()
 	}()
 	d.endpointManager.Subscribe(d)
 	// Add the endpoint manager unsubscribe as the last step in cleanup

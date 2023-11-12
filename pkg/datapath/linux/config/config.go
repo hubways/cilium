@@ -791,6 +791,12 @@ func (h *HeaderfileWriter) WriteNodeConfig(w io.Writer, cfg *datapath.LocalNodeC
 		}
 	}
 
+	// Write Identity and ClusterID related macros.
+	cDefinesMap["CLUSTER_ID_MAX"] = fmt.Sprintf("%d", option.Config.MaxConnectedClusters)
+
+	fmt.Fprint(fw, declareConfig("identity_length", identity.GetClusterIDShift(), "Identity length in bits"))
+	fmt.Fprint(fw, assignConfig("identity_length", identity.GetClusterIDShift()))
+
 	// Since golang maps are unordered, we sort the keys in the map
 	// to get a consistent written format to the writer. This maintains
 	// the consistency when we try to calculate hash for a datapath after
@@ -1090,7 +1096,9 @@ func (h *HeaderfileWriter) writeTemplateConfig(fw *bufio.Writer, e datapath.Endp
 		}
 		fmt.Fprintf(fw, "#define DIRECT_ROUTING_DEV_IFINDEX %d\n", directRoutingIfIndex)
 		if len(option.Config.GetDevices()) == 1 {
-			fmt.Fprintf(fw, "#define ENABLE_SKIP_FIB 1\n")
+			if e.IsHost() || !option.Config.EnforceLXCFibLookup() {
+				fmt.Fprintf(fw, "#define ENABLE_SKIP_FIB 1\n")
+			}
 		}
 	}
 
