@@ -476,9 +476,9 @@ type entryCallback func(key Key, value *MapStateEntry) bool
 
 // ChangeState allows caller to revert changes made by (multiple) toMapState call(s)
 type ChangeState struct {
-	Adds    Keys     // Added or modified keys, if not nil
-	Deletes Keys     // deleted keys, if not nil
-	Old     MapState // Old values of all modified or deleted keys, if not nil
+	Adds    Keys                  // Added or modified keys, if not nil
+	Deletes Keys                  // deleted keys, if not nil
+	Old     map[Key]MapStateEntry // Old values of all modified or deleted keys, if not nil
 }
 
 // toMapState converts a single filter into a MapState entries added to 'p.PolicyMapState'.
@@ -818,7 +818,7 @@ func createL4Filter(policyCtx PolicyContext, peerEndpoints api.EndpointSelectorS
 				ns = ""
 			default:
 			}
-			l4.Listener = api.ResourceQualifiedName(ns, resource.Name, pr.Listener.Name, api.ForceNamespace)
+			l4.Listener, _ = api.ResourceQualifiedName(ns, resource.Name, pr.Listener.Name, api.ForceNamespace)
 			forceRedirect = true
 		}
 	}
