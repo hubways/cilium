@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+/* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
 /* Copyright Authors of Cilium */
 
 #include "common.h"
@@ -25,6 +25,16 @@
 #define DEST_IFINDEX 5
 #define DEST_LXC_ID 200
 
+#define ctx_redirect mock_ctx_redirect
+int mock_ctx_redirect(const struct __sk_buff *ctx __maybe_unused, int ifindex, __u32 flags)
+{
+	if (ifindex != 1)
+		return -1;
+	if (flags != 0)
+		return -2;
+	return CTX_ACT_REDIRECT;
+}
+
 #define skb_change_type mock_skb_change_type
 int mock_skb_change_type(__maybe_unused struct __sk_buff *skb, __u32 type)
 {
@@ -33,51 +43,14 @@ int mock_skb_change_type(__maybe_unused struct __sk_buff *skb, __u32 type)
 	return 0;
 }
 
-#define skb_get_tunnel_key mock_skb_get_tunnel_key
-int mock_skb_get_tunnel_key(__maybe_unused struct __sk_buff *skb,
-			    struct bpf_tunnel_key *to,
-			    __maybe_unused __u32 size,
-			    __maybe_unused __u32 flags)
-{
-	to->remote_ipv4 = v4_node_one;
-	/* 0xfffff is the default SECLABEL */
-	to->tunnel_id = 0xfffff;
-	return 0;
-}
-
-__section("mock-handle-policy")
-int mock_handle_policy(struct __ctx_buff *ctx __maybe_unused)
-{
-	return TC_ACT_REDIRECT;
-}
-
-struct {
-	__uint(type, BPF_MAP_TYPE_PROG_ARRAY);
-	__uint(key_size, sizeof(__u32));
-	__uint(max_entries, 256);
-	__array(values, int());
-} mock_policy_call_map __section(".maps") = {
-	.values = {
-		[DEST_LXC_ID] = &mock_handle_policy,
-	},
-};
-
-#define tail_call_dynamic mock_tail_call_dynamic
-static __always_inline __maybe_unused void
-mock_tail_call_dynamic(struct __ctx_buff *ctx __maybe_unused,
-		       const void *map __maybe_unused, __u32 slot __maybe_unused)
-{
-	tail_call(ctx, &mock_policy_call_map, slot);
-}
-
 static volatile const __u8 *DEST_EP_MAC = mac_three;
 static volatile const __u8 *DEST_NODE_MAC = mac_four;
 
-#include "bpf_overlay.c"
+#include "bpf_network.c"
 
 #include "lib/endpoint.h"
 
-#define FROM_OVERLAY 0
+#define FROM_NETWORK 0
 #define ESP_SEQUENCE 69865
 
 struct {
@@ -87,12 +60,12 @@ struct {
 	__array(values, int());
 } entry_call_map __section(".maps") = {
 	.values = {
-		[FROM_OVERLAY] = &cil_from_overlay,
+		[FROM_NETWORK] = &cil_from_network,
 	},
 };
 
-PKTGEN("tc", "ipv4_with_encrypt_ipsec_from_overlay")
-int ipv4_with_encrypt_ipsec_from_overlay_pktgen(struct __ctx_buff *ctx)
+PKTGEN("tc", "ipv4_not_decrypted_ipsec_from_network")
+int ipv4_not_decrypted_ipsec_from_network_pktgen(struct __ctx_buff *ctx)
 {
 	struct pktgen builder;
 	struct ethhdr *l2;
@@ -127,15 +100,15 @@ int ipv4_with_encrypt_ipsec_from_overlay_pktgen(struct __ctx_buff *ctx)
 	return 0;
 }
 
-SETUP("tc", "ipv4_with_encrypt_ipsec_from_overlay")
-int ipv4_with_encrypt_ipsec_from_overlay_setup(struct __ctx_buff *ctx)
+SETUP("tc", "ipv4_not_decrypted_ipsec_from_network")
+int ipv4_not_decrypted_ipsec_from_network_setup(struct __ctx_buff *ctx)
 {
-	tail_call_static(ctx, &entry_call_map, FROM_OVERLAY);
+	tail_call_static(ctx, &entry_call_map, FROM_NETWORK);
 	return TEST_ERROR;
 }
 
-CHECK("tc", "ipv4_with_encrypt_ipsec_from_overlay")
-int ipv4_with_encrypt_ipsec_from_overlay_check(__maybe_unused const struct __ctx_buff *ctx)
+CHECK("tc", "ipv4_not_decrypted_ipsec_from_network")
+int ipv4_not_decrypted_ipsec_from_network_check(__maybe_unused const struct __ctx_buff *ctx)
 {
 	void *data;
 	void *data_end;
@@ -166,7 +139,7 @@ int ipv4_with_encrypt_ipsec_from_overlay_check(__maybe_unused const struct __ctx
 		test_fatal("l2 proto hasn't been set to ETH_P_IP");
 
 	if (memcmp(l2->h_source, (__u8 *)mac_one, ETH_ALEN) != 0)
-		test_fatal("src mac hasn't been set to source ep's mac");
+		test_fatal("not_decrypted: src mac hasn't been set to source ep's mac");
 
 	if (memcmp(l2->h_dest, (__u8 *)mac_two, ETH_ALEN) != 0)
 		test_fatal("dest mac hasn't been set to dest ep's mac");
@@ -203,8 +176,8 @@ int ipv4_with_encrypt_ipsec_from_overlay_check(__maybe_unused const struct __ctx
 	test_finish();
 }
 
-PKTGEN("tc", "ipv6_with_encrypt_ipsec_from_overlay")
-int ipv6_with_encrypt_ipsec_from_overlay_pktgen(struct __ctx_buff *ctx)
+PKTGEN("tc", "ipv6_not_decrypted_ipsec_from_network")
+int ipv6_not_decrypted_ipsec_from_network_pktgen(struct __ctx_buff *ctx)
 {
 	struct pktgen builder;
 	struct ethhdr *l2;
@@ -238,15 +211,15 @@ int ipv6_with_encrypt_ipsec_from_overlay_pktgen(struct __ctx_buff *ctx)
 	return 0;
 }
 
-SETUP("tc", "ipv6_with_encrypt_ipsec_from_overlay")
-int ipv6_with_encrypt_ipsec_from_overlay_setup(struct __ctx_buff *ctx)
+SETUP("tc", "ipv6_not_decrypted_ipsec_from_network")
+int ipv6_not_decrypted_ipsec_from_network_setup(struct __ctx_buff *ctx)
 {
-	tail_call_static(ctx, &entry_call_map, FROM_OVERLAY);
+	tail_call_static(ctx, &entry_call_map, FROM_NETWORK);
 	return TEST_ERROR;
 }
 
-CHECK("tc", "ipv6_with_encrypt_ipsec_from_overlay")
-int ipv6_with_encrypt_ipsec_from_overlay_check(__maybe_unused const struct __ctx_buff *ctx)
+CHECK("tc", "ipv6_not_decrypted_ipsec_from_network")
+int ipv6_not_decrypted_ipsec_from_network_check(__maybe_unused const struct __ctx_buff *ctx)
 {
 	void *data;
 	void *data_end;
@@ -277,7 +250,7 @@ int ipv6_with_encrypt_ipsec_from_overlay_check(__maybe_unused const struct __ctx
 		test_fatal("l2 proto hasn't been set to ETH_P_IP");
 
 	if (memcmp(l2->h_source, (__u8 *)mac_one, ETH_ALEN) != 0)
-		test_fatal("src mac hasn't been set to source ep's mac");
+		test_fatal("not_decrypted: src mac hasn't been set to source ep's mac");
 
 	if (memcmp(l2->h_dest, (__u8 *)mac_two, ETH_ALEN) != 0)
 		test_fatal("dest mac hasn't been set to dest ep's mac");
@@ -314,8 +287,8 @@ int ipv6_with_encrypt_ipsec_from_overlay_check(__maybe_unused const struct __ctx
 	test_finish();
 }
 
-PKTGEN("tc", "ipv4_without_encrypt_ipsec_from_overlay")
-int ipv4_without_encrypt_ipsec_from_overlay_pktgen(struct __ctx_buff *ctx)
+PKTGEN("tc", "ipv4_decrypted_ipsec_from_network")
+int ipv4_decrypted_ipsec_from_network_pktgen(struct __ctx_buff *ctx)
 {
 	struct pktgen builder;
 	struct tcphdr *l4;
@@ -338,19 +311,19 @@ int ipv4_without_encrypt_ipsec_from_overlay_pktgen(struct __ctx_buff *ctx)
 	return 0;
 }
 
-SETUP("tc", "ipv4_without_encrypt_ipsec_from_overlay")
-int ipv4_without_encrypt_ipsec_from_overlay_setup(struct __ctx_buff *ctx)
+SETUP("tc", "ipv4_decrypted_ipsec_from_network")
+int ipv4_decrypted_ipsec_from_network_setup(struct __ctx_buff *ctx)
 {
 	endpoint_v4_add_entry(v4_pod_two, DEST_IFINDEX, DEST_LXC_ID, 0,
 			      (__u8 *)DEST_EP_MAC, (__u8 *)DEST_NODE_MAC);
 
 	ctx->mark = MARK_MAGIC_DECRYPT;
-	tail_call_static(ctx, &entry_call_map, FROM_OVERLAY);
+	tail_call_static(ctx, &entry_call_map, FROM_NETWORK);
 	return TEST_ERROR;
 }
 
-CHECK("tc", "ipv4_without_encrypt_ipsec_from_overlay")
-int ipv4_without_encrypt_ipsec_from_overlay_check(__maybe_unused const struct __ctx_buff *ctx)
+CHECK("tc", "ipv4_decrypted_ipsec_from_network")
+int ipv4_decrypted_ipsec_from_network_check(__maybe_unused const struct __ctx_buff *ctx)
 {
 	void *data;
 	void *data_end;
@@ -369,7 +342,7 @@ int ipv4_without_encrypt_ipsec_from_overlay_check(__maybe_unused const struct __
 		test_fatal("status code out of bounds");
 
 	status_code = data;
-	assert(*status_code == CTX_ACT_REDIRECT);
+	assert(*status_code == EXPECTED_STATUS_CODE_FOR_DECRYPTED);
 	assert(ctx->mark == 0);
 
 	l2 = data + sizeof(*status_code);
@@ -380,10 +353,10 @@ int ipv4_without_encrypt_ipsec_from_overlay_check(__maybe_unused const struct __
 	if (l2->h_proto != bpf_htons(ETH_P_IP))
 		test_fatal("l2 proto hasn't been set to ETH_P_IP");
 
-	if (memcmp(l2->h_source, (__u8 *)DEST_NODE_MAC, ETH_ALEN) != 0)
-		test_fatal("src mac hasn't been set to source ep's mac");
+	if (memcmp(l2->h_source, (__u8 *)mac_one, ETH_ALEN) != 0)
+		test_fatal("decrypted: src mac hasn't been set to source ep's mac");
 
-	if (memcmp(l2->h_dest, (__u8 *)DEST_EP_MAC, ETH_ALEN) != 0)
+	if (memcmp(l2->h_dest, (__u8 *)mac_two, ETH_ALEN) != 0)
 		test_fatal("dest mac hasn't been set to dest ep's mac");
 
 	l3 = (void *)l2 + sizeof(struct ethhdr);
@@ -418,8 +391,8 @@ int ipv4_without_encrypt_ipsec_from_overlay_check(__maybe_unused const struct __
 	test_finish();
 }
 
-PKTGEN("tc", "ipv6_without_encrypt_ipsec_from_overlay")
-int ipv6_without_encrypt_ipsec_from_overlay_pktgen(struct __ctx_buff *ctx)
+PKTGEN("tc", "ipv6_decrypted_ipsec_from_network")
+int ipv6_decrypted_ipsec_from_network_pktgen(struct __ctx_buff *ctx)
 {
 	struct pktgen builder;
 	struct tcphdr *l4;
@@ -442,19 +415,19 @@ int ipv6_without_encrypt_ipsec_from_overlay_pktgen(struct __ctx_buff *ctx)
 	return 0;
 }
 
-SETUP("tc", "ipv6_without_encrypt_ipsec_from_overlay")
-int ipv6_without_encrypt_ipsec_from_overlay_setup(struct __ctx_buff *ctx)
+SETUP("tc", "ipv6_decrypted_ipsec_from_network")
+int ipv6_decrypted_ipsec_from_network_setup(struct __ctx_buff *ctx)
 {
 	endpoint_v6_add_entry((union v6addr *)v6_pod_two, DEST_IFINDEX, DEST_LXC_ID,
 			      0, (__u8 *)DEST_EP_MAC, (__u8 *)DEST_NODE_MAC);
 
 	ctx->mark = MARK_MAGIC_DECRYPT;
-	tail_call_static(ctx, &entry_call_map, FROM_OVERLAY);
+	tail_call_static(ctx, &entry_call_map, FROM_NETWORK);
 	return TEST_ERROR;
 }
 
-CHECK("tc", "ipv6_without_encrypt_ipsec_from_overlay")
-int ipv6_without_encrypt_ipsec_from_overlay_check(__maybe_unused const struct __ctx_buff *ctx)
+CHECK("tc", "ipv6_decrypted_ipsec_from_network")
+int ipv6_decrypted_ipsec_from_network_check(__maybe_unused const struct __ctx_buff *ctx)
 {
 	void *data;
 	void *data_end;
@@ -473,7 +446,7 @@ int ipv6_without_encrypt_ipsec_from_overlay_check(__maybe_unused const struct __
 		test_fatal("status code out of bounds");
 
 	status_code = data;
-	assert(*status_code == CTX_ACT_REDIRECT);
+	assert(*status_code == EXPECTED_STATUS_CODE_FOR_DECRYPTED);
 	assert(ctx->mark == 0);
 
 	l2 = data + sizeof(*status_code);
@@ -484,10 +457,10 @@ int ipv6_without_encrypt_ipsec_from_overlay_check(__maybe_unused const struct __
 	if (l2->h_proto != bpf_htons(ETH_P_IPV6))
 		test_fatal("l2 proto hasn't been set to ETH_P_IP");
 
-	if (memcmp(l2->h_source, (__u8 *)DEST_NODE_MAC, ETH_ALEN) != 0)
-		test_fatal("src mac hasn't been set to source ep's mac");
+	if (memcmp(l2->h_source, (__u8 *)mac_one, ETH_ALEN) != 0)
+		test_fatal("decrypted: src mac hasn't been set to source ep's mac");
 
-	if (memcmp(l2->h_dest, (__u8 *)DEST_EP_MAC, ETH_ALEN) != 0)
+	if (memcmp(l2->h_dest, (__u8 *)mac_two, ETH_ALEN) != 0)
 		test_fatal("dest mac hasn't been set to dest ep's mac");
 
 	l3 = (void *)l2 + sizeof(struct ethhdr);

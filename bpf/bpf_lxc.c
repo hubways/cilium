@@ -89,7 +89,7 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 
 	ret = lb4_extract_tuple(ctx, ip4, ETH_HLEN, &l4_off, &tuple);
 	if (IS_ERR(ret)) {
-		if (ret == DROP_NO_SERVICE || ret == DROP_UNKNOWN_L4)
+		if (ret == DROP_UNSUPP_SERVICE_PROTO || ret == DROP_UNKNOWN_L4)
 			goto skip_service_lookup;
 		else
 			return ret;
@@ -108,6 +108,14 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 		ret = lb4_local(get_ct_map4(&tuple), ctx, ipv4_is_fragment(ip4),
 				ETH_HLEN, l4_off, &key, &tuple, svc, &ct_state_new,
 				has_l4_header, false, &cluster_id, ext_err);
+
+#ifdef SERVICE_NO_BACKEND_RESPONSE
+		if (ret == DROP_NO_SERVICE) {
+			ep_tail_call(ctx, CILIUM_CALL_IPV4_NO_SERVICE);
+			return DROP_MISSED_TAIL_CALL;
+		}
+#endif
+
 		if (IS_ERR(ret))
 			return ret;
 	}
@@ -133,7 +141,7 @@ static __always_inline int __per_packet_lb_svc_xlate_6(void *ctx, struct ipv6hdr
 
 	ret = lb6_extract_tuple(ctx, ip6, ETH_HLEN, &l4_off, &tuple);
 	if (IS_ERR(ret)) {
-		if (ret == DROP_NO_SERVICE || ret == DROP_UNKNOWN_L4)
+		if (ret == DROP_UNSUPP_SERVICE_PROTO || ret == DROP_UNKNOWN_L4)
 			goto skip_service_lookup;
 		else
 			return ret;
@@ -158,6 +166,14 @@ static __always_inline int __per_packet_lb_svc_xlate_6(void *ctx, struct ipv6hdr
 #endif /* ENABLE_L7_LB */
 		ret = lb6_local(get_ct_map6(&tuple), ctx, ETH_HLEN, l4_off,
 				&key, &tuple, svc, &ct_state_new, false, ext_err);
+
+#ifdef SERVICE_NO_BACKEND_RESPONSE
+		if (ret == DROP_NO_SERVICE) {
+			ep_tail_call(ctx, CILIUM_CALL_IPV6_NO_SERVICE);
+			return DROP_MISSED_TAIL_CALL;
+		}
+#endif
+
 		if (IS_ERR(ret))
 			return ret;
 	}
@@ -1591,7 +1607,11 @@ int tail_ipv6_policy(struct __ctx_buff *ctx)
 	ctx_store_meta(ctx, CB_FROM_HOST, 0);
 
 #ifdef HAVE_ENCAP
-	from_tunnel = ctx_load_meta(ctx, CB_FROM_TUNNEL);
+	/* TODO use CB_FROM_TUNNEL on v1.16, when we can trust that all
+	 * callers populate it (even after downgrade).
+	 */
+	/* from_tunnel = ctx_load_meta(ctx, CB_FROM_TUNNEL); */
+	from_tunnel = true;
 	ctx_store_meta(ctx, CB_FROM_TUNNEL, 0);
 #endif
 

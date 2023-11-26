@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+/* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
 /* Copyright Authors of Cilium */
 
 #include "common.h"
@@ -13,8 +13,6 @@
 #define ENABLE_IPV4
 #define ENABLE_IPV6
 #define ENABLE_IPSEC
-#define TUNNEL_MODE
-#define HAVE_ENCAP
 #define ENCAP_IFINDEX 4
 
 #include "bpf_lxc.c"
@@ -109,6 +107,7 @@ int ipv4_from_lxc_no_node_id_check(__maybe_unused const struct __ctx_buff *ctx)
 		test_fatal("metrics entry not found");
 
 	__u64 count = 1;
+
 	assert_metrics_count(key, count);
 
 	test_finish();
@@ -169,7 +168,7 @@ int ipv4_from_lxc_encrypt_check(__maybe_unused const struct __ctx_buff *ctx)
 	if (memcmp(l2->h_source, (__u8 *)mac_one, ETH_ALEN) != 0)
 		test_fatal("src mac hasn't been set to source ep's mac");
 
-	if (memcmp(l2->h_dest, (__u8 *)mac_two, ETH_ALEN) != 0)
+	if (memcmp(l2->h_dest, (__u8 *)EXPECTED_DEST_MAC, ETH_ALEN) != 0)
 		test_fatal("dest mac hasn't been set to dest ep's mac");
 
 	l3 = (void *)l2 + sizeof(struct ethhdr);
@@ -374,7 +373,7 @@ int ipv6_from_lxc_encrypt_check(__maybe_unused const struct __ctx_buff *ctx)
 	if (memcmp(l2->h_source, (__u8 *)mac_one, ETH_ALEN) != 0)
 		test_fatal("src mac hasn't been set to source ep's mac");
 
-	if (memcmp(l2->h_dest, (__u8 *)mac_two, ETH_ALEN) != 0)
+	if (memcmp(l2->h_dest, (__u8 *)EXPECTED_DEST_MAC, ETH_ALEN) != 0)
 		test_fatal("dest mac hasn't been set to dest ep's mac");
 
 	l3 = (void *)l2 + sizeof(struct ethhdr);
