@@ -1270,7 +1270,8 @@ drop_err:
 static __always_inline int nodeport_lb6(struct __ctx_buff *ctx,
 					struct ipv6hdr *ip6,
 					__u32 src_sec_identity,
-					__s8 *ext_err)
+					__s8 *ext_err,
+					bool __maybe_unused *dsr)
 {
 	bool is_svc_proto __maybe_unused = true;
 	int ret, l3_off = ETH_HLEN, l4_off;
@@ -1355,15 +1356,13 @@ skip_service_lookup:
 #if (defined(IS_BPF_OVERLAY) && DSR_ENCAP_MODE == DSR_ENCAP_GENEVE) || \
 	(!defined(IS_BPF_OVERLAY) && DSR_ENCAP_MODE != DSR_ENCAP_GENEVE)
 		if (is_svc_proto && nodeport_uses_dsr6(&tuple)) {
-			bool dsr = false;
-
 			ret = nodeport_extract_dsr_v6(ctx, ip6, &tuple, l4_off,
 						      &key.address,
-						      &key.dport, &dsr);
+						      &key.dport, dsr);
 			if (IS_ERR(ret))
 				return ret;
 
-			if (dsr)
+			if (*dsr)
 				return nodeport_dsr_ingress_ipv6(ctx, &tuple, l4_off,
 								 &key.address, key.dport,
 								 ext_err);
@@ -2415,10 +2414,10 @@ nodeport_rev_dnat_ingress_ipv4(struct __ctx_buff *ctx, struct trace_ctx *trace,
 			return ret;
 	}
 
-#if defined(ENABLE_EGRESS_GATEWAY_COMMON) && !defined(IS_BPF_OVERLAY) && !defined(TUNNEL_MODE)
-	/* If we are not using TUNNEL_MODE, the gateway node needs to manually steer
-	 * any reply traffic for a remote pod into the tunnel (to avoid iptables
-	 * potentially dropping the packets).
+#if defined(ENABLE_EGRESS_GATEWAY_COMMON) && !defined(IS_BPF_OVERLAY)
+	/* The gateway node needs to manually steer any reply traffic
+	 * for a remote pod into the tunnel (to avoid iptables potentially
+	 * dropping or accidentally SNATing the packets).
 	 */
 	if (egress_gw_reply_needs_redirect_hook(ip4, &tunnel_endpoint, &dst_sec_identity)) {
 		trace->reason = TRACE_REASON_CT_REPLY;
@@ -2572,7 +2571,7 @@ int tail_nodeport_nat_ingress_ipv4(struct __ctx_buff *ctx)
 	 * CALL_IPV4_FROM_NETDEV in the code above.
 	 */
 #if !defined(ENABLE_DSR) || (defined(ENABLE_DSR) && defined(ENABLE_DSR_HYBRID)) ||	\
-    (defined(ENABLE_EGRESS_GATEWAY_COMMON) && !defined(IS_BPF_OVERLAY) && !defined(TUNNEL_MODE))
+    (defined(ENABLE_EGRESS_GATEWAY_COMMON) && !defined(IS_BPF_OVERLAY))
 
 # if defined(ENABLE_HOST_FIREWALL) && defined(IS_BPF_HOST)
 	ret = ipv4_host_policy_ingress(ctx, &src_id, &trace, &ext_err);
@@ -2747,7 +2746,8 @@ static __always_inline int nodeport_lb4(struct __ctx_buff *ctx,
 					struct iphdr *ip4,
 					int l3_off,
 					__u32 src_sec_identity,
-					__s8 *ext_err)
+					__s8 *ext_err,
+					bool __maybe_unused *dsr)
 {
 	bool is_fragment = ipv4_is_fragment(ip4);
 	bool backend_local, has_l4_header;
@@ -2840,18 +2840,16 @@ skip_service_lookup:
 #if (defined(IS_BPF_OVERLAY) && DSR_ENCAP_MODE == DSR_ENCAP_GENEVE) || \
 	(!defined(IS_BPF_OVERLAY) && DSR_ENCAP_MODE != DSR_ENCAP_GENEVE)
 		if (is_svc_proto && nodeport_uses_dsr4(&tuple)) {
-			bool dsr = false;
-
 			/* Check if packet has embedded DSR info, or belongs to
 			 * an established DSR connection:
 			 */
 			ret = nodeport_extract_dsr_v4(ctx, ip4, &tuple,
 						      l4_off, &key.address,
-						      &key.dport, &dsr);
+						      &key.dport, dsr);
 			if (IS_ERR(ret))
 				return ret;
 
-			if (dsr)
+			if (*dsr)
 				/* Packet continues on its way to local backend: */
 				return nodeport_dsr_ingress_ipv4(ctx, &tuple, ip4,
 								 has_l4_header, l4_off,
