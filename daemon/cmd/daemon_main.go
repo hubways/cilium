@@ -52,6 +52,7 @@ import (
 	"github.com/cilium/cilium/pkg/egressgateway"
 	"github.com/cilium/cilium/pkg/endpoint"
 	"github.com/cilium/cilium/pkg/endpointmanager"
+	"github.com/cilium/cilium/pkg/endpointstate"
 	"github.com/cilium/cilium/pkg/envoy"
 	"github.com/cilium/cilium/pkg/flowdebug"
 	"github.com/cilium/cilium/pkg/hive"
@@ -84,6 +85,7 @@ import (
 	"github.com/cilium/cilium/pkg/metrics"
 	monitorAgent "github.com/cilium/cilium/pkg/monitor/agent"
 	monitorAPI "github.com/cilium/cilium/pkg/monitor/api"
+	"github.com/cilium/cilium/pkg/mtu"
 	"github.com/cilium/cilium/pkg/node"
 	nodeManager "github.com/cilium/cilium/pkg/node/manager"
 	nodeTypes "github.com/cilium/cilium/pkg/node/types"
@@ -482,8 +484,9 @@ func InitGlobalFlags(cmd *cobra.Command, vp *viper.Viper) {
 	flags.String(option.IPv6ServiceRange, AutoCIDR, "Kubernetes IPv6 services CIDR if not inside cluster prefix")
 	option.BindEnv(vp, option.IPv6ServiceRange)
 
-	flags.Bool(option.K8sEventHandover, defaults.K8sEventHandover, "Enable k8s event handover to kvstore for improved scalability")
-	option.BindEnv(vp, option.K8sEventHandover)
+	flags.Bool(option.LegacyTurnOffK8sEventHandover, defaults.LegacyTurnOffK8sEventHandover, "Turn off K8sEventsHandover - this is legacy behaviour")
+	option.BindEnv(vp, option.LegacyTurnOffK8sEventHandover)
+	flags.MarkHidden(option.LegacyTurnOffK8sEventHandover)
 
 	flags.String(option.K8sNamespaceName, "", "Name of the Kubernetes namespace in which Cilium is deployed in")
 	option.BindEnv(vp, option.K8sNamespaceName)
@@ -639,9 +642,6 @@ func InitGlobalFlags(cmd *cobra.Command, vp *viper.Viper) {
 	flags.Bool(option.EnableSessionAffinity, false, "Enable support for service session affinity")
 	option.BindEnv(vp, option.EnableSessionAffinity)
 
-	flags.Bool(option.EnableServiceTopology, false, "Enable support for service topology aware hints")
-	option.BindEnv(vp, option.EnableServiceTopology)
-
 	flags.Bool(option.EnableIdentityMark, true, "Enable setting identity mark for local traffic")
 	option.BindEnv(vp, option.EnableIdentityMark)
 
@@ -731,9 +731,6 @@ func InitGlobalFlags(cmd *cobra.Command, vp *viper.Viper) {
 
 	flags.Int(option.RouteMetric, 0, "Overwrite the metric used by cilium when adding routes to its 'cilium_host' device")
 	option.BindEnv(vp, option.RouteMetric)
-
-	flags.Bool(option.PrependIptablesChainsName, true, "Prepend custom iptables chains instead of appending")
-	option.BindEnvWithLegacyEnvFallback(vp, option.PrependIptablesChainsName, "CILIUM_PREPEND_IPTABLES_CHAIN")
 
 	flags.String(option.IPv6NodeAddr, "auto", "IPv6 address of node")
 	option.BindEnv(vp, option.IPv6NodeAddr)
@@ -878,11 +875,11 @@ func InitGlobalFlags(cmd *cobra.Command, vp *viper.Viper) {
 	option.BindEnv(vp, option.DNSProxyConcurrencyProcessingGracePeriod)
 
 	flags.Int(option.DNSProxyLockCount, 131, "Array size containing mutexes which protect against parallel handling of DNS response IPs. Preferably use prime numbers")
-	flags.MarkHidden(option.DNSProxyLockCount)
+	flags.MarkDeprecated(option.DNSProxyLockCount, "This option no longer has any effect, and will be removed in v1.16")
 	option.BindEnv(vp, option.DNSProxyLockCount)
 
 	flags.Duration(option.DNSProxyLockTimeout, 500*time.Millisecond, fmt.Sprintf("Timeout when acquiring the locks controlled by --%s", option.DNSProxyLockCount))
-	flags.MarkHidden(option.DNSProxyLockTimeout)
+	flags.MarkDeprecated(option.DNSProxyLockTimeout, "This option no longer has any effect, and will be removed in v1.16")
 	option.BindEnv(vp, option.DNSProxyLockTimeout)
 
 	flags.Int(option.PolicyQueueSize, defaults.PolicyQueueSize, "Size of queues for policy-related events")
@@ -894,10 +891,6 @@ func InitGlobalFlags(cmd *cobra.Command, vp *viper.Viper) {
 	flags.Duration(option.PolicyTriggerInterval, defaults.PolicyTriggerInterval, "Time between triggers of policy updates (regenerations for all endpoints)")
 	flags.MarkHidden(option.PolicyTriggerInterval)
 	option.BindEnv(vp, option.PolicyTriggerInterval)
-
-	flags.Bool(option.DisableCNPStatusUpdates, true, `Do not send CNP NodeStatus updates to the Kubernetes api-server (recommended to run with "cnp-node-status-gc-interval=0" in cilium-operator)`)
-	flags.MarkDeprecated(option.DisableCNPStatusUpdates, "This option will be removed in v1.15 (disabled CNP Status Updates by default)")
-	option.BindEnv(vp, option.DisableCNPStatusUpdates)
 
 	flags.Bool(option.PolicyAuditModeArg, false, "Enable policy audit (non-drop) mode")
 	option.BindEnv(vp, option.PolicyAuditModeArg)
@@ -937,6 +930,9 @@ func InitGlobalFlags(cmd *cobra.Command, vp *viper.Viper) {
 
 	flags.StringSlice(option.HubbleMetrics, []string{}, "List of Hubble metrics to enable.")
 	option.BindEnv(vp, option.HubbleMetrics)
+
+	flags.String(option.HubbleFlowlogsConfigFilePath, "", "Filepath with configuration of hubble flowlogs")
+	option.BindEnv(vp, option.HubbleFlowlogsConfigFilePath)
 
 	flags.String(option.HubbleExportFilePath, exporteroption.Default.Path, "Filepath to write Hubble events to.")
 	option.BindEnv(vp, option.HubbleExportFilePath)
@@ -1612,6 +1608,7 @@ var daemonCell = cell.Module(
 	"Legacy Daemon",
 
 	cell.Provide(newDaemonPromise),
+	cell.Provide(newRestorerPromise),
 	cell.Provide(func() k8s.CacheStatus { return make(k8s.CacheStatus) }),
 	// Provide a read-only copy of the current daemon settings to be consumed
 	// by the debuginfo API
@@ -1669,6 +1666,8 @@ type daemonParams struct {
 	BigTCPConfig        *bigtcp.Configuration
 	TunnelConfig        tunnel.Config
 	BandwidthManager    bandwidth.Manager
+	IPsecKeyCustodian   datapath.IPsecKeyCustodian
+	MTU                 mtu.MTU
 }
 
 func newDaemonPromise(params daemonParams) promise.Promise[*Daemon] {
@@ -1738,7 +1737,7 @@ func startDaemon(d *Daemon, restoredEndpoints *endpointRestoreState, cleaner *da
 		<-params.CacheStatus
 	}
 	bootstrapStats.k8sInit.End(true)
-	restoreComplete := d.initRestore(restoredEndpoints, params.EndpointRegenerator)
+	d.initRestore(restoredEndpoints, params.EndpointRegenerator)
 
 	if params.WGAgent != nil {
 		go func() {
@@ -1788,8 +1787,8 @@ func startDaemon(d *Daemon, restoredEndpoints *endpointRestoreState, cleaner *da
 	}
 
 	go func() {
-		if restoreComplete != nil {
-			<-restoreComplete
+		if d.endpointRestoreComplete != nil {
+			<-d.endpointRestoreComplete
 		}
 		// Only attempt CEP cleanup if cilium endpoint CRD is enabled, otherwise the cep/ces
 		// watchers/indexers will not be initialized.
@@ -1828,8 +1827,8 @@ func startDaemon(d *Daemon, restoredEndpoints *endpointRestoreState, cleaner *da
 	}()
 
 	go func() {
-		if restoreComplete != nil {
-			<-restoreComplete
+		if d.endpointRestoreComplete != nil {
+			<-d.endpointRestoreComplete
 		}
 		d.dnsNameManager.CompleteBootstrap()
 
@@ -1928,6 +1927,22 @@ func startDaemon(d *Daemon, restoredEndpoints *endpointRestoreState, cleaner *da
 	if err != nil {
 		log.WithError(err).Error("Unable to store Viper's configuration")
 	}
+}
+
+func newRestorerPromise(lc hive.Lifecycle, daemonPromise promise.Promise[*Daemon]) promise.Promise[endpointstate.Restorer] {
+	resolver, promise := promise.New[endpointstate.Restorer]()
+	lc.Append(hive.Hook{
+		OnStart: func(ctx hive.HookContext) error {
+			daemon, err := daemonPromise.Await(context.Background())
+			if err != nil {
+				resolver.Reject(err)
+				return err
+			}
+			resolver.Resolve(daemon)
+			return nil
+		},
+	})
+	return promise
 }
 
 func initClockSourceOption() {

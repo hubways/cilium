@@ -7,7 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/big"
+	"maps"
 	"net"
 	"net/netip"
 	"os"
@@ -133,17 +133,13 @@ type Daemon struct {
 	// apply to locally running endpoints.
 	dnsNameManager *fqdn.NameManager
 
-	// dnsProxyContext contains fields relevant to the DNS proxy. See each
-	// field's godoc for more details.
-	dnsProxyContext dnsProxyContext
-
 	// Used to synchronize generation of daemon's BPF programs and endpoint BPF
 	// programs.
 	compilationMutex *lock.RWMutex
 
 	clustermesh *clustermesh.ClusterMesh
 
-	mtuConfig mtu.Configuration
+	mtuConfig mtu.MTU
 
 	datapathRegenTrigger *trigger.Trigger
 
@@ -159,6 +155,8 @@ type Daemon struct {
 	ipam *ipam.IPAM
 
 	endpointManager endpointmanager.EndpointManager
+
+	endpointRestoreComplete chan struct{}
 
 	identityAllocator CachingIdentityAllocator
 
@@ -224,28 +222,6 @@ type Daemon struct {
 	// Tunnel-related configuration
 	tunnelConfig tunnel.Config
 	bwManager    bandwidth.Manager
-}
-
-func (d *Daemon) initDNSProxyContext(size int) {
-	d.dnsProxyContext = dnsProxyContext{
-		responseMutexes: make([]*lock.Mutex, size),
-		modulus:         big.NewInt(int64(size)),
-	}
-	for i := range d.dnsProxyContext.responseMutexes {
-		d.dnsProxyContext.responseMutexes[i] = new(lock.Mutex)
-	}
-}
-
-// dnsProxyContext is a meta struct containing fields relevant to the DNS proxy
-// of the daemon, for organizational purposes.
-type dnsProxyContext struct {
-	// responseMutexes is used to serialized the critical path of
-	// notifyOnDNSMsg() to ensure that identity allocation and ipcache
-	// insertion happen atomically between parallel DNS request handling.
-	responseMutexes []*lock.Mutex
-	// modulus is used when computing the hash of the DNS response IPs in order
-	// to map them to the mutexes inside responseMutexes.
-	modulus *big.Int
 }
 
 // GetPolicyRepository returns the policy repository of the daemon
@@ -428,32 +404,6 @@ func newDaemon(ctx context.Context, cleaner *daemonCleanup, params *daemonParams
 	}
 	lbmap.Init(lbmapInitParams)
 
-	authKeySize, encryptKeyID, err := setupIPSec()
-	if err != nil {
-		return nil, nil, fmt.Errorf("unable to setup encryption: %s", err)
-	}
-
-	var mtuConfig mtu.Configuration
-	externalIP := node.GetIPv4()
-	if externalIP == nil {
-		externalIP = node.GetIPv6()
-	}
-	configuredMTU := option.Config.MTU
-	if mtu := params.CNIConfigManager.GetMTU(); mtu > 0 {
-		configuredMTU = mtu
-		log.WithField("mtu", configuredMTU).Info("Overwriting MTU based on CNI configuration")
-	}
-	// ExternalIP could be nil but we are covering that case inside NewConfiguration
-	mtuConfig = mtu.NewConfiguration(
-		authKeySize,
-		option.Config.EnableIPSec,
-		params.TunnelConfig.ShouldAdaptMTU(),
-		option.Config.EnableWireguard,
-		option.Config.EnableHighScaleIPcache && option.Config.EnableNodePort,
-		configuredMTU,
-		externalIP,
-	)
-
 	params.NodeManager.Subscribe(params.Datapath.Node())
 
 	identity.IterateReservedIdentities(func(_ identity.NumericIdentity, _ *identity.Identity) {
@@ -465,7 +415,7 @@ func newDaemon(ctx context.Context, cleaner *daemonCleanup, params *daemonParams
 		metrics.Identity.WithLabelValues(identity.WellKnownIdentityType).Add(float64(num))
 	}
 
-	nd := nodediscovery.NewNodeDiscovery(params.NodeManager, params.Clientset, mtuConfig, params.CNIConfigManager.GetCustomNetConf())
+	nd := nodediscovery.NewNodeDiscovery(params.NodeManager, params.Clientset, params.LocalNodeStore, params.MTU, params.CNIConfigManager.GetCustomNetConf())
 
 	d := Daemon{
 		ctx:               ctx,
@@ -473,7 +423,7 @@ func newDaemon(ctx context.Context, cleaner *daemonCleanup, params *daemonParams
 		db:                params.DB,
 		buildEndpointSem:  semaphore.NewWeighted(int64(numWorkerThreads())),
 		compilationMutex:  new(lock.RWMutex),
-		mtuConfig:         mtuConfig,
+		mtuConfig:         params.MTU,
 		datapath:          params.Datapath,
 		deviceManager:     params.DeviceManager,
 		devices:           params.Devices,
@@ -569,7 +519,6 @@ func newDaemon(ctx context.Context, cleaner *daemonCleanup, params *daemonParams
 	)
 	nd.RegisterK8sGetters(d.k8sWatcher)
 
-	d.k8sWatcher.RegisterNodeSubscriber(d.endpointManager)
 	if option.Config.BGPAnnounceLBIP || option.Config.BGPAnnouncePodCIDR {
 		switch option.Config.IPAMMode() {
 		case ipamOption.IPAMKubernetes:
@@ -578,12 +527,6 @@ func newDaemon(ctx context.Context, cleaner *daemonCleanup, params *daemonParams
 			d.bgpSpeaker.SubscribeToLocalCiliumNodeResource(ctx, params.Resources.LocalCiliumNode)
 		}
 	}
-	if option.Config.EnableServiceTopology {
-		d.k8sWatcher.RegisterNodeSubscriber(d.k8sWatcher.K8sSvcCache)
-	}
-
-	// watchers.NewCiliumNodeUpdater needs to be registered *after* d.endpointManager
-	d.k8sWatcher.RegisterNodeSubscriber(watchers.NewCiliumNodeUpdater(d.nodeDiscovery))
 
 	d.redirectPolicyManager.RegisterSvcCache(d.k8sWatcher.K8sSvcCache)
 	if option.Config.BGPAnnounceLBIP {
@@ -721,7 +664,7 @@ func newDaemon(ctx context.Context, cleaner *daemonCleanup, params *daemonParams
 	bootstrapStats.restore.End(true)
 
 	bootstrapStats.fqdn.Start()
-	err = d.bootstrapFQDN(restoredEndpoints.possible, option.Config.ToFQDNsPreCache)
+	err = d.bootstrapFQDN(restoredEndpoints.possible, option.Config.ToFQDNsPreCache, d.ipcache)
 	if err != nil {
 		bootstrapStats.fqdn.EndError(err)
 		return nil, restoredEndpoints, err
@@ -745,13 +688,6 @@ func newDaemon(ctx context.Context, cleaner *daemonCleanup, params *daemonParams
 				return nil, restoredEndpoints, err
 			}
 		}
-
-		// Launch the K8s node watcher so we can start receiving node events.
-		// Launching the k8s node watcher at this stage will prevent all agents
-		// from performing Gets directly into kube-apiserver to get the most up
-		// to date version of the k8s node. This allows for better scalability
-		// in large clusters.
-		d.k8sWatcher.NodesInit(d.clientset)
 
 		if option.Config.IPAM == ipamOption.IPAMClusterPool ||
 			option.Config.IPAM == ipamOption.IPAMMultiPool {
@@ -937,14 +873,19 @@ func newDaemon(ctx context.Context, cleaner *daemonCleanup, params *daemonParams
 			log.WithError(err).Errorf("joining a Cilium cluster (--%s) requires kvstore (--%s) be set", option.JoinClusterName, option.KVStore)
 			return nil, nil, fmt.Errorf("joining a Cilium cluster (--%s) requires kvstore (--%s) be set", option.JoinClusterName, option.KVStore)
 		}
+
 		agentLabels := labels.NewLabelsFromModel(option.Config.AgentLabels).K8sStringMap()
 		if option.Config.K8sNamespace != "" {
 			agentLabels[k8sConst.PodNamespaceLabel] = option.Config.K8sNamespace
 		}
 		agentLabels[k8sConst.PodNameLabel] = nodeTypes.GetName()
 		agentLabels[k8sConst.PolicyLabelCluster] = option.Config.ClusterName
+
 		// Set configured agent labels to local node for node registration
-		node.SetLabels(agentLabels)
+		params.LocalNodeStore.Update(func(ln *node.LocalNode) {
+			ln.Labels = maps.Clone(ln.Labels)
+			maps.Copy(ln.Labels, agentLabels)
+		})
 
 		// This can override node addressing config, so do this before starting IPAM
 		log.WithField(logfields.NodeName, nodeTypes.GetName()).Debug("Calling JoinCluster()")
@@ -1009,7 +950,7 @@ func newDaemon(ctx context.Context, cleaner *daemonCleanup, params *daemonParams
 				params.Clientset,
 				nodeTypes.GetName(),
 				latestLocalNode.Node,
-				encryptKeyID)
+				params.IPsecKeyCustodian.SPI())
 		}
 		if err != nil {
 			log.WithError(err).Warning("Cannot annotate k8s node with CIDR range")
@@ -1108,12 +1049,8 @@ func newDaemon(ctx context.Context, cleaner *daemonCleanup, params *daemonParams
 		}
 	}
 
-	if option.Config.EnableIPSec {
-		if err := ipsec.StartKeyfileWatcher(ctx, option.Config.IPSecKeyFile, nd, d.Datapath().Node()); err != nil {
-			log.WithError(err).Error("Unable to start IPSec keyfile watcher")
-		}
-
-		ipsec.StartStaleKeysReclaimer(ctx)
+	if err := params.IPsecKeyCustodian.StartBackgroundJobs(d.Datapath().Node()); err != nil {
+		log.WithError(err).Error("Unable to start IPsec key watcher")
 	}
 
 	return &d, restoredEndpoints, nil

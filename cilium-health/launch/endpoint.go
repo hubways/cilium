@@ -67,7 +67,7 @@ const (
 	LaunchTime = 30 * time.Second
 )
 
-func configureHealthRouting(netns, dev string, addressing *models.NodeAddressing, mtuConfig mtu.Configuration) error {
+func configureHealthRouting(netns, dev string, addressing *models.NodeAddressing, mtuConfig mtu.MTU) error {
 	routes := []route.Route{}
 
 	if option.Config.EnableIPv4 {
@@ -226,7 +226,7 @@ func LaunchAsEndpoint(baseCtx context.Context,
 	owner regeneration.Owner,
 	policyGetter policyRepoGetter,
 	ipcache *ipcache.IPCache,
-	mtuConfig mtu.Configuration,
+	mtuConfig mtu.MTU,
 	bigTCPConfig *bigtcp.Configuration,
 	epMgr EndpointAdder,
 	proxy endpoint.EndpointProxy,
@@ -344,7 +344,7 @@ func LaunchAsEndpoint(baseCtx context.Context,
 	// Give the endpoint a security identity
 	ctx, cancel := context.WithTimeout(baseCtx, LaunchTime)
 	defer cancel()
-	ep.UpdateLabels(ctx, labels.LabelHealth, nil, true)
+	ep.UpdateLabels(ctx, labels.LabelSourceAny, labels.LabelHealth, nil, true)
 
 	// Initialize the health client to talk to this instance.
 	client := &Client{host: "http://" + net.JoinHostPort(healthIP.String(), strconv.Itoa(option.Config.ClusterHealthPort))}

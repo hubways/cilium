@@ -54,7 +54,7 @@ env:
   cilium_cli_ci_version:
   check_url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
   # renovate: datasource=docker depName=quay.io/cilium/kindest-node
-  k8s_version: v1.28.3
+  k8s_version: v1.29.0-rc.1
 
 jobs:
   commit-status-start:
@@ -98,7 +98,7 @@ jobs:
 
           - config: 'bpf-next'
             # renovate: datasource=docker depName=quay.io/lvh-images/kind
-            kernel: 'bpf-next-20231127.012907'
+            kernel: 'bpf-next-20231128.012937'
             kube-proxy: 'iptables'
             kpr: 'disabled'
             tunnel: 'vxlan'
@@ -240,21 +240,20 @@ jobs:
 
       - name: Provision LVH VMs
         if: ${{ steps.vars.outputs.downgrade_version != '' }}
-        uses: cilium/little-vm-helper@908ab1ff8a596a03cd5221a1f8602dc44c3f906d # v0.0.12
+        uses: cilium/little-vm-helper@8410a93e544b7e180a2365e5fdab0724a39bc02a # v0.0.13
         with:
           test-name: ipsec-upgrade
           image-version: ${{ matrix.kernel }}
           host-mount: ./
           cpu: 4
           mem: '12G'
-          dns-resolver: '1.1.1.1'
           install-dependencies: 'true'
           cmd: |
             git config --global --add safe.directory /host
 
       - name: Setup K8s cluster (${{ matrix.name }})
         if: ${{ steps.vars.outputs.downgrade_version != '' }}
-        uses: cilium/little-vm-helper@908ab1ff8a596a03cd5221a1f8602dc44c3f906d # v0.0.12
+        uses: cilium/little-vm-helper@8410a93e544b7e180a2365e5fdab0724a39bc02a # v0.0.13
         with:
           provision: 'false'
           cmd: |
@@ -282,7 +281,7 @@ jobs:
 
       - name: Install Cilium ${{ steps.vars.outputs.downgrade_version }} (${{ matrix.name }})
         if: ${{ steps.vars.outputs.downgrade_version != '' }}
-        uses: cilium/little-vm-helper@908ab1ff8a596a03cd5221a1f8602dc44c3f906d # v0.0.12
+        uses: cilium/little-vm-helper@8410a93e544b7e180a2365e5fdab0724a39bc02a # v0.0.13
         with:
           provision: 'false'
           cmd: |
@@ -298,7 +297,7 @@ jobs:
 
       - name: Start conn-disrupt-test
         if: ${{ steps.vars.outputs.downgrade_version != '' }}
-        uses: cilium/little-vm-helper@908ab1ff8a596a03cd5221a1f8602dc44c3f906d # v0.0.12
+        uses: cilium/little-vm-helper@8410a93e544b7e180a2365e5fdab0724a39bc02a # v0.0.13
         with:
           provision: 'false'
           cmd: |
@@ -342,7 +341,7 @@ jobs:
 
       - name: Fetch artifacts
         if: ${{ steps.vars.outputs.downgrade_version != '' && !success() }}
-        uses: cilium/little-vm-helper@908ab1ff8a596a03cd5221a1f8602dc44c3f906d # v0.0.12
+        uses: cilium/little-vm-helper@8410a93e544b7e180a2365e5fdab0724a39bc02a # v0.0.13
         with:
           provision: 'false'
           cmd: |
