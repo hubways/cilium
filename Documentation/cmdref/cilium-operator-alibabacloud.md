@@ -47,6 +47,7 @@ cilium-operator-alibabacloud [flags]
       --enable-k8s-api-discovery                             Enable discovery of Kubernetes API groups and resources with the discovery API
       --enable-k8s-endpoint-slice                            Enables k8s EndpointSlice feature in Cilium if the k8s cluster supports it (default true)
       --enable-metrics                                       Enable Prometheus metrics
+      --enable-node-ipam                                     Enable Node IPAM
       --enforce-ingress-https                                Enforces https for host having matching TLS host in Ingress. Incoming traffic to http listener will return 308 http error code with respective location in header. (default true)
       --gateway-api-secrets-namespace string                 Namespace having tls secrets used by CEC for Gateway API (default "cilium-secrets")
       --gops-port uint16                                     Port for gops server to listen on (default 9891)
@@ -60,7 +61,7 @@ cilium-operator-alibabacloud [flags]
       --ingress-default-secret-name string                   Default secret name for Ingress.
       --ingress-default-secret-namespace string              Default secret namespace for Ingress.
       --ingress-default-xff-num-trusted-hops uint32          The number of additional ingress proxy hops from the right side of the HTTP header to trust when determining the origin client's IP address.
-      --ingress-lb-annotation-prefixes strings               Annotations and labels which are needed to propagate from Ingress to the Load Balancer. (default [service.beta.kubernetes.io,service.kubernetes.io,cloud.google.com])
+      --ingress-lb-annotation-prefixes strings               Annotations and labels which are needed to propagate from Ingress to the Load Balancer. (default [lbipam.cilium.io,service.beta.kubernetes.io,service.kubernetes.io,cloud.google.com])
       --ingress-secrets-namespace string                     Namespace having tls secrets used by Ingress and CEC. (default "cilium-secrets")
       --ingress-shared-lb-service-name string                Name of shared LB service name for Ingress. (default "cilium-ingress")
       --instance-tags-filter map                             EC2 Instance tags in the form of k1=v1,k2=v2 (multiple k/v pairs can also be passed by repeating the CLI flag
@@ -100,7 +101,6 @@ cilium-operator-alibabacloud [flags]
       --remove-cilium-node-taints                            Remove node taint "node.cilium.io/agent-not-ready" from Kubernetes nodes once Cilium is up and running (default true)
       --set-cilium-is-up-condition                           Set CiliumIsUp Node condition to mark a Kubernetes Node that a Cilium pod is up and running in that node (default true)
       --set-cilium-node-taints                               Set node taint "node.cilium.io/agent-not-ready" from Kubernetes nodes if Cilium is scheduled but not up and running
-      --skip-cnp-status-startup-clean                        If set to true, the operator will not clean up CNP node status updates at startup
       --skip-crd-creation                                    When true, Kubernetes Custom Resource Definitions will not be created
       --subnet-ids-filter strings                            Subnets IDs (separated by commas)
       --subnet-tags-filter map                               Subnets tags in the form of k1=v1,k2=v2 (multiple k/v pairs can also be passed by repeating the CLI flag
