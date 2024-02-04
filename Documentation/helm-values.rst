@@ -1096,6 +1096,10 @@
      - Annotations to be added to all top-level cilium-envoy objects (resources under templates/cilium-envoy)
      - object
      - ``{}``
+   * - :spelling:ignore:`envoy.baseID`
+     - Set Envoy'--base-id' to use when allocating shared memory regions. Only needs to be changed if multiple Envoy instances will run on the same node and may have conflicts. Supported values: 0 - 4294967295. Defaults to '0'
+     - int
+     - ``0``
    * - :spelling:ignore:`envoy.connectTimeoutSeconds`
      - Time in seconds after which a TCP connection attempt times out
      - int
@@ -1143,7 +1147,7 @@
    * - :spelling:ignore:`envoy.image`
      - Envoy container image.
      - object
-     - ``{"digest":"sha256:debc09c066c11a756234ba3482f301e20ca0f99fd7f4a41fe01e49ca2fa9c50a","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.27.2-4366a60cb693c38ab1917d924f5b1d26f1e58b1e","useDigest":true}``
+     - ``{"digest":"sha256:a3eaf21675c6f1e375aa7f74d03893e0a69a036569ff04c77a1eae0380748b81","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.28.0-67a82649395fd783b2a79c0e78eba25af8c556a6","useDigest":true}``
    * - :spelling:ignore:`envoy.livenessProbe.failureThreshold`
      - failure threshold of liveness probe
      - int
