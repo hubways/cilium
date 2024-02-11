@@ -1408,6 +1408,10 @@
      - Additional agent volumes.
      - list
      - ``[]``
+   * - :spelling:ignore:`gatewayAPI.enableProxyProtocol`
+     - Enable proxy protocol for all GatewayAPI listeners. Note that *only* Proxy protocol traffic will be accepted once this is enabled.
+     - bool
+     - ``false``
    * - :spelling:ignore:`gatewayAPI.enabled`
      - Enable support for Gateway API in cilium This will automatically set enable-envoy-config as well.
      - bool
@@ -2787,15 +2791,7 @@
    * - :spelling:ignore:`proxy`
      - Configure Istio proxy options.
      - object
-     - ``{"prometheus":{"enabled":true,"port":null},"sidecarImageRegex":"cilium/istio_proxy"}``
-   * - :spelling:ignore:`proxy.prometheus.enabled`
-     - Deprecated in favor of envoy.prometheus.enabled
-     - bool
-     - ``true``
-   * - :spelling:ignore:`proxy.prometheus.port`
-     - Deprecated in favor of envoy.prometheus.port
-     - string
-     - ``nil``
+     - ``{"sidecarImageRegex":"cilium/istio_proxy"}``
    * - :spelling:ignore:`proxy.sidecarImageRegex`
      - Regular expression matching compatible Istio sidecar istio-proxy container image names
      - string

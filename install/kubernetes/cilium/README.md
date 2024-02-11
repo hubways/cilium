@@ -402,6 +402,7 @@ contributors across the globe, there is almost always someone available to help.
 | extraHostPathMounts | list | `[]` | Additional agent hostPath mounts. |
 | extraVolumeMounts | list | `[]` | Additional agent volumeMounts. |
 | extraVolumes | list | `[]` | Additional agent volumes. |
+| gatewayAPI.enableProxyProtocol | bool | `false` | Enable proxy protocol for all GatewayAPI listeners. Note that _only_ Proxy protocol traffic will be accepted once this is enabled. |
 | gatewayAPI.enabled | bool | `false` | Enable support for Gateway API in cilium This will automatically set enable-envoy-config as well. |
 | gatewayAPI.secretsNamespace | object | `{"create":true,"name":"cilium-secrets","sync":true}` | SecretsNamespace is the namespace in which envoy SDS will retrieve TLS secrets from. |
 | gatewayAPI.secretsNamespace.create | bool | `true` | Create secrets namespace for Gateway API. |
@@ -746,9 +747,7 @@ contributors across the globe, there is almost always someone available to help.
 | prometheus.serviceMonitor.metricRelabelings | string | `nil` | Metrics relabeling configs for the ServiceMonitor cilium-agent |
 | prometheus.serviceMonitor.relabelings | list | `[{"replacement":"${1}","sourceLabels":["__meta_kubernetes_pod_node_name"],"targetLabel":"node"}]` | Relabeling configs for the ServiceMonitor cilium-agent |
 | prometheus.serviceMonitor.trustCRDsExist | bool | `false` | Set to `true` and helm will not check for monitoring.coreos.com/v1 CRDs before deploying |
-| proxy | object | `{"prometheus":{"enabled":true,"port":null},"sidecarImageRegex":"cilium/istio_proxy"}` | Configure Istio proxy options. |
-| proxy.prometheus.enabled | bool | `true` | Deprecated in favor of envoy.prometheus.enabled |
-| proxy.prometheus.port | string | `nil` | Deprecated in favor of envoy.prometheus.port |
+| proxy | object | `{"sidecarImageRegex":"cilium/istio_proxy"}` | Configure Istio proxy options. |
 | proxy.sidecarImageRegex | string | `"cilium/istio_proxy"` | Regular expression matching compatible Istio sidecar istio-proxy container image names |
 | rbac.create | bool | `true` | Enable creation of Resource-Based Access Control configuration. |
 | readinessProbe.failureThreshold | int | `3` | failure threshold of readiness probe |
