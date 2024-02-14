@@ -14,6 +14,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -396,9 +397,6 @@ const (
 
 	// Restore restores state, if possible, from previous daemon
 	Restore = "restore"
-
-	// SidecarIstioProxyImage regular expression matching compatible Istio sidecar istio-proxy container image names
-	SidecarIstioProxyImage = "sidecar-istio-proxy-image"
 
 	// SocketPath sets daemon's socket path to listen for connections
 	SocketPath = "socket-path"
@@ -883,6 +881,10 @@ const (
 	// AutoCreateCiliumNodeResource enables automatic creation of a
 	// CiliumNode resource for the local node
 	AutoCreateCiliumNodeResource = "auto-create-cilium-node-resource"
+
+	// ExcludeNodeLabelPatterns allows for excluding unnecessary labels from being propagated from k8s node to cilium
+	// node object. This allows for avoiding unnecessary events being broadcast to all nodes in the cluster.
+	ExcludeNodeLabelPatterns = "exclude-node-label-patterns"
 
 	// IPv4NativeRoutingCIDR describes a v4 CIDR in which pod IPs are routable
 	IPv4NativeRoutingCIDR = "ipv4-native-routing-cidr"
@@ -2092,6 +2094,10 @@ type DaemonConfig struct {
 	// CiliumNode resource for the local node
 	AutoCreateCiliumNodeResource bool
 
+	// ExcludeNodeLabelPatterns allows for excluding unnecessary labels from being propagated from k8s node to cilium
+	// node object. This allows for avoiding unnecessary events being broadcast to all nodes in the cluster.
+	ExcludeNodeLabelPatterns []*regexp.Regexp
+
 	// IPv4NativeRoutingCIDR describes a CIDR in which pod IPs are routable
 	IPv4NativeRoutingCIDR *cidr.CIDR
 
@@ -3128,7 +3134,6 @@ func (c *DaemonConfig) Populate(vp *viper.Viper) {
 	c.RouteMetric = vp.GetInt(RouteMetric)
 	c.RunDir = vp.GetString(StateDir)
 	c.ExternalEnvoyProxy = vp.GetBool(ExternalEnvoyProxy)
-	c.SidecarIstioProxyImage = vp.GetString(SidecarIstioProxyImage)
 	c.SocketPath = vp.GetString(SocketPath)
 	c.TracePayloadlen = vp.GetInt(TracePayloadlen)
 	c.Version = vp.GetString(Version)
@@ -3539,6 +3544,17 @@ func (c *DaemonConfig) Populate(vp *viper.Viper) {
 	c.PolicyCIDRMatchMode = vp.GetStringSlice(PolicyCIDRMatchMode)
 	c.EnableNodeSelectorLabels = vp.GetBool(EnableNodeSelectorLabels)
 	c.NodeLabels = vp.GetStringSlice(NodeLabels)
+
+	// Parse node label patterns
+	nodeLabelPatterns := vp.GetStringSlice(ExcludeNodeLabelPatterns)
+	for _, pattern := range nodeLabelPatterns {
+		r, err := regexp.Compile(pattern)
+		if err != nil {
+			log.WithError(err).Errorf("Unable to compile exclude node label regex pattern %s", pattern)
+			continue
+		}
+		c.ExcludeNodeLabelPatterns = append(c.ExcludeNodeLabelPatterns, r)
+	}
 }
 
 func (c *DaemonConfig) populateDevices(vp *viper.Viper) {

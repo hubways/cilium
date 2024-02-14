@@ -53,8 +53,8 @@ concurrency:
 env:
   cilium_cli_ci_version:
   check_url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-  # renovate: datasource=docker depName=quay.io/cilium/kindest-node
-  k8s_version: v1.29.0-rc.1
+  # renovate: datasource=docker depName=kindest/node
+  k8s_version: v1.29.1
 
 jobs:
   commit-status-start:
@@ -153,6 +153,12 @@ jobs:
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
         with:
           ref: ${{ inputs.context-ref || github.sha }}
+          # We need to be able to check the existence of the tag we want to
+          # downgrade to, in case we're on a release preparation commit and the
+          # value in VERSION does not correspond to an existing tag yet. In
+          # that case, print-downgrade-version.sh needs to adjust the patch
+          # release number to downgrade to.
+          fetch-tags: true
           persist-credentials: false
 
       - name: Set Environment Variables
