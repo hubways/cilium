@@ -39,6 +39,7 @@ import (
 	"github.com/cilium/cilium/pkg/datapath/linux/ipsec"
 	"github.com/cilium/cilium/pkg/datapath/linux/probes"
 	linuxrouting "github.com/cilium/cilium/pkg/datapath/linux/routing"
+	"github.com/cilium/cilium/pkg/datapath/linux/sysctl"
 	"github.com/cilium/cilium/pkg/datapath/maps"
 	datapathOption "github.com/cilium/cilium/pkg/datapath/option"
 	datapathTables "github.com/cilium/cilium/pkg/datapath/tables"
@@ -62,6 +63,7 @@ import (
 	"github.com/cilium/cilium/pkg/ipmasq"
 	"github.com/cilium/cilium/pkg/k8s"
 	k8sClient "github.com/cilium/cilium/pkg/k8s/client"
+	k8sSynced "github.com/cilium/cilium/pkg/k8s/synced"
 	"github.com/cilium/cilium/pkg/k8s/watchers/resources"
 	"github.com/cilium/cilium/pkg/kvstore"
 	"github.com/cilium/cilium/pkg/kvstore/store"
@@ -93,7 +95,6 @@ import (
 	"github.com/cilium/cilium/pkg/rate"
 	"github.com/cilium/cilium/pkg/service"
 	"github.com/cilium/cilium/pkg/statedb"
-	"github.com/cilium/cilium/pkg/sysctl"
 	"github.com/cilium/cilium/pkg/time"
 	"github.com/cilium/cilium/pkg/version"
 	wireguard "github.com/cilium/cilium/pkg/wireguard/agent"
@@ -717,9 +718,6 @@ func InitGlobalFlags(cmd *cobra.Command, vp *viper.Viper) {
 	flags.Int(option.MTUName, 0, "Overwrite auto-detected MTU of underlying network")
 	option.BindEnv(vp, option.MTUName)
 
-	flags.String(option.ProcFs, "/proc", "Root's proc filesystem path")
-	option.BindEnv(vp, option.ProcFs)
-
 	flags.Int(option.RouteMetric, 0, "Overwrite the metric used by cilium when adding routes to its 'cilium_host' device")
 	option.BindEnv(vp, option.RouteMetric)
 
@@ -1182,8 +1180,6 @@ func initEnv(vp *viper.Viper) {
 
 	option.LogRegisteredOptions(vp, log)
 
-	sysctl.SetProcfs(option.Config.ProcFs)
-
 	for _, grp := range option.Config.DebugVerbose {
 		switch grp {
 		case argDebugVerboseFlow:
@@ -1622,6 +1618,8 @@ type daemonParams struct {
 	Shutdowner           hive.Shutdowner
 	Resources            agentK8s.Resources
 	CacheStatus          k8s.CacheStatus
+	K8sResourceSynced    *k8sSynced.Resources
+	K8sAPIGroups         *k8sSynced.APIGroups
 	NodeManager          nodeManager.NodeManager
 	EndpointManager      endpointmanager.EndpointManager
 	CertManager          certificatemanager.CertificateManager
@@ -1662,6 +1660,7 @@ type daemonParams struct {
 	BandwidthManager    datapath.BandwidthManager
 	IPsecKeyCustodian   datapath.IPsecKeyCustodian
 	MTU                 mtu.MTU
+	Sysctl              sysctl.Sysctl
 }
 
 func newDaemonPromise(params daemonParams) promise.Promise[*Daemon] {
@@ -1828,7 +1827,7 @@ func startDaemon(d *Daemon, restoredEndpoints *endpointRestoreState, cleaner *da
 
 	bootstrapStats.healthCheck.Start()
 	if option.Config.EnableHealthChecking {
-		d.initHealth(params.HealthAPISpec, cleaner)
+		d.initHealth(params.HealthAPISpec, cleaner, params.Sysctl)
 	}
 	bootstrapStats.healthCheck.End(true)
 
