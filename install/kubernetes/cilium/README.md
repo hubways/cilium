@@ -322,7 +322,7 @@ contributors across the globe, there is almost always someone available to help.
 | envoy.baseID | int | `0` |  Set Envoy'--base-id' to use when allocating shared memory regions. Only needs to be changed if multiple Envoy instances will run on the same node and may have conflicts. Supported values: 0 - 4294967295. Defaults to '0' |
 | envoy.connectTimeoutSeconds | int | `2` | Time in seconds after which a TCP connection attempt times out |
 | envoy.dnsPolicy | string | `nil` | DNS policy for Cilium envoy pods. Ref: https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/#pod-s-dns-policy |
-| envoy.enabled | bool | `false` | Enable Envoy Proxy in standalone DaemonSet. |
+| envoy.enabled | bool | `true` | Enable Envoy Proxy in standalone DaemonSet. |
 | envoy.extraArgs | list | `[]` | Additional envoy container arguments. |
 | envoy.extraContainers | list | `[]` | Additional containers added to the cilium Envoy DaemonSet. |
 | envoy.extraEnv | list | `[]` | Additional envoy container environment variables. |
@@ -331,7 +331,7 @@ contributors across the globe, there is almost always someone available to help.
 | envoy.extraVolumes | list | `[]` | Additional envoy volumes. |
 | envoy.healthPort | int | `9878` | TCP port for the health API. |
 | envoy.idleTimeoutDurationSeconds | int | `60` | Set Envoy upstream HTTP idle connection timeout seconds. Does not apply to connections with pending requests. Default 60s |
-| envoy.image | object | `{"digest":"sha256:663a71073bfebde735bdde2d7afeb565ef7e5c37de1bf962afbb432f1062559f","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.28.1-e62af1059e691fe025d97b53b56ed4e8afa366dc","useDigest":true}` | Envoy container image. |
+| envoy.image | object | `{"digest":"sha256:223fe3d2b7d2c82d0ec3f4fcfd8c322fb7d5052d128519768f6ebc8f6ae43eb7","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.28.1-f6d0ca17bd2f445e82eaf1892b132dbf10cb2124","useDigest":true}` | Envoy container image. |
 | envoy.livenessProbe.failureThreshold | int | `10` | failure threshold of liveness probe |
 | envoy.livenessProbe.periodSeconds | int | `30` | interval between checks of the liveness probe |
 | envoy.log.format | string | `"[%Y-%m-%d %T.%e][%t][%l][%n] [%g:%#] %v"` | The format string to use for laying out the log message metadata of Envoy. |
@@ -365,6 +365,7 @@ contributors across the globe, there is almost always someone available to help.
 | envoy.tolerations | list | `[{"operator":"Exists"}]` | Node tolerations for envoy scheduling to nodes with taints ref: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/ |
 | envoy.updateStrategy | object | `{"rollingUpdate":{"maxUnavailable":2},"type":"RollingUpdate"}` | cilium-envoy update strategy ref: https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/#updating-a-daemonset |
 | envoyConfig.enabled | bool | `false` | Enable CiliumEnvoyConfig CRD CiliumEnvoyConfig CRD can also be implicitly enabled by other options. |
+| envoyConfig.retryInterval | string | `"15s"` | Interval in which an attempt is made to reconcile failed EnvoyConfigs. If the duration is zero, the retry is deactivated. |
 | envoyConfig.secretsNamespace | object | `{"create":true,"name":"cilium-secrets"}` | SecretsNamespace is the namespace in which envoy SDS will retrieve secrets from. |
 | envoyConfig.secretsNamespace.create | bool | `true` | Create secrets namespace for CiliumEnvoyConfig CRDs. |
 | envoyConfig.secretsNamespace.name | string | `"cilium-secrets"` | The name of the secret namespace to which Cilium agents are given read access. |
@@ -403,6 +404,8 @@ contributors across the globe, there is almost always someone available to help.
 | extraVolumes | list | `[]` | Additional agent volumes. |
 | gatewayAPI.enableProxyProtocol | bool | `false` | Enable proxy protocol for all GatewayAPI listeners. Note that _only_ Proxy protocol traffic will be accepted once this is enabled. |
 | gatewayAPI.enabled | bool | `false` | Enable support for Gateway API in cilium This will automatically set enable-envoy-config as well. |
+| gatewayAPI.hostNetwork.enabled | bool | `false` | Configure whether the Envoy listeners should be exposed on the host network. |
+| gatewayAPI.hostNetwork.nodes.matchLabels | object | `{}` | Specify the labels of the nodes where the Ingress listeners should be exposed  matchLabels:   kubernetes.io/os: linux   kubernetes.io/hostname: kind-worker |
 | gatewayAPI.secretsNamespace | object | `{"create":true,"name":"cilium-secrets","sync":true}` | SecretsNamespace is the namespace in which envoy SDS will retrieve TLS secrets from. |
 | gatewayAPI.secretsNamespace.create | bool | `true` | Create secrets namespace for Gateway API. |
 | gatewayAPI.secretsNamespace.name | string | `"cilium-secrets"` | Name of Gateway API secret namespace. |
@@ -563,6 +566,10 @@ contributors across the globe, there is almost always someone available to help.
 | ingressController.enableProxyProtocol | bool | `false` | Enable proxy protocol for all Ingress listeners. Note that _only_ Proxy protocol traffic will be accepted once this is enabled. |
 | ingressController.enabled | bool | `false` | Enable cilium ingress controller This will automatically set enable-envoy-config as well. |
 | ingressController.enforceHttps | bool | `true` | Enforce https for host having matching TLS host in Ingress. Incoming traffic to http listener will return 308 http error code with respective location in header. |
+| ingressController.hostNetwork.enabled | bool | `false` | Configure whether the Envoy listeners should be exposed on the host network. |
+| ingressController.hostNetwork.nodes.matchLabels | object | `{}` | Specify the labels of the nodes where the Ingress listeners should be exposed  matchLabels:   kubernetes.io/os: linux   kubernetes.io/hostname: kind-worker |
+| ingressController.hostNetwork.sharedHTTPPort | int | `0` | Configure a specific port on the host network that gets used for the shared HTTP listener. This is used for HTTP and HTTPS. |
+| ingressController.hostNetwork.sharedTLSPassthroughPort | int | `0` | Configure a specific port on the host network that gets used for the shared TLS passthrough listener |
 | ingressController.ingressLBAnnotationPrefixes | list | `["lbipam.cilium.io","service.beta.kubernetes.io","service.kubernetes.io","cloud.google.com"]` | IngressLBAnnotations are the annotation and label prefixes, which are used to filter annotations and/or labels to propagate from Ingress to the Load Balancer service |
 | ingressController.loadbalancerMode | string | `"dedicated"` | Default ingress load balancer mode Supported values: shared, dedicated For granular control, use the following annotations on the ingress resource ingress.cilium.io/loadbalancer-mode: shared|dedicated, |
 | ingressController.secretsNamespace | object | `{"create":true,"name":"cilium-secrets","sync":true}` | SecretsNamespace is the namespace in which envoy SDS will retrieve TLS secrets from. |
