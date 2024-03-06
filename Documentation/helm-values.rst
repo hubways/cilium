@@ -1084,6 +1084,14 @@
      - Time in seconds after which a TCP connection attempt times out
      - int
      - ``2``
+   * - :spelling:ignore:`envoy.debug.admin.enabled`
+     - Enable admin interface for cilium-envoy. This is useful for debugging and should not be enabled in production.
+     - bool
+     - ``false``
+   * - :spelling:ignore:`envoy.debug.admin.port`
+     - Port number (bound to loopback interface). kubectl port-forward can be used to access the admin interface.
+     - int
+     - ``9901``
    * - :spelling:ignore:`envoy.dnsPolicy`
      - DNS policy for Cilium envoy pods. Ref: https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/#pod-s-dns-policy
      - string
@@ -1440,6 +1448,10 @@
      - Enable secret sync, which will make sure all TLS secrets used by Ingress are synced to secretsNamespace.name. If disabled, TLS secrets must be maintained externally.
      - bool
      - ``true``
+   * - :spelling:ignore:`gatewayAPI.xffNumTrustedHops`
+     - The number of additional GatewayAPI proxy hops from the right side of the HTTP header to trust when determining the origin client's IP address.
+     - int
+     - ``0``
    * - :spelling:ignore:`gke.enabled`
      - Enable Google Kubernetes Engine integration
      - bool

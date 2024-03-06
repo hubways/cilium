@@ -786,7 +786,7 @@ create_ct:
 			return DROP_INVALID;
 
 		ct_state_new.src_sec_id = WORLD_IPV6_ID;
-		ct_state_new.dsr = 1;
+		ct_state_new.dsr_internal = 1;
 		ct_state_new.proxy_redirect = false;
 		ct_state_new.from_l7lb = false;
 
@@ -1107,9 +1107,8 @@ int tail_nodeport_nat_ingress_ipv6(struct __ctx_buff *ctx)
 	ctx_skip_host_fw_set(ctx);
 # endif
 
-	ret = invoke_traced_tailcall_if(__or(__not(is_defined(HAVE_LARGE_INSN_LIMIT)),
-					     __and(is_defined(ENABLE_HOST_FIREWALL),
-						   is_defined(IS_BPF_HOST))),
+	ret = invoke_traced_tailcall_if(__and(is_defined(ENABLE_HOST_FIREWALL),
+					      is_defined(IS_BPF_HOST)),
 					CILIUM_CALL_IPV6_NODEPORT_REVNAT,
 					nodeport_rev_dnat_ingress_ipv6,
 					&trace, &ext_err);
@@ -2309,7 +2308,7 @@ create_ct:
 			return DROP_INVALID;
 
 		ct_state_new.src_sec_id = WORLD_IPV4_ID;
-		ct_state_new.dsr = 1;
+		ct_state_new.dsr_internal = 1;
 		ct_state_new.proxy_redirect = 0;
 		ct_state_new.from_l7lb = 0;
 
@@ -2596,9 +2595,8 @@ int tail_nodeport_nat_ingress_ipv4(struct __ctx_buff *ctx)
 	 * Also let nodeport_rev_dnat_ingress_ipv4() redirect EgressGW
 	 * reply traffic into tunnel (see there for details).
 	 */
-	ret = invoke_traced_tailcall_if(__or(__not(is_defined(HAVE_LARGE_INSN_LIMIT)),
-					     __and(is_defined(ENABLE_HOST_FIREWALL),
-						   is_defined(IS_BPF_HOST))),
+	ret = invoke_traced_tailcall_if(__and(is_defined(ENABLE_HOST_FIREWALL),
+					      is_defined(IS_BPF_HOST)),
 					CILIUM_CALL_IPV4_NODEPORT_REVNAT,
 					nodeport_rev_dnat_ingress_ipv4,
 					&trace, &ext_err);
@@ -2933,6 +2931,9 @@ skip_service_lookup:
 		if (identity_is_local(src_sec_identity))
 			return DROP_INVALID_IDENTITY;
 
+		if (identity_is_host(src_sec_identity))
+			return DROP_INVALID_IDENTITY;
+
 		/* lookup with SCOPE_FORWARD: */
 		__ipv4_ct_tuple_reverse(&tuple);
 
@@ -3070,7 +3071,7 @@ nodeport_rev_dnat_fwd_ipv4(struct __ctx_buff *ctx, struct trace_ctx *trace,
      defined(IS_BPF_OVERLAY) &&						\
      DSR_ENCAP_MODE == DSR_ENCAP_GENEVE
 		/* For HS IPCache, we also need to revDNAT the OuterSrcIP: */
-		if (ct_state.dsr) {
+		if (ct_state.dsr_internal) {
 			struct bpf_tunnel_key key;
 
 			if (ctx_get_tunnel_key(ctx, &key, sizeof(key), 0) < 0)
