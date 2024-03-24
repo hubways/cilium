@@ -83,6 +83,7 @@ cilium-agent hive dot-graph [flags]
       --mesh-auth-spire-admin-socket string                       The path for the SPIRE admin agent Unix socket.
       --metrics strings                                           Metrics that should be enabled or disabled from the default metric list. (+metric_foo to enable metric_foo, -metric_bar to disable metric_bar)
       --monitor-queue-size int                                    Size of the event queue when reading monitor events
+      --multicast-enabled                                         Enables multicast in Cilium
       --nodeport-addresses strings                                A whitelist of CIDRs to limit which IPs are used for NodePort. If not set, primary IPv4 and/or IPv6 address of each native device is used.
       --pprof                                                     Enable serving pprof debugging API
       --pprof-address string                                      Address that pprof listens on (default "localhost")
@@ -96,6 +97,8 @@ cilium-agent hive dot-graph [flags]
       --proxy-idle-timeout-seconds int                            Set Envoy upstream HTTP idle connection timeout seconds. Does not apply to connections with pending requests. Default 60s (default 60)
       --proxy-max-connection-duration-seconds int                 Set Envoy HTTP option max_connection_duration seconds. Default 0 (disable)
       --proxy-max-requests-per-connection int                     Set Envoy HTTP option max_requests_per_connection. Default 0 (disable)
+      --proxy-portrange-max uint16                                End of port range that is used to allocate ports for L7 proxies. (default 20000)
+      --proxy-portrange-min uint16                                Start of port range that is used to allocate ports for L7 proxies. (default 10000)
       --proxy-prometheus-port int                                 Port to serve Envoy metrics on. Default 0 (disabled).
       --read-cni-conf string                                      CNI configuration file to use as a source for --write-cni-conf-when-ready. If not supplied, a suitable one will be generated.
       --tunnel-port uint16                                        Tunnel port (default 8472 for "vxlan" and 6081 for "geneve")
