@@ -243,18 +243,6 @@ func (n *NodeDiscovery) WaitForLocalNodeInit() {
 	<-n.localStateInitialized
 }
 
-func (n *NodeDiscovery) NodeDeleted(node nodeTypes.Node) {
-	n.Manager.NodeDeleted(node)
-}
-
-func (n *NodeDiscovery) NodeUpdated(node nodeTypes.Node) {
-	n.Manager.NodeUpdated(node)
-}
-
-func (n *NodeDiscovery) ClusterSizeDependantInterval(baseInterval time.Duration) time.Duration {
-	return n.Manager.ClusterSizeDependantInterval(baseInterval)
-}
-
 func (n *NodeDiscovery) updateLocalNode(ln *node.LocalNode) {
 	if option.Config.KVStore != "" && !option.Config.JoinCluster {
 		n.ctrlmgr.UpdateController(
@@ -449,6 +437,8 @@ func (n *NodeDiscovery) mutateNodeResource(nodeResource *ciliumv2.CiliumNode, ln
 	if ip := ln.IPv6IngressIP; ip != nil {
 		nodeResource.Spec.IngressAddressing.IPV6 = ip.String()
 	}
+
+	nodeResource.Spec.BootID = ln.BootID
 
 	switch option.Config.IPAM {
 	case ipamOption.IPAMENI:

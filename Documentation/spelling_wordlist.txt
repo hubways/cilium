@@ -30,6 +30,7 @@ DTrace
 Dangaard
 Datadog
 Dataplane
+Deconfigure
 Dinan
 Dockerfile
 Dockerfiles
@@ -382,6 +383,7 @@ impactful
 ingressing
 init
 initContainer
+initialDelaySeconds
 inlined
 inlines
 inlining
@@ -735,6 +737,7 @@ unix
 unlabel
 unmanaged
 unmigrated
+unselect
 unsettable
 untriaged
 untrusted
