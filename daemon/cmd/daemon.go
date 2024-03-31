@@ -342,6 +342,17 @@ func newDaemon(ctx context.Context, cleaner *daemonCleanup, params *daemonParams
 		return nil, nil, fmt.Errorf("CRD Identity allocation mode requires k8s to be configured")
 	}
 
+	// EncryptedOverlay feature must check the TunnelProtocol if enabled, since
+	// it only supports VXLAN right now.
+	if option.Config.EncryptionEnabled() && option.Config.EnableIPSecEncryptedOverlay {
+		if !option.Config.TunnelingEnabled() {
+			return nil, nil, fmt.Errorf("EncryptedOverlay support requires VXLAN tunneling mode")
+		}
+		if params.TunnelConfig.Protocol() != tunnel.VXLAN {
+			return nil, nil, fmt.Errorf("EncryptedOverlay support requires VXLAN tunneling protocol")
+		}
+	}
+
 	// Check the kernel if we can make use of managed neighbor entries which
 	// simplifies and fully 'offloads' L2 resolution handling to the kernel.
 	if !option.Config.DryMode {
@@ -403,8 +414,6 @@ func newDaemon(ctx context.Context, cleaner *daemonCleanup, params *daemonParams
 		metrics.Identity.WithLabelValues(identity.ReservedIdentityType).Inc()
 	})
 
-	nd := nodediscovery.NewNodeDiscovery(params.NodeManager, params.Clientset, params.LocalNodeStore, params.MTU, params.CNIConfigManager.GetCustomNetConf())
-
 	d := Daemon{
 		ctx:               ctx,
 		clientset:         params.Clientset,
@@ -415,7 +424,7 @@ func newDaemon(ctx context.Context, cleaner *daemonCleanup, params *daemonParams
 		datapath:          params.Datapath,
 		deviceManager:     params.DeviceManager,
 		devices:           params.Devices,
-		nodeDiscovery:     nd,
+		nodeDiscovery:     params.NodeDiscovery,
 		nodeLocalStore:    params.LocalNodeStore,
 		endpointCreations: newEndpointCreationManager(params.Clientset),
 		apiLimiterSet:     params.APILimiterSet,
@@ -507,7 +516,7 @@ func newDaemon(ctx context.Context, cleaner *daemonCleanup, params *daemonParams
 		params.ServiceCache,
 		d.bwManager,
 	)
-	nd.RegisterK8sGetters(d.k8sWatcher)
+	params.NodeDiscovery.RegisterK8sGetters(d.k8sWatcher)
 
 	if option.Config.BGPAnnounceLBIP || option.Config.BGPAnnouncePodCIDR {
 		switch option.Config.IPAMMode() {
