@@ -312,6 +312,9 @@ Annotations:
 * The ``cilium-dbg status --verbose`` command health data may now show health reported on a non-leaf
   component under a leaf named ``reporter``. Health data tree branches will now also be sorted by
   the fully qualified health status identifier.
+* L7 network policy with terminatingTLS will not load the key ``ca.crt`` even if it is present in the
+  secret. This prevents Envoy from incorrectly requiring client certificates from pods when using TLS
+  termination. To retain old behaviour for bug compatibility, please set ``--use-full-tls-context=true``.
 
 Removed Options
 ~~~~~~~~~~~~~~~
@@ -340,6 +343,8 @@ Helm Options
 * The deprecated Helm option ``remoteNodeIdentity`` has been removed. This should have no impact on users who used the previous default
   value of ``true``: Remote nodes will now always use ``remote-node`` identity. If you have network policies based on
   ``enable-remote-node-identity=false`` make sure to update them.
+* The clustermesh-apiserver ``podSecurityContext`` and ``securityContext`` settings now
+  default to drop all capabilities and run as non-root user.
 
 Added Metrics
 ~~~~~~~~~~~~~
