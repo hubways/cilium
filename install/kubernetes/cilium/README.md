@@ -261,8 +261,6 @@ contributors across the globe, there is almost always someone available to help.
 | cni.uninstall | bool | `false` | Remove the CNI configuration and binary files on agent shutdown. Enable this if you're removing Cilium from the cluster. Disable this to prevent the CNI configuration file from being removed during agent upgrade, which can cause nodes to go unmanageable. |
 | conntrackGCInterval | string | `"0s"` | Configure how frequently garbage collection should occur for the datapath connection tracking table. |
 | conntrackGCMaxInterval | string | `""` | Configure the maximum frequency for the garbage collection of the connection tracking table. Only affects the automatic computation for the frequency and has no effect when 'conntrackGCInterval' is set. This can be set to more frequently clean up unused identities created from ToFQDN policies. |
-| containerRuntime | object | `{"integration":"none"}` | Configure container runtime specific integration. Deprecated in favor of bpf.autoMount.enabled. To be removed in 1.15. |
-| containerRuntime.integration | string | `"none"` | Enables specific integrations for container runtimes. Supported values: - crio - none |
 | crdWaitTimeout | string | `"5m"` | Configure timeout in which Cilium will exit if CRDs are not available |
 | customCalls | object | `{"enabled":false}` | Tail call hooks for custom eBPF programs. |
 | customCalls.enabled | bool | `false` | Enable tail call hooks for custom eBPF programs. |
@@ -312,7 +310,7 @@ contributors across the globe, there is almost always someone available to help.
 | encryption.strictMode.enabled | bool | `false` | Enable WireGuard Pod2Pod strict mode. |
 | encryption.type | string | `"ipsec"` | Encryption method. Can be either ipsec or wireguard. |
 | encryption.wireguard.persistentKeepalive | string | `"0s"` | Controls Wireguard PersistentKeepalive option. Set 0s to disable. |
-| encryption.wireguard.userspaceFallback | bool | `false` | Enables the fallback to the user-space implementation. |
+| encryption.wireguard.userspaceFallback | bool | `false` | Enables the fallback to the user-space implementation (deprecated). |
 | endpointHealthChecking.enabled | bool | `true` | Enable connectivity health checking between virtual endpoints. |
 | endpointRoutes.enabled | bool | `false` | Enable use of per endpoint routes instead of routing via the cilium_host interface. |
 | eni.awsEnablePrefixDelegation | bool | `false` | Enable ENI prefix delegation |
@@ -622,7 +620,7 @@ contributors across the globe, there is almost always someone available to help.
 | k8sClientRateLimit.burst | int | 10 for k8s up to 1.26. 20 for k8s version 1.27+ | The burst request rate in requests per second. The rate limiter will allow short bursts with a higher rate. |
 | k8sClientRateLimit.qps | int | 5 for k8s up to 1.26. 10 for k8s version 1.27+ | The sustained request rate in requests per second. |
 | k8sNetworkPolicy.enabled | bool | `true` | Enable support for K8s NetworkPolicy |
-| k8sServiceHost | string | `""` | Kubernetes service host |
+| k8sServiceHost | string | `""` | Kubernetes service host - use "auto" for automatic lookup from the cluster-info ConfigMap (kubeadm-based clusters only) |
 | k8sServicePort | string | `""` | Kubernetes service port |
 | keepDeprecatedLabels | bool | `false` | Keep the deprecated selector labels when deploying Cilium DaemonSet. |
 | keepDeprecatedProbes | bool | `false` | Keep the deprecated probes when deploying Cilium DaemonSet |
