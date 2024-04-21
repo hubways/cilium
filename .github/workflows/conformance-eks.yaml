@@ -129,6 +129,11 @@ jobs:
       matrix: ${{fromJson(needs.generate-matrix.outputs.matrix)}}
 
     steps:
+      - name: Collect Workflow Telemetry
+        uses: catchpoint/workflow-telemetry-action@94c3c3d9567a0205de6da68a76c428ce4e769af1 # v2.0.0
+        with:
+          comment_on_pr: false
+
       - name: Checkout context ref (trusted)
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
         with:
@@ -179,6 +184,8 @@ jobs:
           repository: ${{ env.CILIUM_CLI_RELEASE_REPO }}
           release-version: ${{ env.CILIUM_CLI_VERSION }}
           ci-version: ${{ env.cilium_cli_ci_version }}
+          binary-name: cilium-cli
+          binary-dir: ./
 
       - name: Install kubectl
         run: |
@@ -265,15 +272,6 @@ jobs:
           path: untrusted
           sparse-checkout: |
             install/kubernetes/cilium
-
-      - name: Install Cilium CLI
-        uses: cilium/cilium-cli@a9579d1afc528b085930c5237a69ee77b2c2be76 # v0.16.4
-        with:
-          repository: ${{ env.CILIUM_CLI_RELEASE_REPO }}
-          release-version: ${{ env.CILIUM_CLI_VERSION }}
-          ci-version: ${{ env.cilium_cli_ci_version }}
-          binary-name: cilium-cli
-          binary-dir: ./
 
       - name: Install Cilium
         id: install-cilium
