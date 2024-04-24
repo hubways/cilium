@@ -717,28 +717,11 @@ func (e *Endpoint) GetNodeMAC() mac.MAC {
 	return e.nodeMAC
 }
 
-// ConntrackName returns the name suffix for the endpoint-specific bpf
-// conntrack map, which is a 5-digit endpoint ID, or "global" when the
-// global map should be used.
-func (e *Endpoint) ConntrackName() string {
-	e.unconditionalRLock()
-	defer e.runlock()
-	return e.conntrackName()
-}
-
 // ConntrackNameLocked returns the name suffix for the endpoint-specific bpf
 // conntrack map, which is a 5-digit endpoint ID, or "global" when the
 // global map should be used.
 // Must be called with the endpoint locked.
 func (e *Endpoint) ConntrackNameLocked() string {
-	return e.conntrackName()
-}
-
-// ConntrackName returns the name suffix for the endpoint-specific bpf
-// conntrack map, which is a 5-digit endpoint ID, or "global" when the
-// global map should be used.
-// Must be called with the endpoint locked.
-func (e *Endpoint) conntrackName() string {
 	if e.ConntrackLocalLocked() {
 		return fmt.Sprintf("%05d", int(e.ID))
 	}
@@ -1075,16 +1058,10 @@ func (e *Endpoint) Update(cfg *models.EndpointConfigurationSpec) error {
 		RegenerationLevel: regeneration.RegenerateWithoutDatapath,
 	}
 
-	// If configuration options are provided, we only regenerate if necessary.
-	// Otherwise always regenerate.
-	if cfg.Options == nil {
-		regenCtx.RegenerationLevel = regeneration.RegenerateWithDatapathRebuild
-		regenCtx.Reason = "endpoint was manually regenerated via API"
-	} else if e.updateAndOverrideEndpointOptions(om) || e.status.CurrentStatus() != OK {
+	// Only regenerate if necessary.
+	if cfg.Options == nil || e.updateAndOverrideEndpointOptions(om) || e.status.CurrentStatus() != OK {
 		regenCtx.RegenerationLevel = regeneration.RegenerateWithDatapathRewrite
-	}
 
-	if regenCtx.RegenerationLevel > regeneration.RegenerateWithoutDatapath {
 		e.getLogger().Debug("need to regenerate endpoint; checking state before" +
 			" attempting to regenerate")
 
@@ -1260,7 +1237,7 @@ func (e *Endpoint) leaveLocked(proxyWaitGroup *completion.WaitGroup, conf Delete
 	}
 
 	if e.ConntrackLocalLocked() {
-		ctmap.CloseLocalMaps(e.conntrackName())
+		ctmap.CloseLocalMaps(e.ConntrackNameLocked())
 	} else if !e.isProperty(PropertyFakeEndpoint) {
 		e.scrubIPsInConntrackTableLocked()
 	}
@@ -2566,14 +2543,14 @@ func (e *Endpoint) WaitForFirstRegeneration(ctx context.Context) error {
 
 // SetDefaultConfiguration sets the default configuration options for its
 // boolean configuration options and for policy enforcement based off of the
-// global policy enforcement configuration options. If restore is true, then
-// the configuration option to keep endpoint configuration during endpoint
-// restore is checked, and if so, this is a no-op.
-func (e *Endpoint) SetDefaultConfiguration(restore bool) {
+// global policy enforcement configuration options. If the configuration option to
+// keep endpoint configuration during endpoint restore is enabled, this is a
+// no-op.
+func (e *Endpoint) SetDefaultConfiguration() {
 	e.unconditionalLock()
 	defer e.unlock()
 
-	if restore && option.Config.KeepConfig {
+	if option.Config.KeepConfig {
 		return
 	}
 	e.setDefaultPolicyConfig()

@@ -936,10 +936,6 @@
      - Enables egress gateway to redirect and SNAT the traffic that leaves the cluster.
      - bool
      - ``false``
-   * - :spelling:ignore:`egressGateway.installRoutes`
-     - Deprecated without a replacement necessary.
-     - bool
-     - ``false``
    * - :spelling:ignore:`egressGateway.reconciliationTriggerInterval`
      - Time between triggers of egress gateway state reconciliations
      - string
@@ -989,7 +985,7 @@
      - bool
      - ``false``
    * - :spelling:ignore:`encryption.ipsec.encryptedOverlay`
-     - Enable IPSec encrypted overlay
+     - Enable IPsec encrypted overlay
      - bool
      - ``false``
    * - :spelling:ignore:`encryption.ipsec.interface`
@@ -1041,7 +1037,7 @@
      - string
      - ``"ipsec"``
    * - :spelling:ignore:`encryption.wireguard.persistentKeepalive`
-     - Controls Wireguard PersistentKeepalive option. Set 0s to disable.
+     - Controls WireGuard PersistentKeepalive option. Set 0s to disable.
      - string
      - ``"0s"``
    * - :spelling:ignore:`encryption.wireguard.userspaceFallback`
@@ -1171,7 +1167,7 @@
    * - :spelling:ignore:`envoy.image`
      - Envoy container image.
      - object
-     - ``{"digest":"sha256:d53a3d10f56d5d629dd2871a6600398d56c3f6040fda5ded8681ff6dbefb4213","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.28.2-b26890d42321dd1ee126ee7e38274f3a675c9a23","useDigest":true}``
+     - ``{"digest":"sha256:f48e6e65252f2ff53e8ae91e6521c2ae9ed747e8998e1b9dfc83a2664de3dc35","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.29.4-fe3f52ea52e1a28e4c2cd295b0884fd697bb9e69","useDigest":true}``
    * - :spelling:ignore:`envoy.livenessProbe.failureThreshold`
      - failure threshold of liveness probe
      - int
