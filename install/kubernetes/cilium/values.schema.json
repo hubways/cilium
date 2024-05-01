@@ -1882,6 +1882,16 @@
           "type": "object"
         },
         "podSecurityContext": {
+          "properties": {
+            "appArmorProfile": {
+              "properties": {
+                "type": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            }
+          },
           "type": "object"
         },
         "priorityClassName": {
@@ -1984,6 +1994,9 @@
                     ]
                   },
                   "type": "array"
+                },
+                "keepCapNetBindService": {
+                  "type": "boolean"
                 }
               },
               "type": "object"
@@ -2051,6 +2064,12 @@
             }
           },
           "type": "object"
+        },
+        "xffNumTrustedHopsL7PolicyEgress": {
+          "type": "integer"
+        },
+        "xffNumTrustedHopsL7PolicyIngress": {
+          "type": "integer"
         }
       },
       "type": "object"
@@ -2281,6 +2300,9 @@
     },
     "gatewayAPI": {
       "properties": {
+        "enableAppProtocol": {
+          "type": "boolean"
+        },
         "enableProxyProtocol": {
           "type": "boolean"
         },
@@ -2570,6 +2592,53 @@
                     ]
                   },
                   "type": "array"
+                },
+                "tlsConfig": {
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "tls": {
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "server": {
+                  "properties": {
+                    "cert": {
+                      "type": "string"
+                    },
+                    "extraDnsNames": {
+                      "items": {},
+                      "type": "array"
+                    },
+                    "extraIpAddresses": {
+                      "items": {},
+                      "type": "array"
+                    },
+                    "key": {
+                      "type": "string"
+                    },
+                    "mtls": {
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "key": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "null"
+                        },
+                        "useSecret": {
+                          "type": "boolean"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
                 }
               },
               "type": "object"
@@ -3881,6 +3950,19 @@
         "podLabels": {
           "type": "object"
         },
+        "podSecurityContext": {
+          "properties": {
+            "appArmorProfile": {
+              "properties": {
+                "type": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
         "prestop": {
           "properties": {
             "postScript": {
@@ -4335,6 +4417,16 @@
       "type": "object"
     },
     "podSecurityContext": {
+      "properties": {
+        "appArmorProfile": {
+          "properties": {
+            "type": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
       "type": "object"
     },
     "policyCIDRMatchMode": {

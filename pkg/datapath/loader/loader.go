@@ -14,6 +14,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/cilium/hive/cell"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
@@ -30,7 +31,6 @@ import (
 	datapath "github.com/cilium/cilium/pkg/datapath/types"
 	"github.com/cilium/cilium/pkg/defaults"
 	"github.com/cilium/cilium/pkg/elf"
-	"github.com/cilium/cilium/pkg/hive/cell"
 	iputil "github.com/cilium/cilium/pkg/ip"
 	"github.com/cilium/cilium/pkg/lock"
 	"github.com/cilium/cilium/pkg/logging"
@@ -84,20 +84,30 @@ type loader struct {
 	hostDpInitializedOnce sync.Once
 	hostDpInitialized     chan struct{}
 
-	sysctl    sysctl.Sysctl
-	db        *statedb.DB
-	nodeAddrs statedb.Table[tables.NodeAddress]
-	devices   statedb.Table[*tables.Device]
+	sysctl          sysctl.Sysctl
+	db              *statedb.DB
+	nodeAddrs       statedb.Table[tables.NodeAddress]
+	devices         statedb.Table[*tables.Device]
+	prefilter       datapath.PreFilter
+	compilationLock datapath.CompilationLock
+	configWriter    datapath.ConfigWriter
+	localNodeConfig datapath.LocalNodeConfiguration
+	nodeHandler     datapath.NodeHandler
 }
 
 type Params struct {
 	cell.In
 
-	Config    Config
-	DB        *statedb.DB
-	NodeAddrs statedb.Table[tables.NodeAddress]
-	Sysctl    sysctl.Sysctl
-	Devices   statedb.Table[*tables.Device]
+	Config          Config
+	DB              *statedb.DB
+	NodeAddrs       statedb.Table[tables.NodeAddress]
+	Sysctl          sysctl.Sysctl
+	Devices         statedb.Table[*tables.Device]
+	Prefilter       datapath.PreFilter
+	CompilationLock datapath.CompilationLock
+	ConfigWriter    datapath.ConfigWriter
+	LocalNodeConfig datapath.LocalNodeConfiguration
+	NodeHandler     datapath.NodeHandler
 }
 
 // newLoader returns a new loader.
@@ -109,6 +119,11 @@ func newLoader(p Params) *loader {
 		sysctl:            p.Sysctl,
 		devices:           p.Devices,
 		hostDpInitialized: make(chan struct{}),
+		prefilter:         p.Prefilter,
+		compilationLock:   p.CompilationLock,
+		configWriter:      p.ConfigWriter,
+		localNodeConfig:   p.LocalNodeConfig,
+		nodeHandler:       p.NodeHandler,
 	}
 }
 
@@ -130,16 +145,16 @@ func NewLoaderForTest(tb testing.TB) *loader {
 
 // Init initializes the datapath cache with base program hashes derived from
 // the LocalNodeConfiguration.
-func (l *loader) init(dp datapath.ConfigWriter, nodeCfg *datapath.LocalNodeConfiguration) {
+func (l *loader) init() {
 	l.once.Do(func() {
-		l.templateCache = newObjectCache(dp, nodeCfg, option.Config.StateDir)
+		l.templateCache = newObjectCache(l.configWriter, &l.localNodeConfig, option.Config.StateDir)
 		ignorePrefixes := ignoredELFPrefixes
 		if !option.Config.EnableIPv4 {
 			ignorePrefixes = append(ignorePrefixes, "LXC_IPV4")
 		}
 		elf.IgnoreSymbolPrefixes(ignorePrefixes)
 	})
-	l.templateCache.Update(nodeCfg)
+	l.templateCache.Update(&l.localNodeConfig)
 }
 
 func upsertEndpointRoute(ep datapath.Endpoint, ip net.IPNet) error {
@@ -732,13 +747,29 @@ func (l *loader) Unload(ep datapath.Endpoint) {
 		}
 	}
 
+	log := log.WithField(logfields.EndpointID, ep.StringID())
+
+	// Remove legacy tc attachments.
+	if err := removeTCFilters(ep.InterfaceName(), netlink.HANDLE_MIN_INGRESS); err != nil {
+		log.WithError(err).Errorf("Removing ingress filter from interface %s", ep.InterfaceName())
+	}
+	if err := removeTCFilters(ep.InterfaceName(), netlink.HANDLE_MIN_EGRESS); err != nil {
+		log.WithError(err).Errorf("Removing egress filter from interface %s", ep.InterfaceName())
+	}
+
 	// If Cilium and the kernel support tcx to attach TC programs to the
 	// endpoint's veth device, its bpf_link object is pinned to a per-endpoint
-	// bpffs directory. When the endpoint gets deleted, removing the whole
-	// directory cleans up any pinned maps and links.
-	bpffsPath := bpffsEndpointDir(bpf.CiliumPath(), ep)
-	if err := bpf.Remove(bpffsPath); err != nil {
-		log.WithError(err).WithField(logfields.EndpointID, ep.StringID())
+	// bpffs directory. When the endpoint gets deleted, we can remove the whole
+	// directory to clean up any leftover pinned links and maps.
+
+	// Remove the links directory first to avoid removing program arrays before
+	// the entrypoints are detached.
+	if err := bpf.Remove(bpffsEndpointLinksDir(bpf.CiliumPath(), ep)); err != nil {
+		log.WithError(err)
+	}
+	// Finally, remove the endpoint's top-level directory.
+	if err := bpf.Remove(bpffsEndpointDir(bpf.CiliumPath(), ep)); err != nil {
+		log.WithError(err)
 	}
 }
 
