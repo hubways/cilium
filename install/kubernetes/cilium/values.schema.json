@@ -515,6 +515,9 @@
         "disableExternalIPMitigation": {
           "type": "boolean"
         },
+        "enableTCX": {
+          "type": "boolean"
+        },
         "events": {
           "properties": {
             "drop": {
@@ -2287,6 +2290,10 @@
       "type": "array"
     },
     "extraHostPathMounts": {
+      "items": {},
+      "type": "array"
+    },
+    "extraInitContainers": {
       "items": {},
       "type": "array"
     },
