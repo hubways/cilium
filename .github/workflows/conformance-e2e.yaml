@@ -24,6 +24,8 @@ on:
 # By specifying the access of one of the scopes, all of those that are not
 # specified are set to 'none'.
 permissions:
+  # To read actions state with catchpoint/workflow-telemetry-action
+  actions: read
   # To be able to access the repository with actions/checkout
   contents: read
   # To allow retrieving information from the PR API
@@ -251,6 +253,7 @@ jobs:
             tunnel: 'disabled'
             ingress-controller: 'true'
             misc: 'bpf.tproxy=true'
+            ciliumendpointslice: 'true'
 
           - name: '16'
             # renovate: datasource=docker depName=quay.io/lvh-images/kind
@@ -264,6 +267,7 @@ jobs:
             encryption: 'wireguard'
             encryption-node: 'false'
             host-fw: 'true'
+            ciliumendpointslice: 'true'
 
     timeout-minutes: 60
     steps:
@@ -310,6 +314,7 @@ jobs:
           host-fw: ${{ matrix.host-fw }}
           ingress-controller: ${{ matrix.ingress-controller }}
           misc: ${{ matrix.misc }}
+          ciliumendpointslice: ${{ matrix.ciliumendpointslice }}
 
       - name: Install Cilium CLI
         uses: cilium/cilium-cli@bfa4f93a41da410a1b4c9373c1694ca6d5c35ade # v0.16.6
