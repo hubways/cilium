@@ -186,7 +186,7 @@ func (e *Endpoint) writeHeaderfile(prefix string) error {
 		return err
 	}
 
-	if err = e.owner.Datapath().WriteEndpointConfig(f, e); err != nil {
+	if err = e.owner.Datapath().Loader().WriteEndpointConfig(f, e); err != nil {
 		return err
 	}
 
@@ -692,7 +692,7 @@ func (e *Endpoint) runPreCompilationSteps(regenContext *regenerationContext, rul
 	// This is because policy generation needs the ipcache to make progress, and the ipcache needs to call
 	// endpoint.ApplyPolicyMapChanges()
 	stats.policyCalculation.Start()
-	policyResult, err := e.regeneratePolicy()
+	policyResult, err := e.regeneratePolicy(stats)
 	stats.policyCalculation.End(err == nil)
 	if err != nil {
 		return fmt.Errorf("unable to regenerate policy for '%s': %w", e.StringID(), err)
@@ -982,9 +982,7 @@ func (e *Endpoint) deleteMaps() []error {
 
 	// Remove rate limit from bandwidth manager map.
 	if e.bps != 0 {
-		if err := e.owner.Datapath().BandwidthManager().DeleteEndpointBandwidthLimit(e.ID); err != nil {
-			errors = append(errors, fmt.Errorf("removing endpoint from bandwidth manager map: %w", err))
-		}
+		e.owner.Datapath().BandwidthManager().DeleteBandwidthLimit(e.ID)
 	}
 
 	if e.ConntrackLocalLocked() {
