@@ -17,14 +17,12 @@ import (
 	"golang.org/x/exp/maps"
 
 	"github.com/cilium/cilium/pkg/identity"
-	"github.com/cilium/cilium/pkg/identity/cache"
 	"github.com/cilium/cilium/pkg/labels"
 	"github.com/cilium/cilium/pkg/option"
 	"github.com/cilium/cilium/pkg/policy/api"
 	"github.com/cilium/cilium/pkg/policy/trafficdirection"
 	"github.com/cilium/cilium/pkg/policy/types"
 	"github.com/cilium/cilium/pkg/testutils"
-	testidentity "github.com/cilium/cilium/pkg/testutils/identity"
 )
 
 var (
@@ -37,7 +35,7 @@ func localIdentity(n uint32) identity.NumericIdentity {
 
 }
 func TestCacheManagement(t *testing.T) {
-	repo := NewPolicyRepository(nil, nil, nil, nil)
+	repo := NewPolicyRepository(nil, nil, nil)
 	cache := repo.policyCache
 	identity := ep1.GetSecurityIdentity()
 	require.Equal(t, identity, ep2.GetSecurityIdentity())
@@ -73,7 +71,7 @@ func TestCacheManagement(t *testing.T) {
 }
 
 func TestCachePopulation(t *testing.T) {
-	repo := NewPolicyRepository(nil, nil, nil, nil)
+	repo := NewPolicyRepository(nil, nil, nil)
 	repo.revision.Store(42)
 	cache := repo.policyCache
 
@@ -406,9 +404,8 @@ type policyDistillery struct {
 }
 
 func newPolicyDistillery(selectorCache *SelectorCache) *policyDistillery {
-	identityAllocator := testidentity.NewMockIdentityAllocator(nil)
 	ret := &policyDistillery{
-		Repository: NewPolicyRepository(identityAllocator, nil, nil, nil),
+		Repository: NewPolicyRepository(nil, nil, nil),
 	}
 	ret.selectorCache = selectorCache
 	return ret
@@ -481,7 +478,7 @@ func Test_MergeL3(t *testing.T) {
 
 	SetPolicyEnabled(option.DefaultEnforcement)
 
-	identityCache := cache.IdentityCache{
+	identityCache := identity.IdentityMap{
 		identity.NumericIdentity(identityFoo): labelsFoo,
 		identity.NumericIdentity(identityBar): labelsBar,
 	}
@@ -1122,7 +1119,7 @@ func Test_MergeRules(t *testing.T) {
 
 	SetPolicyEnabled(option.DefaultEnforcement)
 
-	identityCache := cache.IdentityCache{
+	identityCache := identity.IdentityMap{
 		identity.NumericIdentity(identityFoo): labelsFoo,
 	}
 	selectorCache := testNewSelectorCache(identityCache)
@@ -1247,7 +1244,7 @@ func Test_MergeRulesWithNamedPorts(t *testing.T) {
 
 	SetPolicyEnabled(option.DefaultEnforcement)
 
-	identityCache := cache.IdentityCache{
+	identityCache := identity.IdentityMap{
 		identity.NumericIdentity(identityFoo): labelsFoo,
 	}
 	selectorCache := testNewSelectorCache(identityCache)
@@ -1323,7 +1320,7 @@ func Test_AllowAll(t *testing.T) {
 
 	SetPolicyEnabled(option.DefaultEnforcement)
 
-	identityCache := cache.IdentityCache{
+	identityCache := identity.IdentityMap{
 		identity.NumericIdentity(identityFoo): labelsFoo,
 		identity.NumericIdentity(identityBar): labelsBar,
 	}
@@ -1655,7 +1652,7 @@ func Test_EnsureDeniesPrecedeAllows(t *testing.T) {
 
 	SetPolicyEnabled(option.DefaultEnforcement)
 
-	identityCache := cache.IdentityCache{
+	identityCache := identity.IdentityMap{
 		identity.NumericIdentity(identityFoo): labelsFoo,
 		identity.ReservedIdentityWorld:        labels.LabelWorld.LabelArray(),
 		worldIPIdentity:                       lblWorldIP,                  // "192.0.2.3/32"
@@ -1763,7 +1760,7 @@ func Test_EnsureEntitiesSelectableByCIDR(t *testing.T) {
 	hostLabel := labels.NewFrom(labels.LabelHost)
 	hostLabel.MergeLabels(lblHostIPv4CIDR)
 	hostLabel.MergeLabels(lblHostIPv6CIDR)
-	identityCache := cache.IdentityCache{
+	identityCache := identity.IdentityMap{
 		identity.NumericIdentity(identityFoo): labelsFoo,
 		identity.ReservedIdentityHost:         hostLabel.LabelArray(),
 	}

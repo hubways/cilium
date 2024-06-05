@@ -53,13 +53,13 @@ func setupRedirectSuite(tb testing.TB) *RedirectSuite {
 	s.mgr = cache.NewCachingIdentityAllocator(idAllocatorOwner)
 	<-s.mgr.InitIdentityAllocator(nil)
 
-	identityCache := cache.IdentityCache{
+	identityCache := identity.IdentityMap{
 		identity.NumericIdentity(identityFoo): labelsFoo,
 		identity.NumericIdentity(identityBar): labelsBar,
 	}
 
 	s.do = &DummyOwner{
-		repo: policy.NewPolicyRepository(s.mgr, identityCache, nil, nil),
+		repo: policy.NewPolicyRepository(identityCache, nil, nil),
 	}
 	s.do.repo.GetSelectorCache().SetLocalIdentityNotifier(testidentity.NewDummyIdentityNotifier())
 	identitymanager.Subscribe(s.do.repo)
@@ -118,7 +118,7 @@ func (r *RedirectSuiteProxy) RemoveNetworkPolicy(ep endpoint.EndpointInfoSource)
 type DummyIdentityAllocatorOwner struct{}
 
 // UpdateIdentities does nothing.
-func (d *DummyIdentityAllocatorOwner) UpdateIdentities(added, deleted cache.IdentityCache) {
+func (d *DummyIdentityAllocatorOwner) UpdateIdentities(added, deleted identity.IdentityMap) {
 }
 
 // GetNodeSuffix does nothing.
@@ -174,7 +174,7 @@ func (d *DummyOwner) GetNodeSuffix() string {
 }
 
 // UpdateIdentities does nothing.
-func (d *DummyOwner) UpdateIdentities(added, deleted cache.IdentityCache) {}
+func (d *DummyOwner) UpdateIdentities(added, deleted identity.IdentityMap) {}
 
 const (
 	httpPort  = uint16(19001)

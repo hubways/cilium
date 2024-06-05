@@ -18,7 +18,6 @@ import (
 	"github.com/cilium/cilium/pkg/crypto/certificatemanager"
 	"github.com/cilium/cilium/pkg/eventqueue"
 	"github.com/cilium/cilium/pkg/identity"
-	"github.com/cilium/cilium/pkg/identity/cache"
 	ipcachetypes "github.com/cilium/cilium/pkg/ipcache/types"
 	k8sConst "github.com/cilium/cilium/pkg/k8s/apis/cilium.io"
 	"github.com/cilium/cilium/pkg/labels"
@@ -175,13 +174,13 @@ func (p *Repository) GetPolicyCache() *PolicyCache {
 }
 
 // NewPolicyRepository creates a new policy repository.
+// Only used for unit tests.
 func NewPolicyRepository(
-	idAllocator cache.IdentityAllocator,
-	idCache cache.IdentityCache,
+	initialIDs identity.IdentityMap,
 	certManager certificatemanager.CertificateManager,
 	secretManager certificatemanager.SecretManager,
 ) *Repository {
-	repo := NewStoppedPolicyRepository(idAllocator, idCache, certManager, secretManager)
+	repo := NewStoppedPolicyRepository(initialIDs, certManager, secretManager)
 	repo.Start()
 	return repo
 }
@@ -192,12 +191,11 @@ func NewPolicyRepository(
 // Qeues must be allocated via [Repository.Start]. The function serves to
 // satisfy hive invariants.
 func NewStoppedPolicyRepository(
-	idAllocator cache.IdentityAllocator,
-	idCache cache.IdentityCache,
+	initialIDs identity.IdentityMap,
 	certManager certificatemanager.CertificateManager,
 	secretManager certificatemanager.SecretManager,
 ) *Repository {
-	selectorCache := NewSelectorCache(idAllocator, idCache)
+	selectorCache := NewSelectorCache(initialIDs)
 	repo := &Repository{
 		rules:           make(map[ruleKey]*rule),
 		rulesByResource: make(map[ipcachetypes.ResourceID]map[ruleKey]*rule),

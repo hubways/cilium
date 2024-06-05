@@ -19,6 +19,7 @@ import (
 	"github.com/cilium/cilium/pkg/auth"
 	"github.com/cilium/cilium/pkg/bgp/speaker"
 	"github.com/cilium/cilium/pkg/bgpv1"
+	cgroup "github.com/cilium/cilium/pkg/cgroups/manager"
 	"github.com/cilium/cilium/pkg/ciliumenvoyconfig"
 	"github.com/cilium/cilium/pkg/clustermesh"
 	cmtypes "github.com/cilium/cilium/pkg/clustermesh/types"
@@ -40,6 +41,7 @@ import (
 	"github.com/cilium/cilium/pkg/l2announcer"
 	"github.com/cilium/cilium/pkg/logging/logfields"
 	"github.com/cilium/cilium/pkg/maps/metricsmap"
+	natStats "github.com/cilium/cilium/pkg/maps/nat/stats"
 	"github.com/cilium/cilium/pkg/metrics"
 	"github.com/cilium/cilium/pkg/node"
 	nodeManager "github.com/cilium/cilium/pkg/node/manager"
@@ -231,6 +233,13 @@ var (
 		// The node discovery cell provides the local node configuration and node discovery
 		// which communicate changes in local node information to the API server or KVStore.
 		nodediscovery.Cell,
+
+		// Cgroup manager maintains Kubernetes and low-level metadata (cgroup path and
+		// cgroup id) for local pods and their containers.
+		cgroup.Cell,
+
+		// NAT stats provides stat computation and tables for NAT map bpf maps.
+		natStats.Cell,
 	)
 )
 
