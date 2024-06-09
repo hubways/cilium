@@ -129,7 +129,7 @@ skip_service_lookup:
 static __always_inline int __per_packet_lb_svc_xlate_6(void *ctx, struct ipv6hdr *ip6,
 						       __s8 *ext_err)
 {
-	struct ipv6_ct_tuple tuple = {};
+	struct ipv6_ct_tuple tuple __align_stack_8 = {};
 	struct ct_state ct_state_new = {};
 	struct lb6_service *svc;
 	struct lb6_key key = {};
@@ -388,7 +388,7 @@ static __always_inline int handle_ipv6_from_lxc(struct __ctx_buff *ctx, __u32 *d
 	struct ct_state *ct_state, ct_state_new = {};
 	struct ipv6_ct_tuple *tuple;
 #ifdef ENABLE_ROUTING
-	union macaddr router_mac = NODE_MAC;
+	union macaddr router_mac = THIS_INTERFACE_MAC;
 #endif
 	struct ct_buffer6 *ct_buffer;
 	void *data, *data_end;
@@ -491,7 +491,7 @@ static __always_inline int handle_ipv6_from_lxc(struct __ctx_buff *ctx, __u32 *d
 				      auth_type);
 	}
 
-	/* Emit verdict if drop or if allow for CT_NEW or CT_REOPENED. */
+	/* Emit verdict if drop or if allow for CT_NEW. */
 	if (verdict != CTX_ACT_OK || ct_status != CT_ESTABLISHED) {
 		send_policy_verdict_notify(ctx, *dst_sec_identity, tuple->dport,
 					   tuple->nexthdr, POLICY_EGRESS, 1,
@@ -526,7 +526,6 @@ ct_recreate6:
 		trace.monitor = TRACE_PAYLOAD_LEN;
 		break;
 
-	case CT_REOPENED:
 	case CT_ESTABLISHED:
 		/* Did we end up at a stale non-service entry? Recreate if so. */
 		if (unlikely(ct_state->rev_nat_index != ct_state_new.rev_nat_index))
@@ -821,7 +820,7 @@ static __always_inline int handle_ipv4_from_lxc(struct __ctx_buff *ctx, __u32 *d
 	struct ct_state *ct_state, ct_state_new = {};
 	struct ipv4_ct_tuple *tuple;
 #ifdef ENABLE_ROUTING
-	union macaddr router_mac = NODE_MAC;
+	union macaddr router_mac = THIS_INTERFACE_MAC;
 #endif
 	void *data, *data_end;
 	struct iphdr *ip4;
@@ -935,7 +934,7 @@ static __always_inline int handle_ipv4_from_lxc(struct __ctx_buff *ctx, __u32 *d
 				      auth_type);
 	}
 
-	/* Emit verdict if drop or if allow for CT_NEW or CT_REOPENED. */
+	/* Emit verdict if drop or if allow for CT_NEW. */
 	if (verdict != CTX_ACT_OK || ct_status != CT_ESTABLISHED) {
 		send_policy_verdict_notify(ctx, *dst_sec_identity, tuple->dport,
 					   tuple->nexthdr, POLICY_EGRESS, 0,
@@ -981,7 +980,6 @@ ct_recreate4:
 			return ret;
 		break;
 
-	case CT_REOPENED:
 	case CT_ESTABLISHED:
 		/* Did we end up at a stale non-service entry? Recreate if so. */
 		if (unlikely(ct_state->rev_nat_index != ct_state_new.rev_nat_index))
@@ -1387,12 +1385,12 @@ int tail_handle_ipv4(struct __ctx_buff *ctx)
 #ifdef ENABLE_ARP_RESPONDER
 /*
  * ARP responder for ARP requests from container
- * Respond to IPV4_GATEWAY with NODE_MAC
+ * Respond to IPV4_GATEWAY with THIS_INTERFACE_MAC
  */
 __section_tail(CILIUM_MAP_CALLS, CILIUM_CALL_ARP)
 int tail_handle_arp(struct __ctx_buff *ctx)
 {
-	union macaddr mac = NODE_MAC;
+	union macaddr mac = THIS_INTERFACE_MAC;
 	union macaddr smac;
 	__be32 sip;
 	__be32 tip;
@@ -1567,7 +1565,7 @@ ipv6_policy(struct __ctx_buff *ctx, struct ipv6hdr *ip6, int ifindex, __u32 src_
 		}
 	}
 
-	/* Emit verdict if drop or if allow for CT_NEW or CT_REOPENED. */
+	/* Emit verdict if drop or if allow for CT_NEW. */
 	if (verdict != CTX_ACT_OK || ret != CT_ESTABLISHED)
 		send_policy_verdict_notify(ctx, src_label, tuple->dport,
 					   tuple->nexthdr, POLICY_INGRESS, 1,
@@ -1578,18 +1576,11 @@ ipv6_policy(struct __ctx_buff *ctx, struct ipv6hdr *ip6, int ifindex, __u32 src_
 		return verdict;
 
 skip_policy_enforcement:
-#ifdef ENABLE_NODEPORT
-	if (ret == CT_NEW || ret == CT_REOPENED) {
-		bool node_port = ct_has_nodeport_egress_entry6(get_ct_map6(tuple),
-							       tuple, NULL, false);
-
-		ct_state_new.node_port = node_port;
-		if (ret == CT_REOPENED && ct_state->node_port != node_port)
-			ct_update_nodeport(get_ct_map6(tuple), tuple, node_port);
-	}
-#endif /* ENABLE_NODEPORT */
-
 	if (ret == CT_NEW) {
+#ifdef ENABLE_NODEPORT
+		ct_state_new.node_port = ct_has_nodeport_egress_entry6(get_ct_map6(tuple),
+								       tuple, NULL, false);
+#endif /* ENABLE_NODEPORT */
 		ct_state_new.src_sec_id = src_label;
 		ct_state_new.from_tunnel = from_tunnel;
 		ct_state_new.proxy_redirect = *proxy_port > 0;
@@ -1916,7 +1907,7 @@ ipv4_policy(struct __ctx_buff *ctx, struct iphdr *ip4, int ifindex, __u32 src_la
 					      sep->tunnel_endpoint, auth_type);
 		}
 	}
-	/* Emit verdict if drop or if allow for CT_NEW or CT_REOPENED. */
+	/* Emit verdict if drop or if allow for CT_NEW. */
 	if (verdict != CTX_ACT_OK || ret != CT_ESTABLISHED)
 		send_policy_verdict_notify(ctx, src_label, tuple->dport,
 					   tuple->nexthdr, POLICY_INGRESS, 0,
@@ -1927,18 +1918,11 @@ ipv4_policy(struct __ctx_buff *ctx, struct iphdr *ip4, int ifindex, __u32 src_la
 		return verdict;
 
 skip_policy_enforcement:
-#ifdef ENABLE_NODEPORT
-	if (ret == CT_NEW || ret == CT_REOPENED) {
-		bool node_port = ct_has_nodeport_egress_entry4(get_ct_map4(tuple),
-							       tuple, NULL, false);
-
-		ct_state_new.node_port = node_port;
-		if (ret == CT_REOPENED && ct_state->node_port != node_port)
-			ct_update_nodeport(get_ct_map4(tuple), tuple, node_port);
-	}
-#endif /* ENABLE_NODEPORT */
-
 	if (ret == CT_NEW) {
+#ifdef ENABLE_NODEPORT
+		ct_state_new.node_port = ct_has_nodeport_egress_entry4(get_ct_map4(tuple),
+								       tuple, NULL, false);
+#endif /* ENABLE_NODEPORT */
 		ct_state_new.src_sec_id = src_label;
 		ct_state_new.from_tunnel = from_tunnel;
 		ct_state_new.proxy_redirect = *proxy_port > 0;

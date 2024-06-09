@@ -304,6 +304,10 @@
      - Configure the maximum number of entries in the TCP connection tracking table.
      - int
      - ``524288``
+   * - :spelling:ignore:`bpf.datapathMode`
+     - Mode for Pod devices for the core datapath (veth, netkit, netkit-l2, lb-only)
+     - string
+     - ``veth``
    * - :spelling:ignore:`bpf.disableExternalIPMitigation`
      - Disable ExternalIP mitigation (CVE-2020-8554)
      - bool
@@ -465,7 +469,7 @@
      - int
      - ``0``
    * - :spelling:ignore:`cluster.name`
-     - Name of the cluster. Only required for Cluster Mesh and mutual authentication with SPIRE.
+     - Name of the cluster. Only required for Cluster Mesh and mutual authentication with SPIRE. It must respect the following constraints: * It must contain at most 32 characters; * It must begin and end with a lower case alphanumeric character; * It may contain lower case alphanumeric characters and dashes between. The "default" name cannot be used if the Cluster ID is different from 0.
      - string
      - ``"default"``
    * - :spelling:ignore:`clustermesh.annotations`
@@ -1191,7 +1195,7 @@
    * - :spelling:ignore:`envoy.image`
      - Envoy container image.
      - object
-     - ``{"digest":"sha256:55547cd5506ada958513372cc31e557ade531ba6f8d92299562d1f5f1fd72f33","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.29.4-d34c0d3642a86c63eb6fcf498ad73904c5a16050","useDigest":true}``
+     - ``{"digest":"sha256:f2c0b275aebe14c7369c8396c4461c787b12b823aba0c613ebbed7a3f92f288e","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.29.5-8fccf45a8ab9da13824e0f14122d5db35673f3bb","useDigest":true}``
    * - :spelling:ignore:`envoy.livenessProbe.failureThreshold`
      - failure threshold of liveness probe
      - int
@@ -1492,6 +1496,10 @@
      - Additional agent volumes.
      - list
      - ``[]``
+   * - :spelling:ignore:`forceDeviceDetection`
+     - Forces the auto-detection of devices, even if specific devices are explicitly listed
+     - bool
+     - ``false``
    * - :spelling:ignore:`gatewayAPI.enableAlpn`
      - Enable ALPN for all listeners configured with Gateway API. ALPN will attempt HTTP/2, then HTTP 1.1. Note that this will also enable ``appProtocol`` support, and services that wish to use HTTP/2 will need to indicate that via their ``appProtocol``.
      - bool
@@ -3078,6 +3086,14 @@
      - ``true``
    * - :spelling:ignore:`synchronizeK8sNodes`
      - Synchronize Kubernetes nodes to kvstore and perform CNP GC.
+     - bool
+     - ``true``
+   * - :spelling:ignore:`sysctlfix`
+     - Configure sysctl override described in #20072.
+     - object
+     - ``{"enabled":true}``
+   * - :spelling:ignore:`sysctlfix.enabled`
+     - Enable the sysctl override. When enabled, the init container will mount the /proc of the host so that the ``sysctlfix`` utility can execute.
      - bool
      - ``true``
    * - :spelling:ignore:`terminationGracePeriodSeconds`

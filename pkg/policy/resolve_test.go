@@ -214,7 +214,7 @@ func (td *testData) bootstrapRepo(ruleGenFunc func(int) api.Rules, numRules int,
 
 	td.sc.UpdateIdentities(generateNumIdentities(3000), nil, wg)
 	wg.Wait()
-	rulez, _ := td.repo.AddList(ruleGenFunc(numRules))
+	rulez, _ := td.repo.MustAddList(ruleGenFunc(numRules))
 
 	epSet := NewEndpointSet(map[Endpoint]struct{}{
 		&dummyEndpoint{
@@ -299,7 +299,7 @@ func TestL7WithIngressWildcard(t *testing.T) {
 	}
 
 	rule1.Sanitize()
-	_, _, err := repo.Add(rule1)
+	_, _, err := repo.mustAdd(rule1)
 	require.NoError(t, err)
 
 	repo.Mutex.RLock()
@@ -402,7 +402,7 @@ func TestL7WithLocalHostWildcard(t *testing.T) {
 	}
 
 	rule1.Sanitize()
-	_, _, err := repo.Add(rule1)
+	_, _, err := repo.mustAdd(rule1)
 	require.NoError(t, err)
 
 	repo.Mutex.RLock()
@@ -503,7 +503,7 @@ func TestMapStateWithIngressWildcard(t *testing.T) {
 	}
 
 	rule1.Sanitize()
-	_, _, err := repo.Add(rule1)
+	_, _, err := repo.mustAdd(rule1)
 	require.NoError(t, err)
 
 	repo.Mutex.RLock()
@@ -626,7 +626,7 @@ func TestMapStateWithIngress(t *testing.T) {
 	}
 
 	rule1.Sanitize()
-	_, _, err := repo.Add(rule1)
+	_, _, err := repo.mustAdd(rule1)
 	require.NoError(t, err)
 
 	repo.Mutex.RLock()

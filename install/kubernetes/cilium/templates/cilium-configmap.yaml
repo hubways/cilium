@@ -585,6 +585,10 @@ data:
   enable-tcx: {{ .Values.bpf.enableTCX | quote }}
 {{- end }}
 
+{{- if hasKey .Values.bpf "datapathMode" }}
+  datapath-mode: {{ .Values.bpf.datapathMode | quote }}
+{{- end }}
+
 {{- if (not (kindIs "invalid" .Values.bpf.masquerade)) }}
   enable-bpf-masquerade: {{ .Values.bpf.masquerade | quote }}
 {{- else if eq $defaultBpfMasquerade "true" }}
@@ -699,6 +703,10 @@ data:
 
 {{- if .Values.enableRuntimeDeviceDetection }}
   enable-runtime-device-detection: "true"
+{{- end }}
+
+{{- if .Values.forceDeviceDetection }}
+  force-device-detection: "true"
 {{- end }}
 
   kube-proxy-replacement: {{ $kubeProxyReplacement | quote }}
@@ -1119,8 +1127,6 @@ data:
 {{- if .Values.bgpControlPlane.enabled }}
   enable-bgp-control-plane: "true"
   bgp-secrets-namespace: {{ .Values.bgpControlPlane.secretsNamespace.name | quote }}
-{{- else }}
-  enable-bgp-control-plane: "false"
 {{- end }}
 
 {{- if .Values.pmtuDiscovery.enabled }}

@@ -400,25 +400,6 @@ func (p *Repository) SearchRLocked(lbls labels.LabelArray) api.Rules {
 	return result
 }
 
-// Add inserts a rule into the policy repository
-// This is just a helper function for unit testing.
-// TODO: this should be in a test_helpers.go file or something similar
-// so we can clearly delineate what helpers are for testing.
-// NOTE: This is only called from unit tests, but from multiple packages.
-func (p *Repository) Add(r api.Rule) (uint64, map[uint16]struct{}, error) {
-	p.Mutex.Lock()
-	defer p.Mutex.Unlock()
-
-	if err := r.Sanitize(); err != nil {
-		return p.GetRevision(), nil, err
-	}
-
-	newList := make([]*api.Rule, 1)
-	newList[0] = &r
-	_, rev := p.AddListLocked(newList)
-	return rev, map[uint16]struct{}{}, nil
-}
-
 // AddListLocked inserts a rule into the policy repository with the repository already locked
 // Expects that the entire rule list has already been sanitized.
 func (p *Repository) AddListLocked(rules api.Rules) (ruleSlice, uint64) {
@@ -540,12 +521,15 @@ func (p *Repository) LocalEndpointIdentityRemoved(identity *identity.Identity) {
 	}()
 }
 
-// AddList inserts a rule into the policy repository. It is used for
-// unit-testing purposes only.
-func (p *Repository) AddList(rules api.Rules) (ruleSlice, uint64) {
+// MustAddList inserts a rule into the policy repository. It is used for
+// unit-testing purposes only. Panics if the rule is invalid
+func (p *Repository) MustAddList(rules api.Rules) (ruleSlice, uint64) {
 	for i := range rules {
 		// FIXME(GH-31162): Many unit tests provide invalid rules
-		_ = rules[i].Sanitize()
+		err := rules[i].Sanitize()
+		if err != nil {
+			panic(err)
+		}
 	}
 	p.Mutex.Lock()
 	defer p.Mutex.Unlock()

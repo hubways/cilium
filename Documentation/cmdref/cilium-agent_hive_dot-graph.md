@@ -22,7 +22,7 @@ cilium-agent hive dot-graph [flags]
       --bpf-node-map-max uint32                                   Sets size of node bpf map which will be the max number of unique Node IPs in the cluster (default 16384)
       --certificates-directory string                             Root directory to find certificates specified in L7 TLS policy enforcement (default "/var/run/cilium/certs")
       --cluster-id uint32                                         Unique identifier of the cluster
-      --cluster-name string                                       Name of the cluster (default "default")
+      --cluster-name string                                       Name of the cluster. It must consist of at most 32 lower case alphanumeric characters and '-', start and end with an alphanumeric character. (default "default")
       --clustermesh-config string                                 Path to the ClusterMesh configuration directory
       --clustermesh-sync-timeout duration                         Timeout waiting for the initial synchronization of information from remote clusters (default 1m0s)
       --cni-chaining-mode string                                  Enable CNI chaining with the specified plugin (default "none")
@@ -57,6 +57,7 @@ cilium-agent hive dot-graph [flags]
       --envoy-keep-cap-netbindservice                             Keep capability NET_BIND_SERVICE for Envoy process
       --envoy-log string                                          Path to a separate Envoy log file, if any
       --envoy-secrets-namespace string                            EnvoySecretsNamespace is the namespace having secrets used by CEC
+      --force-device-detection                                    Forces the auto-detection of devices, even if specific devices are explicitly listed
       --gateway-api-secrets-namespace string                      GatewayAPISecretsNamespace is the namespace having tls secrets used by CEC, originating from Gateway API
       --gops-port uint16                                          Port for gops server to listen on (default 9890)
       --http-idle-timeout uint                                    Time after which a non-gRPC HTTP stream is considered failed unless traffic in the stream has been processed (in seconds); defaults to 0 (unlimited)

@@ -52,14 +52,12 @@ import (
 	"github.com/cilium/cilium/pkg/datapath/tunnel"
 	datapath "github.com/cilium/cilium/pkg/datapath/types"
 	"github.com/cilium/cilium/pkg/defaults"
-	"github.com/cilium/cilium/pkg/egressgateway"
 	"github.com/cilium/cilium/pkg/endpoint"
 	"github.com/cilium/cilium/pkg/endpointmanager"
 	"github.com/cilium/cilium/pkg/endpointstate"
 	"github.com/cilium/cilium/pkg/envoy"
 	"github.com/cilium/cilium/pkg/flowdebug"
 	"github.com/cilium/cilium/pkg/hive"
-	healthTypes "github.com/cilium/cilium/pkg/hive/health/types"
 	"github.com/cilium/cilium/pkg/hubble/exporter/exporteroption"
 	"github.com/cilium/cilium/pkg/hubble/observer/observeroption"
 	"github.com/cilium/cilium/pkg/identity"
@@ -256,7 +254,10 @@ func InitGlobalFlags(cmd *cobra.Command, vp *viper.Viper) {
 	option.BindEnv(vp, option.EnableRuntimeDeviceDetection)
 	flags.MarkDeprecated(option.EnableRuntimeDeviceDetection, "Runtime device detection and datapath reconfiguration is now the default and only mode of operation")
 
-	flags.String(option.DatapathMode, defaults.DatapathMode, "Datapath mode name")
+	flags.String(option.DatapathMode, defaults.DatapathMode,
+		fmt.Sprintf("Datapath mode name (%s, %s, %s, %s)",
+			datapathOption.DatapathModeVeth, datapathOption.DatapathModeNetkit,
+			datapathOption.DatapathModeNetkitL2, datapathOption.DatapathModeLBOnly))
 	option.BindEnv(vp, option.DatapathMode)
 
 	flags.Bool(option.EnableEndpointRoutes, defaults.EnableEndpointRoutes, "Use per endpoint routes instead of routing via cilium_host")
@@ -1348,6 +1349,12 @@ func initEnv(vp *viper.Viper) {
 
 	switch option.Config.DatapathMode {
 	case datapathOption.DatapathModeVeth:
+	case datapathOption.DatapathModeNetkit, datapathOption.DatapathModeNetkitL2:
+		// For netkit we enable also tcx for all non-netkit devices.
+		// The underlying kernel does support it given tcx got merged
+		// before netkit and supporting legacy tc in this context does
+		// not make any sense whatsoever.
+		option.Config.EnableTCX = true
 	case datapathOption.DatapathModeLBOnly:
 		log.Info("Running in LB-only mode")
 		if option.Config.NodePortAcceleration != option.NodePortAccelerationDisabled {
@@ -1625,45 +1632,43 @@ var daemonCell = cell.Module(
 type daemonParams struct {
 	cell.In
 
-	Lifecycle            cell.Lifecycle
-	Clientset            k8sClient.Clientset
-	Datapath             datapath.Datapath
-	WGAgent              *wireguard.Agent
-	LocalNodeStore       *node.LocalNodeStore
-	Shutdowner           hive.Shutdowner
-	Resources            agentK8s.Resources
-	CacheStatus          k8s.CacheStatus
-	K8sResourceSynced    *k8sSynced.Resources
-	K8sAPIGroups         *k8sSynced.APIGroups
-	NodeManager          nodeManager.NodeManager
-	EndpointManager      endpointmanager.EndpointManager
-	CertManager          certificatemanager.CertificateManager
-	SecretManager        certificatemanager.SecretManager
-	IdentityAllocator    CachingIdentityAllocator
-	Policy               *policy.Repository
-	PolicyUpdater        *policy.Updater
-	IPCache              *ipcache.IPCache
-	PolicyK8sWatcher     *policyK8s.PolicyResourcesWatcher
-	EgressGatewayManager *egressgateway.Manager
-	IPAMMetadataManager  *ipamMetadata.Manager
-	CNIConfigManager     cni.CNIConfigManager
-	SwaggerSpec          *server.Spec
-	HealthAPISpec        *healthApi.Spec
-	ServiceCache         *k8s.ServiceCache
-	ClusterMesh          *clustermesh.ClusterMesh
-	MonitorAgent         monitorAgent.Agent
-	L2Announcer          *l2announcer.L2Announcer
-	ServiceManager       service.ServiceManager
-	L7Proxy              *proxy.Proxy
-	EnvoyXdsServer       envoy.XDSServer
-	DB                   *statedb.DB
-	APILimiterSet        *rate.APILimiterSet
-	AuthManager          *auth.AuthManager
-	Settings             cellSettings
-	HealthV2Provider     healthTypes.Provider
-	DeviceManager        *linuxdatapath.DeviceManager `optional:"true"`
-	Devices              statedb.Table[*datapathTables.Device]
-	NodeAddrs            statedb.Table[datapathTables.NodeAddress]
+	Lifecycle           cell.Lifecycle
+	Clientset           k8sClient.Clientset
+	Datapath            datapath.Datapath
+	WGAgent             *wireguard.Agent
+	LocalNodeStore      *node.LocalNodeStore
+	Shutdowner          hive.Shutdowner
+	Resources           agentK8s.Resources
+	CacheStatus         k8s.CacheStatus
+	K8sResourceSynced   *k8sSynced.Resources
+	K8sAPIGroups        *k8sSynced.APIGroups
+	NodeManager         nodeManager.NodeManager
+	EndpointManager     endpointmanager.EndpointManager
+	CertManager         certificatemanager.CertificateManager
+	SecretManager       certificatemanager.SecretManager
+	IdentityAllocator   CachingIdentityAllocator
+	Policy              *policy.Repository
+	PolicyUpdater       *policy.Updater
+	IPCache             *ipcache.IPCache
+	PolicyK8sWatcher    *policyK8s.PolicyResourcesWatcher
+	IPAMMetadataManager *ipamMetadata.Manager
+	CNIConfigManager    cni.CNIConfigManager
+	SwaggerSpec         *server.Spec
+	HealthAPISpec       *healthApi.Spec
+	ServiceCache        *k8s.ServiceCache
+	ClusterMesh         *clustermesh.ClusterMesh
+	MonitorAgent        monitorAgent.Agent
+	L2Announcer         *l2announcer.L2Announcer
+	ServiceManager      service.ServiceManager
+	L7Proxy             *proxy.Proxy
+	EnvoyXdsServer      envoy.XDSServer
+	DB                  *statedb.DB
+	APILimiterSet       *rate.APILimiterSet
+	AuthManager         *auth.AuthManager
+	Settings            cellSettings
+	DeviceManager       *linuxdatapath.DeviceManager `optional:"true"`
+	Devices             statedb.Table[*datapathTables.Device]
+	NodeAddrs           statedb.Table[datapathTables.NodeAddress]
 	// Grab the GC object so that we can start the CT/NAT map garbage collection.
 	// This is currently necessary because these maps have not yet been modularized,
 	// and because it depends on parameters which are not provided through hive.

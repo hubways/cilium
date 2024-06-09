@@ -254,7 +254,7 @@ func (l *loader) reinitializeOverlay(ctx context.Context, tunnelConfig tunnel.Co
 	// gather compile options for bpf_overlay.c
 	opts := []string{
 		fmt.Sprintf("-DSECLABEL=%d", identity.ReservedIdentityWorld),
-		fmt.Sprintf("-DNODE_MAC={.addr=%s}", mac.CArrayString(link.Attrs().HardwareAddr)),
+		fmt.Sprintf("-DTHIS_INTERFACE_MAC={.addr=%s}", mac.CArrayString(link.Attrs().HardwareAddr)),
 		fmt.Sprintf("-DCALLS_MAP=cilium_calls_overlay_%d", identity.ReservedIdentityWorld),
 	}
 	if option.Config.EnableNodePort {
@@ -330,7 +330,9 @@ func (l *loader) Reinitialize(ctx context.Context, cfg datapath.LocalNodeConfigu
 
 	// Store the new LocalNodeConfiguration
 	l.nodeConfig.Store(&cfg)
-	l.initTemplateCache(&cfg)
+	// Startup relies on not returning an error here, maybe something we
+	// can fix in the future.
+	_ = l.templateCache.UpdateDatapathHash(&cfg)
 
 	var internalIPv4, internalIPv6 net.IP
 	if option.Config.EnableIPv4 {
