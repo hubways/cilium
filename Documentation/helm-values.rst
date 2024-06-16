@@ -95,7 +95,7 @@
    * - :spelling:ignore:`authentication.mutual.spire.install.agent.image`
      - SPIRE agent image
      - object
-     - ``{"digest":"sha256:99405637647968245ff9fe215f8bd2bd0ea9807be9725f8bf19fe1b21471e52b","override":null,"pullPolicy":"Always","repository":"ghcr.io/spiffe/spire-agent","tag":"1.8.5","useDigest":true}``
+     - ``{"digest":"sha256:5106ac601272a88684db14daf7f54b9a45f31f77bb16a906bd5e87756ee7b97c","override":null,"pullPolicy":"Always","repository":"ghcr.io/spiffe/spire-agent","tag":"1.9.6","useDigest":true}``
    * - :spelling:ignore:`authentication.mutual.spire.install.agent.labels`
      - SPIRE agent labels
      - object
@@ -175,7 +175,7 @@
    * - :spelling:ignore:`authentication.mutual.spire.install.server.image`
      - SPIRE server image
      - object
-     - ``{"digest":"sha256:28269265882048dcf0fed32fe47663cd98613727210b8d1a55618826f9bf5428","override":null,"pullPolicy":"Always","repository":"ghcr.io/spiffe/spire-server","tag":"1.8.5","useDigest":true}``
+     - ``{"digest":"sha256:59a0b92b39773515e25e68a46c40d3b931b9c1860bc445a79ceb45a805cab8b4","override":null,"pullPolicy":"Always","repository":"ghcr.io/spiffe/spire-server","tag":"1.9.6","useDigest":true}``
    * - :spelling:ignore:`authentication.mutual.spire.install.server.initContainers`
      - SPIRE server init containers
      - list
@@ -403,7 +403,7 @@
    * - :spelling:ignore:`certgen`
      - Configure certificate generation for Hubble integration. If hubble.tls.auto.method=cronJob, these values are used for the Kubernetes CronJob which will be scheduled regularly to (re)generate any certificates not provided manually.
      - object
-     - ``{"affinity":{},"annotations":{"cronJob":{},"job":{}},"extraVolumeMounts":[],"extraVolumes":[],"image":{"digest":"sha256:bbc5e65e9dc65bc6b58967fe536b7f3b54e12332908aeb0a96a36866b4372b4e","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/certgen","tag":"v0.1.12","useDigest":true},"podLabels":{},"tolerations":[],"ttlSecondsAfterFinished":1800}``
+     - ``{"affinity":{},"annotations":{"cronJob":{},"job":{}},"extraVolumeMounts":[],"extraVolumes":[],"image":{"digest":"sha256:169d93fd8f2f9009db3b9d5ccd37c2b753d0989e1e7cd8fe79f9160c459eef4f","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/certgen","tag":"v0.2.0","useDigest":true},"podLabels":{},"tolerations":[],"ttlSecondsAfterFinished":1800}``
    * - :spelling:ignore:`certgen.affinity`
      - Affinity for certgen
      - object
@@ -479,7 +479,7 @@
    * - :spelling:ignore:`clustermesh.apiserver.affinity`
      - Affinity for clustermesh.apiserver
      - object
-     - ``{"podAntiAffinity":{"requiredDuringSchedulingIgnoredDuringExecution":[{"labelSelector":{"matchLabels":{"k8s-app":"clustermesh-apiserver"}},"topologyKey":"kubernetes.io/hostname"}]}}``
+     - ``{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"podAffinityTerm":{"labelSelector":{"matchLabels":{"k8s-app":"clustermesh-apiserver"}},"topologyKey":"kubernetes.io/hostname"},"weight":100}]}}``
    * - :spelling:ignore:`clustermesh.apiserver.etcd.init.extraArgs`
      - Additional arguments to ``clustermesh-apiserver etcdinit``.
      - list
@@ -535,7 +535,7 @@
    * - :spelling:ignore:`clustermesh.apiserver.kvstoremesh.enabled`
      - Enable KVStoreMesh. KVStoreMesh caches the information retrieved from the remote clusters in the local etcd instance.
      - bool
-     - ``false``
+     - ``true``
    * - :spelling:ignore:`clustermesh.apiserver.kvstoremesh.extraArgs`
      - Additional KVStoreMesh arguments.
      - list
@@ -783,7 +783,7 @@
    * - :spelling:ignore:`clustermesh.apiserver.updateStrategy`
      - clustermesh-apiserver update strategy
      - object
-     - ``{"rollingUpdate":{"maxUnavailable":1},"type":"RollingUpdate"}``
+     - ``{"rollingUpdate":{"maxSurge":1,"maxUnavailable":0},"type":"RollingUpdate"}``
    * - :spelling:ignore:`clustermesh.config`
      - Clustermesh explicit configuration.
      - object

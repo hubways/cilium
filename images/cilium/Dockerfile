@@ -1,8 +1,8 @@
 # Copyright Authors of Cilium
 # SPDX-License-Identifier: Apache-2.0
 
-ARG CILIUM_BUILDER_IMAGE=quay.io/cilium/cilium-builder:43a37a93ebfaa75fbc8a5561df2af263d6755e50@sha256:58ad504e639ec090f5ed423fbfbda83d29fc27188748b3e2e39888bef950e288
-ARG CILIUM_RUNTIME_IMAGE=quay.io/cilium/cilium-runtime:e7292e797ee4cb45785c2b0a98013bff0e20a423@sha256:9e9da2ff731904ee62689b274b1c213bf002eba889edbef78cdf2e0e004d1e2f
+ARG CILIUM_BUILDER_IMAGE=quay.io/cilium/cilium-builder:783a1a7f8c26dc684899d2e4351544de61186824@sha256:c674a18d3b696f5e96bdea7a00451987fce2b6f2189399575cabd7a80fa4ed0f
+ARG CILIUM_RUNTIME_IMAGE=quay.io/cilium/cilium-runtime:4fff62d7500ff836685839435abbb522cb8745a2@sha256:1fa31a96d2e7d1f3604b10c448188a59e1e745f0d9231aefe97ac176abe43ef6
 #
 # cilium-envoy from github.com/cilium/proxy
 #
@@ -26,12 +26,8 @@ FROM --platform=${BUILDPLATFORM} ${CILIUM_BUILDER_IMAGE} as builder
 ARG TARGETOS
 # TARGETARCH is an automatic platform ARG enabled by Docker BuildKit.
 ARG TARGETARCH
-ARG NOSTRIP
-ARG NOOPT
-ARG LOCKDEBUG
-ARG RACE
-ARG V
-ARG LIBNETWORK_PLUGIN
+# MODIFIERS are extra arguments to be passed to make at build time.
+ARG MODIFIERS
 
 #
 # Please do not add any dependency updates before the 'make install' here,
@@ -39,15 +35,15 @@ ARG LIBNETWORK_PLUGIN
 #
 WORKDIR /go/src/github.com/cilium/cilium
 RUN --mount=type=bind,readwrite,target=/go/src/github.com/cilium/cilium --mount=target=/root/.cache,type=cache --mount=target=/go/pkg,type=cache \
-    make GOARCH=${TARGETARCH} RACE=${RACE} NOSTRIP=1 NOOPT=${NOOPT} LOCKDEBUG=${LOCKDEBUG} PKG_BUILD=1 V=${V} LIBNETWORK_PLUGIN=${LIBNETWORK_PLUGIN} \
-    DESTDIR=/tmp/install/${TARGETOS}/${TARGETARCH} build-container install-container-binary
+    make GOARCH=${TARGETARCH} DESTDIR=/tmp/install/${TARGETOS}/${TARGETARCH} PKG_BUILD=1 ${MODIFIERS} \
+    build-container install-container-binary
 
 RUN --mount=type=bind,readwrite,target=/go/src/github.com/cilium/cilium --mount=target=/root/.cache,type=cache --mount=target=/go/pkg,type=cache \
     # install-bash-completion will execute the bash_completion script. It is
     # fine to run this with same architecture as BUILDARCH since the output of
     # bash_completion is the same for both architectures.
-    make GOARCH=${BUILDARCH} RACE=${RACE} NOSTRIP=1 NOOPT=${NOOPT} LOCKDEBUG=${LOCKDEBUG} PKG_BUILD=1 V=${V} LIBNETWORK_PLUGIN=${LIBNETWORK_PLUGIN} \
-    DESTDIR=/tmp/install/${TARGETOS}/${TARGETARCH} install-bash-completion licenses-all && \
+    make GOARCH=${BUILDARCH} DESTDIR=/tmp/install/${TARGETOS}/${TARGETARCH} PKG_BUILD=1 ${MODIFIERS} \
+    install-bash-completion licenses-all && \
     mv LICENSE.all /tmp/install/${TARGETOS}/${TARGETARCH}/LICENSE.all && \
     mkdir -p /tmp/hubble/${TARGETOS}/${TARGETARCH} && \
     cd hubble && \

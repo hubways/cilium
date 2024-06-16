@@ -79,7 +79,6 @@ import (
 	"github.com/cilium/cilium/pkg/proxy"
 	"github.com/cilium/cilium/pkg/rate"
 	"github.com/cilium/cilium/pkg/recorder"
-	"github.com/cilium/cilium/pkg/redirectpolicy"
 	"github.com/cilium/cilium/pkg/resiliency"
 	"github.com/cilium/cilium/pkg/service"
 	serviceStore "github.com/cilium/cilium/pkg/service/store"
@@ -109,8 +108,6 @@ type Daemon struct {
 	svc              service.ServiceManager
 	rec              *recorder.Recorder
 	policy           *policy.Repository
-	policyUpdater    *policy.Updater
-	preFilter        datapath.PreFilter
 
 	statusCollectMutex lock.RWMutex
 	statusResponse     models.StatusResponse
@@ -156,7 +153,8 @@ type Daemon struct {
 
 	ipcache *ipcache.IPCache
 
-	k8sWatcher *watchers.K8sWatcher
+	k8sWatcher  *watchers.K8sWatcher
+	k8sSvcCache *k8s.ServiceCache
 
 	// endpointMetadataFetcher knows how to fetch Kubernetes metadata for endpoints.
 	endpointMetadataFetcher endpointMetadataFetcher
@@ -171,8 +169,6 @@ type Daemon struct {
 	// endpointCreations is a map of all currently ongoing endpoint
 	// creation events
 	endpointCreations *endpointCreationManager
-
-	lrpManager *redirectpolicy.Manager
 
 	cgroupManager manager.CGroupManager
 
@@ -209,16 +205,6 @@ type Daemon struct {
 // GetPolicyRepository returns the policy repository of the daemon
 func (d *Daemon) GetPolicyRepository() *policy.Repository {
 	return d.policy
-}
-
-// DebugEnabled returns if debug mode is enabled.
-func (d *Daemon) DebugEnabled() bool {
-	return option.Config.Opts.IsEnabled(option.Debug)
-}
-
-// GetOptions returns the datapath configuration options of the daemon.
-func (d *Daemon) GetOptions() *option.IntOptions {
-	return option.Config.Opts
 }
 
 // GetCompilationLock returns the mutex responsible for synchronizing compilation
@@ -424,7 +410,6 @@ func newDaemon(ctx context.Context, cleaner *daemonCleanup, params *daemonParams
 		identityAllocator: params.IdentityAllocator,
 		ipcache:           params.IPCache,
 		policy:            params.Policy,
-		policyUpdater:     params.PolicyUpdater,
 		ipamMetadata:      params.IPAMMetadataManager,
 		cniConfigManager:  params.CNIConfigManager,
 		clusterInfo:       params.ClusterInfo,
@@ -438,20 +423,15 @@ func newDaemon(ctx context.Context, cleaner *daemonCleanup, params *daemonParams
 		bigTCPConfig:      params.BigTCPConfig,
 		tunnelConfig:      params.TunnelConfig,
 		bwManager:         params.BandwidthManager,
-		lrpManager:        params.LRPManager,
 		cgroupManager:     params.CGroupManager,
-		preFilter:         params.Prefilter,
 		endpointManager:   params.EndpointManager,
+		k8sWatcher:        params.K8sWatcher,
+		k8sSvcCache:       params.K8sSvcCache,
+		rec:               params.Recorder,
 	}
 
 	d.configModifyQueue = eventqueue.NewEventQueueBuffered("config-modify-queue", ConfigModifyQueueSize)
 	d.configModifyQueue.Run()
-
-	d.rec, err = recorder.NewRecorder(d.ctx, params.Datapath.Loader())
-	if err != nil {
-		log.WithError(err).Error("error while initializing BPF pcap recorder")
-		return nil, nil, fmt.Errorf("error while initializing BPF pcap recorder: %w", err)
-	}
 
 	// Collect CIDR identities from the "old" bpf ipcache and restore them
 	// in to the metadata layer.
@@ -467,27 +447,6 @@ func newDaemon(ctx context.Context, cleaner *daemonCleanup, params *daemonParams
 	if err := d.initPolicy(); err != nil {
 		return nil, nil, fmt.Errorf("error while initializing policy subsystem: %w", err)
 	}
-
-	d.k8sWatcher = watchers.NewK8sWatcher(
-		params.Clientset,
-		params.K8sResourceSynced,
-		params.K8sAPIGroups,
-		d.endpointManager,
-		params.NodeManager,
-		&d,
-		d.svc,
-		d.lrpManager,
-		params.MetalLBBgpSpeaker,
-		option.Config,
-		d.ipcache,
-		params.CGroupManager,
-		params.Resources,
-		params.ServiceCache,
-		d.bwManager,
-		d.db,
-		d.nodeAddrs,
-	)
-	params.NodeDiscovery.RegisterK8sGetters(d.k8sWatcher)
 
 	bootstrapStats.daemonInit.End(true)
 
@@ -533,7 +492,7 @@ func newDaemon(ctx context.Context, cleaner *daemonCleanup, params *daemonParams
 		bootstrapStats.restore.End(true)
 	}
 
-	debug.RegisterStatusObject("k8s-service-cache", d.k8sWatcher.K8sSvcCache)
+	debug.RegisterStatusObject("k8s-service-cache", d.k8sSvcCache)
 	debug.RegisterStatusObject("ipam", d.ipam)
 	debug.RegisterStatusObject("ongoing-endpoint-creations", d.endpointCreations)
 
@@ -546,8 +505,8 @@ func newDaemon(ctx context.Context, cleaner *daemonCleanup, params *daemonParams
 		// before the relevant subystems are being shut down.
 		cleaner.preCleanupFuncs.Add(func() {
 			// Stop k8s watchers
-			log.Info("Stopping k8s service handler")
-			d.k8sWatcher.StopK8sServiceHandler()
+			log.Info("Stopping k8s watcher")
+			d.k8sWatcher.StopWatcher()
 
 			// Iterate over the policy repository and remove L7 DNS part
 			needsPolicyRegen := false
@@ -615,6 +574,12 @@ func newDaemon(ctx context.Context, cleaner *daemonCleanup, params *daemonParams
 	restoredEndpoints, err := d.fetchOldEndpoints(option.Config.StateDir)
 	if err != nil {
 		log.WithError(err).Error("Unable to read existing endpoints")
+	}
+	// Restore all proxy ports from datapath, if possible
+	// Must be run before d.bootstrapFQDN(), which depends
+	// on the ports having been restored.
+	if d.l7Proxy != nil {
+		d.l7Proxy.RestoreProxyPorts()
 	}
 	bootstrapStats.restore.End(true)
 
@@ -748,6 +713,10 @@ func newDaemon(ctx context.Context, cleaner *daemonCleanup, params *daemonParams
 		}
 	}
 
+	if params.DirectoryPolicyWatcher != nil {
+		params.DirectoryPolicyWatcher.WatchDirectoryPolicyResources(d.ctx, &d)
+	}
+
 	// Some of the k8s watchers rely on option flags set above (specifically
 	// EnableBPFMasquerade), so we should only start them once the flag values
 	// are set.
@@ -825,7 +794,7 @@ func newDaemon(ctx context.Context, cleaner *daemonCleanup, params *daemonParams
 		}
 
 		// Start services watcher
-		serviceStore.JoinClusterServices(d.k8sWatcher.K8sSvcCache, option.Config.ClusterName)
+		serviceStore.JoinClusterServices(d.k8sSvcCache, option.Config.ClusterName)
 	}
 
 	// Start IPAM
@@ -934,15 +903,10 @@ func newDaemon(ctx context.Context, cleaner *daemonCleanup, params *daemonParams
 		return nil, nil, err
 	}
 
-	if err := d.datapath.Loader().RestoreTemplates(option.Config.StateDir); err != nil {
-		log.WithError(err).Error("Unable to restore previous BPF templates")
-	}
-
 	// Start watcher for endpoint IP --> identity mappings in key-value store.
 	// this needs to be done *after* init() for the daemon in that function,
 	// we populate the IPCache with the host's IP(s).
 	d.ipcache.InitIPIdentityWatcher(d.ctx, params.StoreFactory)
-	identitymanager.Subscribe(d.policy)
 
 	if err := params.IPsecKeyCustodian.StartBackgroundJobs(d.Datapath().Node()); err != nil {
 		log.WithError(err).Error("Unable to start IPsec key watcher")
@@ -1009,7 +973,7 @@ func changedOption(key string, value option.OptionSetting, data interface{}) {
 	d := data.(*Daemon)
 	if key == option.Debug {
 		// Set the debug toggle (this can be a no-op)
-		if d.DebugEnabled() {
+		if option.Config.Opts.IsEnabled(option.Debug) {
 			logging.SetLogLevelToDebug()
 		}
 		// Reflect log level change to proxies

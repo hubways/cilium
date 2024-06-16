@@ -368,6 +368,11 @@ Annotations:
   service DNS name. Additionally, Kubernetes service DNS name to ClusterIP
   translation is now automatically enabled for etcd (if necessary); the
   ``etcd.operator`` ``kvstore-opt`` option is now a no-op and has been removed.
+* KVStoreMesh is now enabled by default in Clustermesh.
+  If you want to disable KVStoreMesh, set Helm value ``clustermesh.apiserver.kvstoremesh.enabled=false``
+  explicitly during the upgrade.
+* Gateway API GRPCRoute which is moved from ``v1alpha2`` to ``v1``. Please install new GRPCRoute CRD and migrate
+  your resources from ``v1alpha2`` to ``v1`` version.
 
 Removed Options
 ~~~~~~~~~~~~~~~
@@ -413,6 +418,8 @@ Helm Options
   The option has been replaced by ``ciliumEndpointSlice.enabled``.
 * The Helm option for deploying a managed etcd instance via ``etcd.managed``
   and other related Helm configurations have been removed.
+* The Clustermesh option ``clustermesh.apiserver.kvstoremesh.enabled`` is now set to ``true`` by default.
+  To disable KVStoreMesh, set ``clustermesh.apiserver.kvstoremesh.enabled=false`` explicitly during the upgrade.
 
 Added Metrics
 ~~~~~~~~~~~~~

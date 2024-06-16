@@ -73,7 +73,7 @@ contributors across the globe, there is almost always someone available to help.
 | authentication.mutual.spire.enabled | bool | `false` | Enable SPIRE integration (beta) |
 | authentication.mutual.spire.install.agent.affinity | object | `{}` | SPIRE agent affinity configuration |
 | authentication.mutual.spire.install.agent.annotations | object | `{}` | SPIRE agent annotations |
-| authentication.mutual.spire.install.agent.image | object | `{"digest":"sha256:99405637647968245ff9fe215f8bd2bd0ea9807be9725f8bf19fe1b21471e52b","override":null,"pullPolicy":"Always","repository":"ghcr.io/spiffe/spire-agent","tag":"1.8.5","useDigest":true}` | SPIRE agent image |
+| authentication.mutual.spire.install.agent.image | object | `{"digest":"sha256:5106ac601272a88684db14daf7f54b9a45f31f77bb16a906bd5e87756ee7b97c","override":null,"pullPolicy":"Always","repository":"ghcr.io/spiffe/spire-agent","tag":"1.9.6","useDigest":true}` | SPIRE agent image |
 | authentication.mutual.spire.install.agent.labels | object | `{}` | SPIRE agent labels |
 | authentication.mutual.spire.install.agent.nodeSelector | object | `{}` | SPIRE agent nodeSelector configuration ref: ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector |
 | authentication.mutual.spire.install.agent.podSecurityContext | object | `{}` | Security context to be added to spire agent pods. SecurityContext holds pod-level security attributes and common container settings. ref: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-pod |
@@ -93,7 +93,7 @@ contributors across the globe, there is almost always someone available to help.
 | authentication.mutual.spire.install.server.dataStorage.enabled | bool | `true` | Enable SPIRE server data storage |
 | authentication.mutual.spire.install.server.dataStorage.size | string | `"1Gi"` | Size of the SPIRE server data storage |
 | authentication.mutual.spire.install.server.dataStorage.storageClass | string | `nil` | StorageClass of the SPIRE server data storage |
-| authentication.mutual.spire.install.server.image | object | `{"digest":"sha256:28269265882048dcf0fed32fe47663cd98613727210b8d1a55618826f9bf5428","override":null,"pullPolicy":"Always","repository":"ghcr.io/spiffe/spire-server","tag":"1.8.5","useDigest":true}` | SPIRE server image |
+| authentication.mutual.spire.install.server.image | object | `{"digest":"sha256:59a0b92b39773515e25e68a46c40d3b931b9c1860bc445a79ceb45a805cab8b4","override":null,"pullPolicy":"Always","repository":"ghcr.io/spiffe/spire-server","tag":"1.9.6","useDigest":true}` | SPIRE server image |
 | authentication.mutual.spire.install.server.initContainers | list | `[]` | SPIRE server init containers |
 | authentication.mutual.spire.install.server.labels | object | `{}` | SPIRE server labels |
 | authentication.mutual.spire.install.server.nodeSelector | object | `{}` | SPIRE server nodeSelector configuration ref: ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector |
@@ -150,7 +150,7 @@ contributors across the globe, there is almost always someone available to help.
 | bpf.tproxy | bool | `false` | Configure the eBPF-based TPROXY to reduce reliance on iptables rules for implementing Layer 7 policy. |
 | bpf.vlanBypass | list | `[]` | Configure explicitly allowed VLAN id's for bpf logic bypass. [0] will allow all VLAN id's without any filtering. |
 | bpfClockProbe | bool | `false` | Enable BPF clock source probing for more efficient tick retrieval. |
-| certgen | object | `{"affinity":{},"annotations":{"cronJob":{},"job":{}},"extraVolumeMounts":[],"extraVolumes":[],"image":{"digest":"sha256:bbc5e65e9dc65bc6b58967fe536b7f3b54e12332908aeb0a96a36866b4372b4e","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/certgen","tag":"v0.1.12","useDigest":true},"podLabels":{},"tolerations":[],"ttlSecondsAfterFinished":1800}` | Configure certificate generation for Hubble integration. If hubble.tls.auto.method=cronJob, these values are used for the Kubernetes CronJob which will be scheduled regularly to (re)generate any certificates not provided manually. |
+| certgen | object | `{"affinity":{},"annotations":{"cronJob":{},"job":{}},"extraVolumeMounts":[],"extraVolumes":[],"image":{"digest":"sha256:169d93fd8f2f9009db3b9d5ccd37c2b753d0989e1e7cd8fe79f9160c459eef4f","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/certgen","tag":"v0.2.0","useDigest":true},"podLabels":{},"tolerations":[],"ttlSecondsAfterFinished":1800}` | Configure certificate generation for Hubble integration. If hubble.tls.auto.method=cronJob, these values are used for the Kubernetes CronJob which will be scheduled regularly to (re)generate any certificates not provided manually. |
 | certgen.affinity | object | `{}` | Affinity for certgen |
 | certgen.annotations | object | `{"cronJob":{},"job":{}}` | Annotations to be added to the hubble-certgen initial Job and CronJob |
 | certgen.extraVolumeMounts | list | `[]` | Additional certgen volumeMounts. |
@@ -169,7 +169,7 @@ contributors across the globe, there is almost always someone available to help.
 | cluster.id | int | `0` | Unique ID of the cluster. Must be unique across all connected clusters and in the range of 1 to 255. Only required for Cluster Mesh, may be 0 if Cluster Mesh is not used. |
 | cluster.name | string | `"default"` | Name of the cluster. Only required for Cluster Mesh and mutual authentication with SPIRE. It must respect the following constraints: * It must contain at most 32 characters; * It must begin and end with a lower case alphanumeric character; * It may contain lower case alphanumeric characters and dashes between. The "default" name cannot be used if the Cluster ID is different from 0. |
 | clustermesh.annotations | object | `{}` | Annotations to be added to all top-level clustermesh objects (resources under templates/clustermesh-apiserver and templates/clustermesh-config) |
-| clustermesh.apiserver.affinity | object | `{"podAntiAffinity":{"requiredDuringSchedulingIgnoredDuringExecution":[{"labelSelector":{"matchLabels":{"k8s-app":"clustermesh-apiserver"}},"topologyKey":"kubernetes.io/hostname"}]}}` | Affinity for clustermesh.apiserver |
+| clustermesh.apiserver.affinity | object | `{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"podAffinityTerm":{"labelSelector":{"matchLabels":{"k8s-app":"clustermesh-apiserver"}},"topologyKey":"kubernetes.io/hostname"},"weight":100}]}}` | Affinity for clustermesh.apiserver |
 | clustermesh.apiserver.etcd.init.extraArgs | list | `[]` | Additional arguments to `clustermesh-apiserver etcdinit`. |
 | clustermesh.apiserver.etcd.init.extraEnv | list | `[]` | Additional environment variables to `clustermesh-apiserver etcdinit`. |
 | clustermesh.apiserver.etcd.init.resources | object | `{}` | Specifies the resources for etcd init container in the apiserver |
@@ -183,7 +183,7 @@ contributors across the globe, there is almost always someone available to help.
 | clustermesh.apiserver.extraVolumes | list | `[]` | Additional clustermesh-apiserver volumes. |
 | clustermesh.apiserver.healthPort | int | `9880` | TCP port for the clustermesh-apiserver health API. |
 | clustermesh.apiserver.image | object | `{"digest":"","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/clustermesh-apiserver-ci","tag":"latest","useDigest":false}` | Clustermesh API server image. |
-| clustermesh.apiserver.kvstoremesh.enabled | bool | `false` | Enable KVStoreMesh. KVStoreMesh caches the information retrieved from the remote clusters in the local etcd instance. |
+| clustermesh.apiserver.kvstoremesh.enabled | bool | `true` | Enable KVStoreMesh. KVStoreMesh caches the information retrieved from the remote clusters in the local etcd instance. |
 | clustermesh.apiserver.kvstoremesh.extraArgs | list | `[]` | Additional KVStoreMesh arguments. |
 | clustermesh.apiserver.kvstoremesh.extraEnv | list | `[]` | Additional KVStoreMesh environment variables. |
 | clustermesh.apiserver.kvstoremesh.extraVolumeMounts | list | `[]` | Additional KVStoreMesh volumeMounts. |
@@ -245,7 +245,7 @@ contributors across the globe, there is almost always someone available to help.
 | clustermesh.apiserver.tls.server.extraIpAddresses | list | `[]` | Extra IP addresses added to certificate when it's auto generated |
 | clustermesh.apiserver.tolerations | list | `[]` | Node tolerations for pod assignment on nodes with taints ref: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/ |
 | clustermesh.apiserver.topologySpreadConstraints | list | `[]` | Pod topology spread constraints for clustermesh-apiserver |
-| clustermesh.apiserver.updateStrategy | object | `{"rollingUpdate":{"maxUnavailable":1},"type":"RollingUpdate"}` | clustermesh-apiserver update strategy |
+| clustermesh.apiserver.updateStrategy | object | `{"rollingUpdate":{"maxSurge":1,"maxUnavailable":0},"type":"RollingUpdate"}` | clustermesh-apiserver update strategy |
 | clustermesh.config | object | `{"clusters":[],"domain":"mesh.cilium.io","enabled":false}` | Clustermesh explicit configuration. |
 | clustermesh.config.clusters | list | `[]` | List of clusters to be peered in the mesh. |
 | clustermesh.config.domain | string | `"mesh.cilium.io"` | Default dns domain for the Clustermesh API servers This is used in the case cluster addresses are not provided and IPs are used. |
