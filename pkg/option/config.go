@@ -279,6 +279,10 @@ const (
 	// Alias to NodePortAcceleration
 	LoadBalancerAcceleration = "bpf-lb-acceleration"
 
+	// LoadBalancerExternalControlPlane switch skips connectivity to kube-apiserver
+	// which is relevant in lb-only mode
+	LoadBalancerExternalControlPlane = "bpf-lb-external-control-plane"
+
 	// MaglevTableSize determines the size of the backend table per service
 	MaglevTableSize = "bpf-lb-maglev-table-size"
 
@@ -683,6 +687,25 @@ const (
 
 	// IPv6MCastDevice is the name of the option to select IPv6 multicast device
 	IPv6MCastDevice = "ipv6-mcast-device"
+
+	// BPFEventsDefaultRateLimit specifies limit of messages per second that can be written to
+	// BPF events map. This limit is defined for all types of events except dbg and pcap.
+	// The number of messages is averaged, meaning that if no messages were written
+	// to the map over 5 seconds, it's possible to write more events than the value of rate limit
+	// in the 6th second.
+	//
+	// If BPFEventsDefaultRateLimit > 0, non-zero value for BPFEventsDefaultBurstLimit must also be provided
+	// lest the configuration is considered invalid.
+	// If both rate and burst limit are 0 or not specified, no limit is imposed.
+	BPFEventsDefaultRateLimit = "bpf-events-default-rate-limit"
+
+	// BPFEventsDefaultBurstLimit specifies the maximum number of messages that can be written
+	// to BPF events map in 1 second. This limit is defined for all types of events except dbg and pcap.
+	//
+	// If BPFEventsDefaultBurstLimit > 0, non-zero value for BPFEventsDefaultRateLimit must also be provided
+	// lest the configuration is considered invalid.
+	// If both burst and rate limit are 0 or not specified, no limit is imposed.
+	BPFEventsDefaultBurstLimit = "bpf-events-default-burst-limit"
 
 	// FQDNRejectResponseCode is the name for the option for dns-proxy reject response code
 	FQDNRejectResponseCode = "tofqdns-dns-reject-response-code"
@@ -1525,6 +1548,24 @@ type DaemonConfig struct {
 	// is enabled. Network byte-order.
 	MonitorAggregationFlags uint16
 
+	// BPFEventsDefaultRateLimit specifies limit of messages per second that can be written to
+	// BPF events map. This limit is defined for all types of events except dbg and pcap.
+	// The number of messages is averaged, meaning that if no messages were written
+	// to the map over 5 seconds, it's possible to write more events than the value of rate limit
+	// in the 6th second.
+	//
+	// If BPFEventsDefaultRateLimit > 0, non-zero value for BPFEventsDefaultBurstLimit must also be provided
+	// lest the configuration is considered invalid.
+	BPFEventsDefaultRateLimit uint32
+
+	// BPFEventsDefaultBurstLimit specifies the maximum number of messages that can be written
+	// to BPF events map in 1 second. This limit is defined for all types of events except dbg and pcap.
+	//
+	// If BPFEventsDefaultBurstLimit > 0, non-zero value for BPFEventsDefaultRateLimit must also be provided
+	// lest the configuration is considered invalid.
+	// If both burst and rate limit are 0 or not specified, no limit is imposed.
+	BPFEventsDefaultBurstLimit uint32
+
 	// BPFMapsDynamicSizeRatio is ratio of total system memory to use for
 	// dynamic sizing of the CT, NAT, Neighbor and SockRevNAT BPF maps.
 	BPFMapsDynamicSizeRatio float64
@@ -1944,6 +1985,10 @@ type DaemonConfig struct {
 	// LoadBalancerRSSv4CIDR defines the outer source IPv6 prefix for DSR/IPIP
 	LoadBalancerRSSv6CIDR string
 	LoadBalancerRSSv6     net.IPNet
+
+	// LoadBalancerExternalControlPlane tells whether to not use kube-apiserver as
+	// its control plane in lb-only mode.
+	LoadBalancerExternalControlPlane bool
 
 	// EnablePMTUDiscovery indicates whether to send ICMP fragmentation-needed
 	// replies to the client (when needed).
@@ -3107,6 +3152,7 @@ func (c *DaemonConfig) Populate(vp *viper.Viper) {
 	c.LoadBalancerDSRL4Xlate = vp.GetString(LoadBalancerDSRL4Xlate)
 	c.LoadBalancerRSSv4CIDR = vp.GetString(LoadBalancerRSSv4CIDR)
 	c.LoadBalancerRSSv6CIDR = vp.GetString(LoadBalancerRSSv6CIDR)
+	c.LoadBalancerExternalControlPlane = vp.GetBool(LoadBalancerExternalControlPlane)
 	c.InstallNoConntrackIptRules = vp.GetBool(InstallNoConntrackIptRules)
 	c.ContainerIPLocalReservedPorts = vp.GetString(ContainerIPLocalReservedPorts)
 	c.EnableCustomCalls = vp.GetBool(EnableCustomCallsName)
@@ -3355,6 +3401,18 @@ func (c *DaemonConfig) Populate(vp *viper.Viper) {
 		log.Fatalf("unable to parse %s: %s", LogOpt, err)
 	} else {
 		c.LogOpt = m
+	}
+
+	bpfEventsDefaultRateLimit := vp.GetUint32(BPFEventsDefaultRateLimit)
+	bpfEventsDefaultBurstLimit := vp.GetUint32(BPFEventsDefaultBurstLimit)
+	switch {
+	case bpfEventsDefaultRateLimit > 0 && bpfEventsDefaultBurstLimit == 0:
+		log.Fatalf("invalid BPF events default config: burst limit must also be specified when rate limit is provided")
+	case bpfEventsDefaultRateLimit == 0 && bpfEventsDefaultBurstLimit > 0:
+		log.Fatalf("invalid BPF events default config: rate limit must also be specified when burst limit is provided")
+	default:
+		c.BPFEventsDefaultRateLimit = vp.GetUint32(BPFEventsDefaultRateLimit)
+		c.BPFEventsDefaultBurstLimit = vp.GetUint32(BPFEventsDefaultBurstLimit)
 	}
 
 	c.bpfMapEventConfigs = make(BPFEventBufferConfigs)

@@ -301,6 +301,15 @@ Annotations:
 
 .. _current_release_required_changes:
 
+.. _1.17_upgrade_notes:
+
+1.17 Upgrade Notes
+------------------
+
+* Operating Cilium in ``--datapath-mode=lb-only`` for plain Docker mode now requires to
+  add an additional ``--bpf-lb-external-control-plane=true`` to the command line, otherwise
+  it is assumed that Kubernetes is present.
+
 .. _1.16_upgrade_notes:
 
 1.16 Upgrade Notes
@@ -398,6 +407,9 @@ Annotations:
   ``CiliumLoadBalancerIPPool.spec.blocks``. As of v1.15 both fields have the same behavior. The
   ``cidrs`` field will be removed in v1.16. Please update your IP pool configurations to use
   ``blocks`` instead of ``cidrs`` before upgrading.
+* For IPsec, the use of per-tunnel keys is mandatory, via the use of the ``+``
+  sign in the secret. See the :ref:`encryption_ipsec` guide for more
+  information.
 
 Removed Options
 ~~~~~~~~~~~~~~~
