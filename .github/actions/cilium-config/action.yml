@@ -71,6 +71,7 @@ runs:
       run: |
         DEFAULTS="--wait \
             --chart-directory=${{ inputs.chart-dir }} \
+            --disable-check=minimum-version \
             --helm-set=debug.enabled=true \
             --helm-set=debug.verbose=envoy \
             --helm-set=hubble.eventBufferCapacity=65535 \
@@ -125,10 +126,6 @@ runs:
           if [ "${{ inputs.kpr }}" == "true" ]; then
             # BPF-masq requires KPR=true.
             MASQ="--helm-set=bpf.masquerade=true"
-            if [ "${{ inputs.host-fw }}" == "true" ]; then
-              # BPF IPv6 masquerade not currently supported with host firewall - GH-26074
-              MASQ="${MASQ} --helm-set=enableIPv6Masquerade=false"
-            fi
           fi
 
           EGRESS_GATEWAY=""
