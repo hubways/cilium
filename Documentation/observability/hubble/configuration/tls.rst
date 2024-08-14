@@ -4,13 +4,11 @@
     Please use the official rendered version released here:
     https://docs.cilium.io
 
-.. _hubble_configure:
+**********
+Hubble TLS
+**********
 
-********************
-Hubble Configuration
-********************
-
-This page provides guidance to configure Hubble in a way that suits your
+This page provides guidance to configure Hubble with TLS in a way that suits your
 environment. Instructions to enable Hubble are provided as part of each
 Cilium :ref:`getting_started` guide.
 
@@ -297,8 +295,8 @@ If you encounter issues after enabling TLS, you can use the instructions below t
 
 .. _hubble_configure_metrics_tls:
 
-Metrics TLS and Authentication
-===============================
+Hubble Metrics TLS and Authentication
+=====================================
 
 Starting with Cilium 1.16, Hubble supports configuring TLS on the Hubble
 metrics API in addition to the Hubble observer API.
@@ -306,6 +304,10 @@ metrics API in addition to the Hubble observer API.
 This can be done by specifying the following options to Helm at install or
 upgrade time, along with the TLS configuration options described in the
 previous section.
+
+.. note::
+
+  This section assumes that you have already enabled :ref:`Hubble metrics<hubble_metrics>`.
 
 To enable TLS on the Hubble metrics API, add the following Helm flag to your
 list of options:

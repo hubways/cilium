@@ -1040,7 +1040,7 @@ func (d *Daemon) startStatusCollector(cleaner *daemonCleanup) {
 					}, nil
 				case option.Config.EnableWireguard:
 					var msg string
-					status, err := d.datapath.WireguardAgent().Status(false)
+					status, err := d.wireguardAgent.Status(false)
 					if err != nil {
 						msg = err.Error()
 					}
@@ -1141,7 +1141,7 @@ func (d *Daemon) startStatusCollector(cleaner *daemonCleanup) {
 	d.statusResponse.AttachMode = d.getAttachModeStatus()
 	d.statusResponse.DatapathMode = d.getDatapathModeStatus()
 
-	d.statusCollector = status.NewCollector(probes, status.Config{StackdumpPath: "/run/cilium/state/agent.stack.gz"})
+	d.statusCollector = status.NewCollector(probes, status.DefaultConfig)
 
 	// Set up a signal handler function which prints out logs related to daemon status.
 	cleaner.cleanupFuncs.Add(func() {
