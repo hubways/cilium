@@ -74,7 +74,7 @@ func RunE(hooks api.Hooks) func(cmd *cobra.Command, args []string) error {
 
 		logger := check.NewConcurrentLogger(params.Writer, params.TestConcurrency)
 
-		connTests, err := newConnectivityTests(params, logger)
+		connTests, err := newConnectivityTests(params, hooks, logger)
 		if err != nil {
 			return err
 		}
@@ -132,6 +132,7 @@ func newCmdConnectivityTest(hooks api.Hooks) *cobra.Command {
 	cmd.Flags().StringVar(&params.ExternalCIDR, "external-cidr", "1.0.0.0/8", "CIDR to use as external target in connectivity tests")
 	cmd.Flags().StringVar(&params.ExternalIP, "external-ip", "1.1.1.1", "IP to use as external target in connectivity tests")
 	cmd.Flags().StringVar(&params.ExternalOtherIP, "external-other-ip", "1.0.0.1", "Other IP to use as external target in connectivity tests")
+	cmd.Flags().StringVar(&params.ServiceType, "service-type", "NodePort", "Type of Kubernetes Services created for connectivity tests")
 	cmd.Flags().StringSliceVar(&params.NodeCIDRs, "node-cidr", nil, "one or more CIDRs that cover all nodes in the cluster")
 	cmd.Flags().StringVar(&params.JunitFile, "junit-file", "", "Generate junit report and write to file")
 	cmd.Flags().Var(option.NewNamedMapOptions("junit-property", &params.JunitProperties, nil), "junit-property", "Add key=value properties to the generated junit file")
@@ -224,7 +225,11 @@ func registerCommonFlags(flags *pflag.FlagSet) {
 	flags.Var(&params.DeploymentAnnotations, "deployment-pod-annotations", "Add annotations to the connectivity pods, e.g. '{\"client\":{\"foo\":\"bar\"}}'")
 }
 
-func newConnectivityTests(params check.Parameters, logger *check.ConcurrentLogger) ([]*check.ConnectivityTest, error) {
+func newConnectivityTests(
+	params check.Parameters,
+	hooks api.Hooks,
+	logger *check.ConcurrentLogger,
+) ([]*check.ConnectivityTest, error) {
 	if params.TestConcurrency < 1 {
 		fmt.Printf("--test-concurrency parameter value is invalid [%d], using 1 instead\n", params.TestConcurrency)
 		params.TestConcurrency = 1
@@ -240,7 +245,7 @@ func newConnectivityTests(params check.Parameters, logger *check.ConcurrentLogge
 		}
 		params.ExternalDeploymentPort += i
 		params.EchoServerHostPort += i
-		cc, err := check.NewConnectivityTest(k8sClient, params, defaults.CLIVersion, logger)
+		cc, err := check.NewConnectivityTest(k8sClient, params, hooks, logger)
 		if err != nil {
 			return nil, err
 		}

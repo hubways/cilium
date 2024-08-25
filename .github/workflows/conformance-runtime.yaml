@@ -186,8 +186,6 @@ jobs:
           ###
           # RuntimeAgentChaos Cilium agent Checking for file-descriptor leak
           # RuntimeAgentChaos Cilium agent removing leftover Cilium interfaces
-          # RuntimeAgentChaos KVStore Delete event on KVStore with CIDR identities
-          # RuntimeAgentChaos KVStore Validate that delete events on KVStore do not release in use identities
           # RuntimeAgentFQDNPolicies Can update L7 DNS policy rules
           # RuntimeAgentFQDNPolicies CNAME follow
           # RuntimeAgentFQDNPolicies DNS proxy policy works if Cilium stops
@@ -200,7 +198,6 @@ jobs:
           # RuntimeAgentFQDNPolicies toFQDNs populates toCIDRSet (data from proxy) Policy addition after DNS lookup
           # RuntimeAgentFQDNPolicies Validate dns-proxy monitor information
           # RuntimeAgentFQDNPolicies With verbose policy logs Validates DNSSEC responses
-          # RuntimeAgentKVStoreTest KVStore tests Consul KVStore
           # RuntimeAgentKVStoreTest KVStore tests Etcd KVStore
           # RuntimeAgentPolicies Init Policy Default Drop Test tests egress
           # RuntimeAgentPolicies Init Policy Default Drop Test tests ingress
@@ -340,7 +337,7 @@ jobs:
             export VMUSER=root
             echo '127.0.0.1 localhost' >> /etc/hosts
             echo '::1 localhost' >> /etc/hosts
-            /tmp/provision/runtime_install.sh
+            /tmp/provision/runtime_install.sh ${{ env.CILIUM_RUNTIME_EXTRA_ARGS }}
             service docker restart
 
       - name: Runtime tests
@@ -373,7 +370,8 @@ jobs:
           -cilium.hubble-relay-image=quay.io/${{ env.QUAY_ORGANIZATION_DEV }}/hubble-relay-ci \
           -cilium.hubble-relay-tag=${{ steps.vars.outputs.sha }} \
           -cilium.operator-suffix=-ci \
-          -cilium.SSHConfig="cat ./cilium-ssh-config.txt"
+          -cilium.SSHConfig="cat ./cilium-ssh-config.txt" \
+          -cilium.extra-opts="${{ env.CILIUM_RUNTIME_EXTRA_ARGS }}"
 
       - name: Runtime privileged tests
         if: ${{ matrix.focus == 'privileged' }}

@@ -46,14 +46,6 @@ GitHub Actions provide an alternative mode for running Cilium's end-to-end tests
 The configuration is set up to closely match the environment used in GHA. Refer
 to the relevant documentation for instructions on running tests using GHA.
 
-Running Tests with Vagrant
-^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-To run tests locally using Vagrant, the test scripts invoke ``vagrant`` to create
-virtual machine(s). These tests utilize the Ginkgo testing framework, leveraging
-its rich capabilities and the benefits of Go's compilation-time checks and
-strong typing.
-
 Running End-To-End Tests
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -680,7 +672,7 @@ test an exhaustive data will be added.
 	level=info msg=Starting testName=RuntimeKafka
 	level=info msg="Vagrant: running command \"vagrant ssh-config runtime\""
 	cmd: "sudo cilium-dbg status" exitCode: 0
-	 KVStore:            Ok         Consul: 172.17.0.3:8300
+	 KVStore:            Ok         Etcd: 172.17.0.3:4001
 	ContainerRuntime:   Ok
 	Kubernetes:         Disabled
 	Kubernetes APIs:    [""]
