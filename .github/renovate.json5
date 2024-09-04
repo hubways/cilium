@@ -29,7 +29,6 @@
     "go.mod",
     "go.sum",
     "Makefile.defs",
-    "test/kubernetes-test.sh",
     "test/packet/scripts/install.sh",
     "install/kubernetes/cilium/templates/spire/**",
     "install/kubernetes/cilium/values.yaml.tmpl",
@@ -83,7 +82,8 @@
     "^make -C install/kubernetes$",
     "^make -C Documentation update-helm-values$",
     "^make generate-k8s-api$",
-    "^make manifests$"
+    "^make manifests$",
+    "^make generate-apis$"
   ],
   "assignAutomerge": true,
   "packageRules": [
@@ -183,6 +183,7 @@
         "golang-version"
       ],
       "matchUpdateTypes": [
+        "minor",
         "patch"
       ],
       matchBaseBranches: [
@@ -560,6 +561,17 @@
       }
     },
     {
+      matchPackageNames: [
+        "protocolbuffers/protobuf"
+      ],
+      "postUpgradeTasks": {
+        "commands": [
+          "make generate-apis"
+        ],
+        "executionMode": "update"
+      }
+    },
+    {
       "matchDepNames": [
         "quay.io/cilium/cilium-envoy"
       ],
@@ -702,8 +714,6 @@
     },
     {
       "fileMatch": [
-        "^test/kubernetes-test\\.sh$",
-        "^test/packet/scripts/install\\.sh$",
         "^.github/actions/set-env-variables/action\\.yml$"
       ],
       "matchStrings": [
