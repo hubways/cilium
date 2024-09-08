@@ -327,6 +327,7 @@ func extractRoutes(listenerPort int32, hostnames []string, hr gatewayv1.HTTPRout
 				Rewrite:                rewriteFilter,
 				RequestMirrors:         requestMirrors,
 				Timeout:                toTimeout(rule.Timeouts),
+				Retry:                  toHTTPRetry(rule.Retry),
 			})
 		}
 
@@ -346,6 +347,7 @@ func extractRoutes(listenerPort int32, hostnames []string, hr gatewayv1.HTTPRout
 				Rewrite:                rewriteFilter,
 				RequestMirrors:         requestMirrors,
 				Timeout:                toTimeout(rule.Timeouts),
+				Retry:                  toHTTPRetry(rule.Retry),
 			})
 		}
 	}
@@ -367,6 +369,30 @@ func toTimeout(timeouts *gatewayv1.HTTPRouteTimeouts) model.Timeout {
 			res.Request = model.AddressOf(duration)
 		}
 	}
+	return res
+}
+
+func toHTTPRetry(retry *gatewayv1.HTTPRouteRetry) *model.HTTPRetry {
+	if retry == nil {
+		return nil
+	}
+
+	codes := make([]uint32, 0, len(retry.Codes))
+	for _, c := range retry.Codes {
+		codes = append(codes, uint32(c))
+	}
+
+	res := &model.HTTPRetry{
+		Codes:    codes,
+		Attempts: retry.Attempts,
+	}
+
+	if retry.Backoff != nil {
+		if duration, err := time.ParseDuration(string(*retry.Backoff)); err == nil {
+			res.Backoff = model.AddressOf(duration)
+		}
+	}
+
 	return res
 }
 
@@ -611,8 +637,22 @@ func toHTTPRewriteFilter(rewrite *gatewayv1.HTTPURLRewriteFilter) *model.HTTPURL
 }
 
 func toHTTPRequestMirror(svc corev1.Service, mirror *gatewayv1.HTTPRequestMirrorFilter, ns string) *model.HTTPRequestMirror {
+	var n, d int32 = 100, 100
+
+	switch {
+	case mirror.Percent != nil:
+		n = *mirror.Percent
+	case mirror.Fraction != nil:
+		n = mirror.Fraction.Numerator
+		if mirror.Fraction.Denominator != nil {
+			d = *mirror.Fraction.Denominator
+		}
+	}
+
 	return &model.HTTPRequestMirror{
-		Backend: model.AddressOf(backendRefToModelBackend(svc, mirror.BackendRef, ns)),
+		Backend:     model.AddressOf(backendRefToModelBackend(svc, mirror.BackendRef, ns)),
+		Numerator:   n,
+		Denominator: d,
 	}
 }
 
@@ -856,7 +896,7 @@ func toHTTPHeaders(headers []gatewayv1.HTTPHeader) []model.Header {
 	return res
 }
 
-func toMapString(in map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue) map[string]string {
+func toMapString[K, V ~string](in map[K]V) map[string]string {
 	out := make(map[string]string, len(in))
 	for k, v := range in {
 		out[string(k)] = string(v)
