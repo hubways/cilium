@@ -974,8 +974,8 @@ data:
 {{- if .Values.hubble.export.static.enabled }}
   hubble-export-file-path: {{ .Values.hubble.export.static.filePath | quote }}
   hubble-export-fieldmask: {{ .Values.hubble.export.static.fieldMask | join " " | quote }}
-  hubble-export-allowlist: {{ .Values.hubble.export.static.allowList | join "," | quote }}
-  hubble-export-denylist: {{ .Values.hubble.export.static.denyList | join "," | quote }}
+  hubble-export-allowlist: {{ .Values.hubble.export.static.allowList | join " " | quote }}
+  hubble-export-denylist: {{ .Values.hubble.export.static.denyList | join " " | quote }}
 {{- end }}
 {{- if .Values.hubble.export.dynamic.enabled }}
   hubble-flowlogs-config-path: /flowlog-config/flowlogs.yaml
@@ -1317,6 +1317,9 @@ data:
 
 {{- if .Values.envoy.log.path }}
   envoy-log: {{ .Values.envoy.log.path | quote }}
+{{- end }}
+{{- if .Values.envoy.log.defaultLevel }}
+  envoy-default-log-level: {{ .Values.envoy.log.defaultLevel | quote }}
 {{- end }}
 
   envoy-keep-cap-netbindservice: {{ .Values.envoy.securityContext.capabilities.keepCapNetBindService | quote }}
