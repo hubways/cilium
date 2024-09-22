@@ -160,6 +160,9 @@
                         "podSecurityContext": {
                           "type": "object"
                         },
+                        "resources": {
+                          "type": "object"
+                        },
                         "securityContext": {
                           "type": "object"
                         },
@@ -364,6 +367,9 @@
                         "podSecurityContext": {
                           "type": "object"
                         },
+                        "resources": {
+                          "type": "object"
+                        },
                         "securityContext": {
                           "type": "object"
                         },
@@ -504,6 +510,9 @@
             }
           },
           "type": "object"
+        },
+        "ctAccounting": {
+          "type": "boolean"
         },
         "ctAnyMax": {
           "type": [
@@ -1615,6 +1624,9 @@
       "type": "boolean"
     },
     "enableIPv6Masquerade": {
+      "type": "boolean"
+    },
+    "enableInternalTrafficPolicy": {
       "type": "boolean"
     },
     "enableK8sTerminatingEndpoint": {
@@ -3913,6 +3925,12 @@
     },
     "name": {
       "type": "string"
+    },
+    "namespaceOverride": {
+      "type": [
+        "null",
+        "string"
+      ]
     },
     "nat": {
       "properties": {

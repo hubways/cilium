@@ -27,6 +27,7 @@ cilium-agent [flags]
       --bgp-announce-pod-cidr                                     Announces the node's pod CIDR via BGP
       --bgp-config-path string                                    Path to file containing the BGP configuration (default "/var/lib/cilium/bgp/config.yaml")
       --bpf-auth-map-max int                                      Maximum number of entries in auth map (default 524288)
+      --bpf-conntrack-accounting-enabled                          Enable CT accounting for packets and bytes
       --bpf-ct-global-any-max int                                 Maximum number of entries in non-TCP CT table (default 262144)
       --bpf-ct-global-tcp-max int                                 Maximum number of entries in TCP CT table (default 524288)
       --bpf-ct-timeout-regular-any duration                       Timeout for entries in non-TCP CT table (default 1m0s)
@@ -112,6 +113,7 @@ cilium-agent [flags]
       --enable-cilium-endpoint-slice                              Enable the CiliumEndpointSlice watcher in place of the CiliumEndpoint watcher (beta)
       --enable-cilium-health-api-server-access strings            List of cilium health API APIs which are administratively enabled. Supports '*'. (default [*])
       --enable-custom-calls                                       Enable tail call hooks for custom eBPF programs
+      --enable-drift-checker                                      Enables support for config drift checker
       --enable-dynamic-config                                     Enables support for dynamic agent config
       --enable-encryption-strict-mode                             Enable encryption strict mode
       --enable-endpoint-health-checking                           Enable connectivity health checking between virtual endpoints (default true)
@@ -130,6 +132,7 @@ cilium-agent [flags]
       --enable-hubble-recorder-api                                Enable the Hubble recorder API (default true)
       --enable-identity-mark                                      Enable setting identity mark for local traffic (default true)
       --enable-ingress-controller                                 Enables Envoy secret sync for Ingress controller related TLS secrets
+      --enable-internal-traffic-policy                            Enable internal traffic policy (default true)
       --enable-ip-masq-agent                                      Enable BPF ip-masq-agent
       --enable-ipip-termination                                   Enable plain IPIP/IP6IP6 termination
       --enable-ipsec                                              Enable IPsec support
@@ -237,6 +240,7 @@ cilium-agent [flags]
       --identity-allocation-mode string                           Method to use for identity allocation (default "kvstore")
       --identity-change-grace-period duration                     Time to wait before using new identity on endpoint identity change (default 5s)
       --identity-restore-grace-period duration                    Time to wait before releasing unused restored CIDR identities during agent restart (default 30s)
+      --ignore-flags-drift-checker strings                        Ignores specified flags during drift checking
       --ingress-secrets-namespace string                          IngressSecretsNamespace is the namespace having tls secrets used by CEC, originating from Ingress controller
       --install-no-conntrack-iptables-rules                       Install Iptables rules to skip netfilter connection tracking on all pod traffic. This option is only effective when Cilium is running in direct routing and full KPR mode. Moreover, this option cannot be enabled when Cilium is running in a managed Kubernetes environment or in a chained CNI setup.
       --ip-masq-agent-config-path string                          ip-masq-agent configuration file path (default "/etc/config/ip-masq-agent")
