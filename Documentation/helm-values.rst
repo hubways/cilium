@@ -1056,10 +1056,18 @@
      - Configure whether to enable auto detect of terminating state for endpoints in order to support graceful termination.
      - bool
      - ``true``
+   * - :spelling:ignore:`enableLBIPAM`
+     - Enable LoadBalancer IP Address Management
+     - bool
+     - ``true``
    * - :spelling:ignore:`enableMasqueradeRouteSource`
      - Enables masquerading to the source of the route for traffic leaving the node from endpoints.
      - bool
      - ``false``
+   * - :spelling:ignore:`enableNonDefaultDenyPolicies`
+     - Enable Non-Default-Deny policies
+     - bool
+     - ``true``
    * - :spelling:ignore:`enableRuntimeDeviceDetection`
      - Enables experimental support for the detection of new and removed datapath devices. When devices change the eBPF datapath is reloaded and services updated. If "devices" is set then only those devices, or devices matching a wildcard will be considered.  This option has been deprecated and is a no-op.
      - bool
