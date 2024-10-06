@@ -12,10 +12,6 @@
      - Description
      - Type
      - Default
-   * - :spelling:ignore:`LBIPAM.requireLBClass`
-     - requireLBClass tells LB-IPAM to only allocate IPs to services with a specific LoadBalancer class. ref: https://docs.cilium.io/en/stable/network/lb-ipam/#loadbalancerclass
-     - bool
-     - ``false``
    * - :spelling:ignore:`MTU`
      - Configure the underlying network MTU to overwrite auto-detected MTU. This value doesn't change the host network interface MTU i.e. eth0 or ens0. It changes the MTU for cilium_net@cilium_host, cilium_host@cilium_net, cilium_vxlan and lxc_health interfaces.
      - int
@@ -964,6 +960,10 @@
      - Configure verbosity levels for debug logging This option is used to enable debug messages for operations related to such sub-system such as (e.g. kvstore, envoy, datapath or policy), and flow is for enabling debug messages emitted per request, message and connection. Multiple values can be set via a space-separated string (e.g. "datapath envoy").  Applicable values: - flow - kvstore - envoy - datapath - policy
      - string
      - ``nil``
+   * - :spelling:ignore:`defaultLBServiceIPAM`
+     - defaultLBServiceIPAM indicates the default LoadBalancer Service IPAM when no LoadBalancer class is set. Applicable values: lbipam, nodeipam, none @schema type: [string] @schema
+     - string
+     - ``"lbipam"``
    * - :spelling:ignore:`directRoutingSkipUnreachable`
      - Enable skipping of PodCIDR routes between worker nodes if the worker nodes are in a different L2 network segment.
      - bool
@@ -1901,7 +1901,7 @@
      - int
      - ``31234``
    * - :spelling:ignore:`hubble.relay.service.type`
-     - - The type of service used for Hubble Relay access, either ClusterIP or NodePort.
+     - - The type of service used for Hubble Relay access, either ClusterIP, NodePort or LoadBalancer.
      - string
      - ``"ClusterIP"``
    * - :spelling:ignore:`hubble.relay.sortBufferDrainTimeout`
@@ -3100,6 +3100,14 @@
      - Enable native-routing mode or tunneling mode. Possible values:   - ""   - native   - tunnel
      - string
      - ``"tunnel"``
+   * - :spelling:ignore:`scheduling`
+     - Scheduling configurations for cilium pods
+     - object
+     - ``{"mode":"anti-affinity"}``
+   * - :spelling:ignore:`scheduling.mode`
+     - Mode specifies how Cilium daemonset pods should be scheduled to Nodes. ``anti-affinity`` mode applies a pod anti-affinity rule to the cilium daemonset. Pod anti-affinity may significantly impact scheduling throughput for large clusters. See: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#inter-pod-affinity-and-anti-affinity ``kube-scheduler`` mode forgoes the anti-affinity rule for full scheduling throughput. Kube-scheduler avoids host port conflict when scheduling pods.
+     - string
+     - Defaults to apply a pod anti-affinity rule to the agent pod - ``anti-affinity``
    * - :spelling:ignore:`sctp`
      - SCTP Configuration Values
      - object
