@@ -38,8 +38,7 @@ import (
 	"k8s.io/cli-runtime/pkg/resource"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/kubernetes/scheme"
-	_ "k8s.io/client-go/plugin/pkg/client/auth" // Register all auth providers (azure, gcp, oidc, openstack, ..).
+	_ "k8s.io/client-go/plugin/pkg/client/auth" // Register all auth providers (azure, gcp, oidc, openstack, ..）
 	"k8s.io/client-go/rest"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"k8s.io/client-go/transport/spdy"
@@ -67,8 +66,9 @@ type Client struct {
 
 func NewClient(contextName, kubeconfig, ciliumNamespace string) (*Client, error) {
 	// Register the Cilium types in the default scheme.
-	_ = ciliumv2.AddToScheme(scheme.Scheme)
-	_ = ciliumv2alpha1.AddToScheme(scheme.Scheme)
+	scheme := runtime.NewScheme()
+	_ = ciliumv2.AddToScheme(scheme)
+	_ = ciliumv2alpha1.AddToScheme(scheme)
 
 	restClientGetter := genericclioptions.ConfigFlags{
 		Context:    &contextName,
@@ -1093,4 +1093,65 @@ func (c *Client) CreateEphemeralContainer(ctx context.Context, pod *corev1.Pod, 
 	return c.Clientset.CoreV1().Pods(pod.Namespace).Patch(
 		ctx, pod.Name, types.StrategicMergePatchType, patch, metav1.PatchOptions{}, "ephemeralcontainers",
 	)
+}
+
+type Object interface {
+	metav1.Object
+	runtime.Object
+}
+
+// ApplyGeneric uses server-side apply to merge changes to an arbitrary object.
+// Returns the applied object.
+func (c *Client) ApplyGeneric(ctx context.Context, obj Object) (*unstructured.Unstructured, error) {
+	gvk, resource, err := c.Describe(obj)
+	if err != nil {
+		return nil, fmt.Errorf("could not get Kubernetes API information for %s/%s: %w", obj.GetNamespace(), obj.GetName(), err)
+	}
+
+	// Now, convert the object to an Unstructured
+	u, ok := obj.(*unstructured.Unstructured)
+	if !ok {
+		b, err := json.Marshal(obj)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert to unstructured (marshal): %w", err)
+		}
+		u = &unstructured.Unstructured{}
+		if err := json.Unmarshal(b, u); err != nil {
+			return nil, fmt.Errorf("failed to convert to unstructured (unmarshal): %w", err)
+		}
+	}
+
+	// Dragons: If we're passed a non-Unstructured object (e.g. v1.ConfigMap), it won't have
+	// the GVK set necessarily. So, use the retrieved GVK from the schema and add it.
+	// This is a no-op for Unstructured objects.
+	// TODO: use a proper codec + serializer
+	u.GetObjectKind().SetGroupVersionKind(gvk)
+
+	// clear ManagedFields; it is not allowed to specify them in a Patch
+	u.SetManagedFields(nil)
+
+	dynamicClient := c.DynamicClientset.Resource(resource).Namespace(obj.GetNamespace())
+	return dynamicClient.Apply(ctx, obj.GetName(), u, metav1.ApplyOptions{Force: true, FieldManager: "cilium-cli"})
+}
+
+func (c *Client) GetGeneric(ctx context.Context, namespace, name string, obj Object) (*unstructured.Unstructured, error) {
+	_, resource, err := c.Describe(obj)
+	if err != nil {
+		return nil, fmt.Errorf("could not get Kubernetes API information for %s/%s: %w", obj.GetNamespace(), obj.GetName(), err)
+	}
+
+	dynamicClient := c.DynamicClientset.Resource(resource).Namespace(namespace)
+
+	return dynamicClient.Get(ctx, name, metav1.GetOptions{})
+}
+
+func (c *Client) DeleteGeneric(ctx context.Context, obj Object) error {
+	_, resource, err := c.Describe(obj)
+	if err != nil {
+		return fmt.Errorf("could not get Kubernetes API information for %s/%s: %w", obj.GetNamespace(), obj.GetName(), err)
+	}
+
+	dynamicClient := c.DynamicClientset.Resource(resource).Namespace(obj.GetNamespace())
+
+	return dynamicClient.Delete(ctx, obj.GetName(), metav1.DeleteOptions{})
 }
