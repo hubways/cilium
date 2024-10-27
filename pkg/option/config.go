@@ -1001,6 +1001,9 @@ const (
 	// LBAffinityMapMaxEntries configures max entries of bpf map for session affinity.
 	LBAffinityMapMaxEntries = "bpf-lb-affinity-map-max"
 
+	// LBSourceRangeAllTypes configures service source ranges for all service types.
+	LBSourceRangeAllTypes = "bpf-lb-source-range-all-types"
+
 	// LBSourceRangeMapMaxEntries configures max entries of bpf map for service source ranges.
 	LBSourceRangeMapMaxEntries = "bpf-lb-source-range-map-max"
 
@@ -1180,6 +1183,9 @@ const (
 
 	// EnableExternalWorkloads enables the support for external workloads.
 	EnableExternalWorkloads = "enable-external-workloads"
+
+	// EnableSourceIPVerification enables the source ip verification, defaults to true
+	EnableSourceIPVerification = "enable-source-ip-verification"
 )
 
 const (
@@ -2056,6 +2062,10 @@ type DaemonConfig struct {
 	// LBAffinityMapEntries is the maximum number of entries allowed in BPF lbmap for session affinities.
 	LBAffinityMapEntries int
 
+	// LBSourceRangeAllTypes enables propagation of loadbalancerSourceRanges to all Kubernetes
+	// service types which were created from the LoadBalancer service.
+	LBSourceRangeAllTypes bool
+
 	// LBSourceRangeMapEntries is the maximum number of entries allowed in BPF lbmap for source ranges.
 	LBSourceRangeMapEntries int
 
@@ -2220,6 +2230,9 @@ type DaemonConfig struct {
 
 	// EnableNonDefaultDenyPolicies allows policies to define whether they are operating in default-deny mode
 	EnableNonDefaultDenyPolicies bool
+
+	// EnableSourceIPVerification enables the source ip validation of connection from endpoints to endpoints
+	EnableSourceIPVerification bool
 }
 
 var (
@@ -2279,6 +2292,8 @@ var (
 		EnableInternalTrafficPolicy:   defaults.EnableInternalTrafficPolicy,
 
 		EnableNonDefaultDenyPolicies: defaults.EnableNonDefaultDenyPolicies,
+
+		EnableSourceIPVerification: defaults.EnableSourceIPVerification,
 	}
 )
 
@@ -2922,6 +2937,7 @@ func (c *DaemonConfig) Populate(vp *viper.Viper) {
 	c.BPFEventsTraceEnabled = vp.GetBool(BPFEventsTraceEnabled)
 	c.BPFConntrackAccounting = vp.GetBool(BPFConntrackAccounting)
 	c.EnableIPSecEncryptedOverlay = vp.GetBool(EnableIPSecEncryptedOverlay)
+	c.LBSourceRangeAllTypes = vp.GetBool(LBSourceRangeAllTypes)
 
 	c.ServiceNoBackendResponse = vp.GetString(ServiceNoBackendResponse)
 	switch c.ServiceNoBackendResponse {
@@ -3270,6 +3286,8 @@ func (c *DaemonConfig) Populate(vp *viper.Viper) {
 	c.LoadBalancerProtocolDifferentiation = vp.GetBool(LoadBalancerProtocolDifferentiation)
 
 	c.EnableInternalTrafficPolicy = vp.GetBool(EnableInternalTrafficPolicy)
+
+	c.EnableSourceIPVerification = vp.GetBool(EnableSourceIPVerification)
 }
 
 func (c *DaemonConfig) populateLoadBalancerSettings(vp *viper.Viper) {
