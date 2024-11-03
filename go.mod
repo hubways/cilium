@@ -24,7 +24,7 @@ require (
 	github.com/cilium/endpointslice-controller v0.0.0-20240409203012-75cb5d61db1b
 	github.com/cilium/fake v0.6.1
 	github.com/cilium/hive v0.0.0-20241021113747-bb8f3c0bede4
-	github.com/cilium/linters v0.0.0-20241008062613-dfa317e9f337
+	github.com/cilium/linters v0.1.0
 	github.com/cilium/lumberjack/v2 v2.3.0
 	github.com/cilium/proxy v0.0.0-20240909042906-ae435a5bef38
 	github.com/cilium/statedb v0.3.2
@@ -129,6 +129,7 @@ require (
 	k8s.io/component-base v0.31.2
 	k8s.io/endpointslice v0.31.1
 	k8s.io/klog/v2 v2.130.1
+	k8s.io/kubectl v0.31.2
 	k8s.io/utils v0.0.0-20240921022957-49e7df575cb6
 	sigs.k8s.io/controller-runtime v0.19.0
 	sigs.k8s.io/controller-tools v0.16.3
@@ -320,7 +321,6 @@ require (
 	k8s.io/gengo v0.0.0-20230829151522-9cce18d56c01 // indirect
 	k8s.io/gengo/v2 v2.0.0-20240228010128-51d4e06bde70 // indirect
 	k8s.io/kube-openapi v0.0.0-20240423202451-8948a665c108 // indirect
-	k8s.io/kubectl v0.31.1 // indirect
 	oras.land/oras-go v1.2.5 // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/kustomize/api v0.17.2 // indirect
