@@ -371,7 +371,7 @@ contributors across the globe, there is almost always someone available to help.
 | envoy.extraVolumes | list | `[]` | Additional envoy volumes. |
 | envoy.healthPort | int | `9878` | TCP port for the health API. |
 | envoy.idleTimeoutDurationSeconds | int | `60` | Set Envoy upstream HTTP idle connection timeout seconds. Does not apply to connections with pending requests. Default 60s |
-| envoy.image | object | `{"digest":"sha256:d7db101d856c478a497fc79fab3ce3c732221e80fdf37bfe001672acb155d164","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.30.7-1730239547-90b7953f5b6ffe617fa630d42ea6d5b65fba1b9e","useDigest":true}` | Envoy container image. |
+| envoy.image | object | `{"digest":"sha256:f89267235e105c008e00e8cac1c11b325b69dc25473c4170e2f1dfbe72303bc8","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.30.7-1730450803-0a83534f8c57b4d24405b213ed4b65e4e4987d8d","useDigest":true}` | Envoy container image. |
 | envoy.livenessProbe.failureThreshold | int | `10` | failure threshold of liveness probe |
 | envoy.livenessProbe.periodSeconds | int | `30` | interval between checks of the liveness probe |
 | envoy.log.defaultLevel | string | Defaults to the default log level of the Cilium Agent - `info` | Default log level of Envoy application log that is configured if Cilium debug / verbose logging isn't enabled. This option allows to have a different log level than the Cilium Agent - e.g. lower it to `critical`. Possible values: trace, debug, info, warning, error, critical, off |
@@ -651,6 +651,7 @@ contributors across the globe, there is almost always someone available to help.
 | ipam.operator.clusterPoolIPv6PodCIDRList | list | `["fd00::/104"]` | IPv6 CIDR list range to delegate to individual nodes for IPAM. |
 | ipam.operator.externalAPILimitBurstSize | int | `20` | The maximum burst size when rate limiting access to external APIs. Also known as the token bucket capacity. |
 | ipam.operator.externalAPILimitQPS | float | `4.0` | The maximum queries per second when rate limiting access to external APIs. Also known as the bucket refill rate, which is used to refill the bucket up to the burst size capacity. |
+| iptablesRandomFully | bool | `false` | Configure iptables--random-fully. Disabled by default. View https://github.com/cilium/cilium/issues/13037 for more information. |
 | ipv4.enabled | bool | `true` | Enable IPv4 support. |
 | ipv4NativeRoutingCIDR | string | `""` | Allows to explicitly specify the IPv4 CIDR for native routing. When specified, Cilium assumes networking for this CIDR is preconfigured and hands traffic destined for that range to the Linux network stack without applying any SNAT. Generally speaking, specifying a native routing CIDR implies that Cilium can depend on the underlying networking stack to route packets to their destination. To offer a concrete example, if Cilium is configured to use direct routing and the Kubernetes CIDR is included in the native routing CIDR, the user must configure the routes to reach pods, either manually or by setting the auto-direct-node-routes flag. |
 | ipv6.enabled | bool | `false` | Enable IPv6 support. |
@@ -846,7 +847,7 @@ contributors across the globe, there is almost always someone available to help.
 | serviceAccounts.clustermeshcertgen | object | `{"annotations":{},"automount":true,"create":true,"name":"clustermesh-apiserver-generate-certs"}` | Clustermeshcertgen is used if clustermesh.apiserver.tls.auto.method=cronJob |
 | serviceAccounts.hubblecertgen | object | `{"annotations":{},"automount":true,"create":true,"name":"hubble-generate-certs"}` | Hubblecertgen is used if hubble.tls.auto.method=cronJob |
 | serviceAccounts.nodeinit.enabled | bool | `false` | Enabled is temporary until https://github.com/cilium/cilium-cli/issues/1396 is implemented. Cilium CLI doesn't create the SAs for node-init, thus the workaround. Helm is not affected by this issue. Name and automount can be configured, if enabled is set to true. Otherwise, they are ignored. Enabled can be removed once the issue is fixed. Cilium-nodeinit DS must also be fixed. |
-| serviceNoBackendResponse | string | `"reject"` | Configure what the response should be to traffic for a service without backends. "reject" only works on kernels >= 5.10, on lower kernels we fallback to "drop". Possible values:  - reject (default)  - drop |
+| serviceNoBackendResponse | string | `"reject"` | Configure what the response should be to traffic for a service without backends. Possible values:  - reject (default)  - drop |
 | sleepAfterInit | bool | `false` | Do not run Cilium agent when running with clean mode. Useful to completely uninstall Cilium as it will stop Cilium from starting and create artifacts in the node. |
 | socketLB | object | `{"enabled":false}` | Configure socket LB |
 | socketLB.enabled | bool | `false` | Enable socket LB |
