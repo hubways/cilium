@@ -15,6 +15,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/pflag"
 
+	"github.com/cilium/cilium/pkg/crypto/certificatemanager"
 	"github.com/cilium/cilium/pkg/endpointstate"
 	"github.com/cilium/cilium/pkg/ipcache"
 	"github.com/cilium/cilium/pkg/k8s/client"
@@ -54,6 +55,7 @@ type envoyProxyConfig struct {
 	EnvoyBaseID                       uint64
 	EnvoyKeepCapNetbindservice        bool
 	ProxyConnectTimeout               uint
+	ProxyInitialFetchTimeout          uint
 	ProxyGID                          uint
 	ProxyMaxRequestsPerConnection     int
 	ProxyMaxConnectionDurationSeconds int
@@ -78,6 +80,7 @@ func (r envoyProxyConfig) Flags(flags *pflag.FlagSet) {
 	flags.Uint64("envoy-base-id", 0, "Envoy base ID")
 	flags.Bool("envoy-keep-cap-netbindservice", false, "Keep capability NET_BIND_SERVICE for Envoy process")
 	flags.Uint("proxy-connect-timeout", 2, "Time after which a TCP connect attempt is considered failed unless completed (in seconds)")
+	flags.Uint("proxy-initial-fetch-timeout", 30, "Time after which an xDS stream is considered timed out (in seconds)")
 	flags.Uint("proxy-gid", 1337, "Group ID for proxy control plane sockets.")
 	flags.Int("proxy-max-requests-per-connection", 0, "Set Envoy HTTP option max_requests_per_connection. Default 0 (disable)")
 	flags.Int("proxy-max-connection-duration-seconds", 0, "Set Envoy HTTP option max_connection_duration seconds. Default 0 (disable)")
@@ -130,9 +133,15 @@ type xdsServerParams struct {
 	// Depend on ArtifactCopier to enforce init order and ensure that the additional artifacts are copied
 	// before starting the xDS server (and starting to configure Envoy).
 	ArtifactCopier *ArtifactCopier
+
+	SecretManager certificatemanager.SecretManager
 }
 
 func newEnvoyXDSServer(params xdsServerParams) (XDSServer, error) {
+	// Override the default value before bootstrap is created for embedded envoy, or
+	// the xDS ConfigSource is used for CEC/CCEC.
+	CiliumXDSConfigSource.InitialFetchTimeout.Seconds = int64(params.EnvoyProxyConfig.ProxyInitialFetchTimeout)
+
 	xdsServer, err := newXDSServer(
 		params.RestorerPromise,
 		params.IPCache,
@@ -149,7 +158,8 @@ func newEnvoyXDSServer(params xdsServerParams) (XDSServer, error) {
 			useFullTLSContext:             params.EnvoyProxyConfig.UseFullTLSContext,
 			proxyXffNumTrustedHopsIngress: params.EnvoyProxyConfig.ProxyXffNumTrustedHopsIngress,
 			proxyXffNumTrustedHopsEgress:  params.EnvoyProxyConfig.ProxyXffNumTrustedHopsEgress,
-		})
+		},
+		params.SecretManager)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Envoy xDS server: %w", err)
 	}
@@ -308,8 +318,9 @@ type syncerParams struct {
 
 	K8sClientset client.Clientset
 
-	Config    secretSyncConfig
-	XdsServer XDSServer
+	Config        secretSyncConfig
+	XdsServer     XDSServer
+	SecretManager certificatemanager.SecretManager
 }
 
 func registerSecretSyncer(params syncerParams) error {
@@ -324,9 +335,10 @@ func registerSecretSyncer(params syncerParams) error {
 	namespaces := map[string]struct{}{}
 
 	for namespace, cond := range map[string]func() bool{
-		params.Config.EnvoySecretsNamespace:      func() bool { return option.Config.EnableEnvoyConfig },
-		params.Config.IngressSecretsNamespace:    func() bool { return params.Config.EnableIngressController },
-		params.Config.GatewayAPISecretsNamespace: func() bool { return params.Config.EnableGatewayAPI },
+		params.Config.EnvoySecretsNamespace:           func() bool { return option.Config.EnableEnvoyConfig },
+		params.Config.IngressSecretsNamespace:         func() bool { return params.Config.EnableIngressController },
+		params.Config.GatewayAPISecretsNamespace:      func() bool { return params.Config.EnableGatewayAPI },
+		params.SecretManager.GetSecretSyncNamespace(): func() bool { return params.SecretManager.PolicySecretSyncEnabled() },
 	} {
 		if len(namespace) > 0 && cond() {
 			namespaces[namespace] = struct{}{}
@@ -345,7 +357,11 @@ func registerSecretSyncer(params syncerParams) error {
 
 	params.Lifecycle.Append(jobGroup)
 
-	secretSyncer := newSecretSyncer(params.Logger, params.XdsServer)
+	secretSyncerLogger := params.Logger.WithField("controller", "secretSyncer")
+
+	secretSyncer := newSecretSyncer(secretSyncerLogger, params.XdsServer)
+
+	secretSyncerLogger.Debug("Watching namespaces for secrets", "namespaces", namespaces)
 
 	for ns := range namespaces {
 		jobGroup.Add(job.Observer(

@@ -600,7 +600,7 @@ bpf:
   # @schema
   # type: [null, boolean]
   # @schema
-  # -- (bool) Configure the eBPF-based TPROXY to reduce reliance on iptables rules
+  # -- (bool) Configure the eBPF-based TPROXY (beta) to reduce reliance on iptables rules
   # for implementing Layer 7 policy.
   # @default -- `false`
   tproxy: ~
@@ -2292,6 +2292,8 @@ envoy:
     defaultLevel: ~
   # -- Time in seconds after which a TCP connection attempt times out
   connectTimeoutSeconds: 2
+  # -- Time in seconds after which the initial fetch on an xDS stream is considered timed out
+  initialFetchTimeoutSeconds: 30
   # -- ProxyMaxRequestsPerConnection specifies the max_requests_per_connection setting for Envoy
   maxRequestsPerConnection: 0
   # -- Set Envoy HTTP option max_connection_duration seconds. Default 0 (disable)
@@ -2541,6 +2543,20 @@ tls:
   #   - local
   #   - k8s
   secretsBackend: local
+  # -- Configures settings for synchronization of TLS Interception Secrets
+  secretSync:
+    # -- Enable synchronization of Secrets for TLS Interception. If disabled and
+    # tls.secretsBackend is set to 'k8s', then secrets will be read directly by the agent.
+    enabled: true
+    # -- This configures secret synchronization for secrets used in CiliumNetworkPolicies
+    secretsNamespace:
+      # -- Create secrets namespace for TLS Interception secrets.
+      create: true
+      # -- Name of TLS Interception secret namespace.
+      name: cilium-secrets
+      # -- Enable secret sync, which will make sure all TLS secrets used by TLS Interception are synced to secretsNamespace.name.
+      # If disabled, TLS secrets must be maintained externally.
+      enabled: true
   # -- Base64 encoded PEM values for the CA certificate and private key.
   # This can be used as common CA to generate certificates used by hubble and clustermesh components.
   # It is neither required nor used when cert-manager is used to generate the certificates.
