@@ -114,7 +114,7 @@ jobs:
 
           - name: '2'
             # renovate: datasource=docker depName=quay.io/lvh-images/kind
-            kernel: '5.4-20241104.124130'
+            kernel: '5.4-20241107.001101'
             kube-proxy: 'iptables'
             kpr: 'false'
             tunnel: 'disabled'
@@ -122,7 +122,7 @@ jobs:
 
           - name: '3'
             # renovate: datasource=docker depName=quay.io/lvh-images/kind
-            kernel: '5.10-20241104.124130'
+            kernel: '5.10-20241107.001101'
             kube-proxy: 'iptables'
             kpr: 'false'
             tunnel: 'disabled'
@@ -131,7 +131,7 @@ jobs:
 
           - name: '4'
             # renovate: datasource=docker depName=quay.io/lvh-images/kind
-            kernel: '5.10-20241104.124130'
+            kernel: '5.10-20241107.001101'
             kube-proxy: 'iptables'
             kpr: 'true'
             devices: '{eth0,eth1}'
@@ -140,10 +140,11 @@ jobs:
             lb-mode: 'snat'
             endpoint-routes: 'true'
             egress-gateway: 'true'
+            ingress-controller: 'true'
 
           - name: '5'
             # renovate: datasource=docker depName=quay.io/lvh-images/kind
-            kernel: '5.15-20241104.124130'
+            kernel: '5.15-20241107.001101'
             kube-proxy: 'iptables'
             kpr: 'true'
             devices: '{eth0,eth1}'
@@ -153,10 +154,11 @@ jobs:
             endpoint-routes: 'true'
             egress-gateway: 'true'
             host-fw: 'false' # enabling breaks downgrading (missed tail calls)
+            ingress-controller: 'true'
 
           - name: '6'
             # renovate: datasource=docker depName=quay.io/lvh-images/kind
-            kernel: '6.1-20241104.124130'
+            kernel: '6.1-20241107.001101'
             kube-proxy: 'none'
             kpr: 'true'
             devices: '{eth0,eth1}'
@@ -170,7 +172,7 @@ jobs:
 
           - name: '7'
             # renovate: datasource=docker depName=quay.io/lvh-images/kind
-            kernel: 'bpf-next-20241105.013305'
+            kernel: 'bpf-next-20241118.013900'
             kube-proxy: 'none'
             kpr: 'true'
             devices: '{eth0,eth1}'
@@ -185,7 +187,7 @@ jobs:
 
           - name: '8'
             # renovate: datasource=docker depName=quay.io/lvh-images/kind
-            kernel: 'bpf-next-20241105.013305'
+            kernel: 'bpf-next-20241118.013900'
             kube-proxy: 'iptables'
             kpr: 'false'
             tunnel: 'geneve'
@@ -196,7 +198,7 @@ jobs:
 
           - name: '9'
             # renovate: datasource=docker depName=quay.io/lvh-images/kind
-            kernel: '5.10-20241104.124130'
+            kernel: '5.10-20241107.001101'
             kube-proxy: 'iptables'
             kpr: 'true'
             devices: '{eth0,eth1}'
@@ -207,10 +209,11 @@ jobs:
             lb-mode: 'snat'
             endpoint-routes: 'true'
             egress-gateway: 'true'
+            ingress-controller: 'true'
 
           - name: '10'
             # renovate: datasource=docker depName=quay.io/lvh-images/kind
-            kernel: '5.15-20241104.124130'
+            kernel: '5.15-20241107.001101'
             kube-proxy: 'iptables'
             kpr: 'false'
             tunnel: 'disabled'
@@ -224,7 +227,7 @@ jobs:
 
           - name: '11'
             # renovate: datasource=docker depName=quay.io/lvh-images/kind
-            kernel: '6.1-20241104.124130'
+            kernel: '6.1-20241107.001101'
             kube-proxy: 'none'
             kpr: 'true'
             devices: '{eth0,eth1}'
@@ -241,7 +244,7 @@ jobs:
 
           - name: '12'
             # renovate: datasource=docker depName=quay.io/lvh-images/kind
-            kernel: 'bpf-next-20241105.013305'
+            kernel: 'bpf-next-20241118.013900'
             kube-proxy: 'none'
             kpr: 'true'
             devices: '{eth0,eth1}'
@@ -268,7 +271,7 @@ jobs:
             # explains why 5.4 might cause north-south-loadbalancing tests to
             # fail.
             # renovate: datasource=docker depName=quay.io/lvh-images/kind
-            kernel: '5.15-20241104.124130'
+            kernel: '5.15-20241107.001101'
             kube-proxy: 'iptables'
             kpr: 'true'
             devices: '{eth0,eth1}'
@@ -281,7 +284,7 @@ jobs:
 
           - name: '15'
             # renovate: datasource=docker depName=quay.io/lvh-images/kind
-            kernel: 'bpf-next-20241105.013305'
+            kernel: 'bpf-next-20241118.013900'
             kube-proxy: 'none'
             kpr: 'true'
             devices: '{eth0,eth1}'
@@ -295,7 +298,7 @@ jobs:
 
           - name: '16'
             # renovate: datasource=docker depName=quay.io/lvh-images/kind
-            kernel: '5.15-20241104.124130'
+            kernel: '5.15-20241107.001101'
             kube-proxy: 'none'
             kpr: 'true'
             devices: '{eth0,eth1}'
@@ -310,7 +313,7 @@ jobs:
 
           - name: '17'
             # renovate: datasource=docker depName=quay.io/lvh-images/kind
-            kernel: 'bpf-20241105.013305'
+            kernel: 'bpf-20241118.013900'
             misc: 'bpf.datapathMode=netkit,bpf.masquerade=true,enableIPv4BIGTCP=true,enableIPv6BIGTCP=true'
             kube-proxy: 'none'
             kpr: 'true'
@@ -322,7 +325,7 @@ jobs:
 
           - name: '18'
             # renovate: datasource=docker depName=quay.io/lvh-images/kind
-            kernel: 'bpf-20241105.013305'
+            kernel: 'bpf-20241118.013900'
             misc: 'bpf.datapathMode=netkit-l2,bpf.masquerade=true,enableIPv4BIGTCP=true,enableIPv6BIGTCP=true'
             kube-proxy: 'none'
             kpr: 'true'
@@ -334,7 +337,7 @@ jobs:
 
           - name: '19'
             # renovate: datasource=docker depName=quay.io/lvh-images/kind
-            kernel: 'bpf-20241105.013305'
+            kernel: 'bpf-20241118.013900'
             misc: 'bpf.datapathMode=netkit,bpf.masquerade=true'
             kube-proxy: 'none'
             kpr: 'true'
@@ -346,7 +349,7 @@ jobs:
 
           - name: '20'
             # renovate: datasource=docker depName=quay.io/lvh-images/kind
-            kernel: 'bpf-20241105.013305'
+            kernel: 'bpf-20241118.013900'
             misc: 'bpf.datapathMode=netkit-l2,bpf.masquerade=true'
             kube-proxy: 'none'
             kpr: 'true'
@@ -357,7 +360,7 @@ jobs:
 
           - name: '21'
             # renovate: datasource=docker depName=quay.io/lvh-images/kind
-            kernel: 'bpf-20241105.013305'
+            kernel: 'bpf-20241118.013900'
             misc: 'bpf.datapathMode=netkit,bpf.masquerade=true'
             kube-proxy: 'none'
             kpr: 'true'
@@ -368,7 +371,7 @@ jobs:
 
           - name: '22'
             # renovate: datasource=docker depName=quay.io/lvh-images/kind
-            kernel: 'bpf-20241105.013305'
+            kernel: 'bpf-20241118.013900'
             misc: 'bpf.datapathMode=netkit-l2,bpf.masquerade=true'
             kube-proxy: 'none'
             kpr: 'true'
@@ -379,7 +382,7 @@ jobs:
 
           - name: '23'
             # renovate: datasource=docker depName=quay.io/lvh-images/kind
-            kernel: 'bpf-20241105.013305'
+            kernel: 'bpf-20241118.013900'
             misc: 'bpf.datapathMode=netkit,bpf.masquerade=true'
             kube-proxy: 'none'
             kpr: 'true'
@@ -393,7 +396,7 @@ jobs:
 
           - name: '24'
             # renovate: datasource=docker depName=quay.io/lvh-images/kind
-            kernel: 'bpf-net-20241105.013305'
+            kernel: 'bpf-net-20241118.013900'
             misc: 'bpf.datapathMode=netkit,bpf.masquerade=true,enableIPv4BIGTCP=true,enableIPv6BIGTCP=true'
             kube-proxy: 'none'
             kpr: 'true'
@@ -401,11 +404,12 @@ jobs:
             tunnel: 'disabled'
             ciliumendpointslice: 'true'
             endpoint-routes: 'true'
+            ingress-controller: 'true'
             skip-upgrade: 'true'
 
           - name: '25'
             # renovate: datasource=docker depName=quay.io/lvh-images/kind
-            kernel: 'bpf-net-20241105.013305'
+            kernel: 'bpf-net-20241118.013900'
             misc: 'bpf.datapathMode=netkit-l2,bpf.masquerade=true,enableIPv4BIGTCP=true,enableIPv6BIGTCP=true'
             kube-proxy: 'none'
             kpr: 'true'
@@ -413,13 +417,14 @@ jobs:
             tunnel: 'disabled'
             ciliumendpointslice: 'true'
             endpoint-routes: 'true'
+            ingress-controller: 'true'
             skip-upgrade: 'true'
 
           # Example of a feature that is being introduced, and we want to test
           # it without performing an upgrade, we use skip-upgrade: 'true'
           # - name: '23'
           #   # renovate: datasource=docker depName=quay.io/lvh-images/kind
-          #   kernel: 'bpf-20241105.013305'
+          #   kernel: 'bpf-20241118.013900'
           #   misc: 'bpf.datapathMode=netkit-l2,bpf.masquerade=true'
           #   skip-upgrade: 'true'
 
