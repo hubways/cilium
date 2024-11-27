@@ -350,6 +350,11 @@ func TestParseServiceWithServiceTypeExposure(t *testing.T) {
 }
 
 func TestParseService(t *testing.T) {
+	oldDefaultLbAlg := option.Config.NodePortAlg
+	option.Config.NodePortAlg = option.NodePortAlgRandom
+	defer func() {
+		option.Config.NodePortAlg = oldDefaultLbAlg
+	}()
 	objMeta := slim_metav1.ObjectMeta{
 		Name:      "foo",
 		Namespace: "bar",
@@ -380,8 +385,10 @@ func TestParseService(t *testing.T) {
 		Ports:                    map[loadbalancer.FEPortName]*loadbalancer.L4Addr{},
 		NodePorts:                map[loadbalancer.FEPortName]NodePortToFrontend{},
 		LoadBalancerSourceRanges: map[string]*cidr.CIDR{},
+		SourceRangesPolicy:       loadbalancer.SVCSourceRangesPolicyAllow,
 		Type:                     loadbalancer.SVCTypeClusterIP,
 		ForwardingMode:           loadbalancer.SVCForwardingModeSNAT,
+		LoadBalancerAlgo:         loadbalancer.SVCLoadBalancingAlgoRandom,
 	}, svc)
 
 	k8sSvc = &slim_corev1.Service{
@@ -402,8 +409,10 @@ func TestParseService(t *testing.T) {
 		Ports:                    map[loadbalancer.FEPortName]*loadbalancer.L4Addr{},
 		NodePorts:                map[loadbalancer.FEPortName]NodePortToFrontend{},
 		LoadBalancerSourceRanges: map[string]*cidr.CIDR{},
+		SourceRangesPolicy:       loadbalancer.SVCSourceRangesPolicyAllow,
 		Type:                     loadbalancer.SVCTypeClusterIP,
 		ForwardingMode:           loadbalancer.SVCForwardingModeSNAT,
+		LoadBalancerAlgo:         loadbalancer.SVCLoadBalancingAlgoRandom,
 	}, svc)
 
 	k8sSvc = &slim_corev1.Service{
@@ -426,8 +435,10 @@ func TestParseService(t *testing.T) {
 		Ports:                    map[loadbalancer.FEPortName]*loadbalancer.L4Addr{},
 		NodePorts:                map[loadbalancer.FEPortName]NodePortToFrontend{},
 		LoadBalancerSourceRanges: map[string]*cidr.CIDR{},
+		SourceRangesPolicy:       loadbalancer.SVCSourceRangesPolicyAllow,
 		Type:                     loadbalancer.SVCTypeClusterIP,
 		ForwardingMode:           loadbalancer.SVCForwardingModeSNAT,
+		LoadBalancerAlgo:         loadbalancer.SVCLoadBalancingAlgoRandom,
 	}, svc)
 
 	serviceInternalTrafficPolicyLocal := slim_corev1.ServiceInternalTrafficPolicyLocal
@@ -451,8 +462,10 @@ func TestParseService(t *testing.T) {
 		Ports:                    map[loadbalancer.FEPortName]*loadbalancer.L4Addr{},
 		NodePorts:                map[loadbalancer.FEPortName]NodePortToFrontend{},
 		LoadBalancerSourceRanges: map[string]*cidr.CIDR{},
+		SourceRangesPolicy:       loadbalancer.SVCSourceRangesPolicyAllow,
 		Type:                     loadbalancer.SVCTypeNodePort,
 		ForwardingMode:           loadbalancer.SVCForwardingModeSNAT,
+		LoadBalancerAlgo:         loadbalancer.SVCLoadBalancingAlgoRandom,
 	}, svc)
 
 	oldNodePort := option.Config.EnableNodePort
@@ -513,7 +526,13 @@ func TestParseService(t *testing.T) {
 		ipv4InternalAddrCluster.Addr(),
 		ipv4NodePortAddrCluster.Addr(),
 	}
+	oldLbAlg := option.Config.LoadBalancerAlgAnnotation
+	option.Config.LoadBalancerAlgAnnotation = true
 
+	option.Config.NodePortAlg = option.NodePortAlgMaglev
+	defer func() {
+		option.Config.LoadBalancerAlgAnnotation = oldLbAlg
+	}()
 	id, svc = ParseService(k8sSvc, addrs)
 	require.EqualValues(t, ServiceID{Namespace: "bar", Name: "foo"}, id)
 	require.EqualValues(t, &Service{
@@ -537,9 +556,13 @@ func TestParseService(t *testing.T) {
 		LoadBalancerIPs:          map[string]net.IP{loadbalancerIngressIP: net.ParseIP(loadbalancerIngressIP)},
 		Type:                     loadbalancer.SVCTypeLoadBalancer,
 		TopologyAware:            true,
+		SourceRangesPolicy:       loadbalancer.SVCSourceRangesPolicyAllow,
 		ForwardingMode:           loadbalancer.SVCForwardingModeSNAT,
 		Annotations:              map[string]string{"service.kubernetes.io/topology-aware-hints": "auto"},
+		LoadBalancerAlgo:         loadbalancer.SVCLoadBalancingAlgoMaglev,
 	}, svc)
+
+	objMeta.Annotations[annotation.ServiceLoadBalancingAlgo] = option.NodePortAlgRandom
 
 	ipMode := slim_corev1.LoadBalancerIPModeProxy
 	k8sSvc = &slim_corev1.Service{
@@ -595,10 +618,15 @@ func TestParseService(t *testing.T) {
 		LoadBalancerSourceRanges: map[string]*cidr.CIDR{},
 		K8sExternalIPs:           map[string]net.IP{},
 		LoadBalancerIPs:          map[string]net.IP{},
+		SourceRangesPolicy:       loadbalancer.SVCSourceRangesPolicyAllow,
 		Type:                     loadbalancer.SVCTypeLoadBalancer,
 		ForwardingMode:           loadbalancer.SVCForwardingModeSNAT,
 		TopologyAware:            true,
-		Annotations:              map[string]string{"service.kubernetes.io/topology-aware-hints": "auto"},
+		Annotations: map[string]string{
+			"service.kubernetes.io/topology-aware-hints": "auto",
+			annotation.ServiceLoadBalancingAlgo:          option.NodePortAlgRandom,
+		},
+		LoadBalancerAlgo: loadbalancer.SVCLoadBalancingAlgoRandom,
 	}, svc)
 
 	// Same as the previous test, but LB service status is empty.
@@ -646,10 +674,15 @@ func TestParseService(t *testing.T) {
 		LoadBalancerSourceRanges: map[string]*cidr.CIDR{},
 		K8sExternalIPs:           map[string]net.IP{},
 		LoadBalancerIPs:          map[string]net.IP{},
+		SourceRangesPolicy:       loadbalancer.SVCSourceRangesPolicyAllow,
 		Type:                     loadbalancer.SVCTypeLoadBalancer,
 		ForwardingMode:           loadbalancer.SVCForwardingModeSNAT,
 		TopologyAware:            true,
-		Annotations:              map[string]string{"service.kubernetes.io/topology-aware-hints": "auto"},
+		Annotations: map[string]string{
+			"service.kubernetes.io/topology-aware-hints": "auto",
+			annotation.ServiceLoadBalancingAlgo:          option.NodePortAlgRandom,
+		},
+		LoadBalancerAlgo: loadbalancer.SVCLoadBalancingAlgoRandom,
 	}, svc)
 }
 

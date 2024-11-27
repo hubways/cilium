@@ -305,6 +305,12 @@ const (
 	// SessionAffinityTimeout is a timeout for the session affinity
 	SessionAffinityTimeout = "sessionAffinityTimeout"
 
+	// LoadBalancerAlgo is algorithm for backend selection
+	LoadBalancerAlgo = "LoadBalancerAlgo"
+
+	// LoadBalancerSourceRangesPolicy is the LB SVC source ranges policy
+	LoadBalancerSourceRangesPolicy = "loadBalancerSourceRangesPolicy"
+
 	// LoadBalancerSourceRanges is the LB SVC source ranges
 	LoadBalancerSourceRanges = "loadBalancerSourceRanges"
 

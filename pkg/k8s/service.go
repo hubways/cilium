@@ -76,6 +76,17 @@ func getAnnotationServiceForwardingMode(svc *slim_corev1.Service) loadbalancer.S
 
 	return loadbalancer.SVCForwardingModeSNAT
 }
+func getAnnotationServiceLoadBalancingAlgo(svc *slim_corev1.Service) (loadbalancer.SVCLoadBalancingAlgo, error) {
+	if value, ok := annotation.Get(svc, annotation.ServiceLoadBalancingAlgo); ok {
+		val := loadbalancer.ToSVCLoadBalancingAlgo(strings.ToLower(value))
+		if val != loadbalancer.SVCLoadBalancingAlgoUndef {
+			return val, nil
+		}
+		return loadbalancer.ToSVCLoadBalancingAlgo(option.Config.NodePortAlg), fmt.Errorf("Value %q is not supported for %q", val, annotation.ServiceLoadBalancingAlgo)
+	}
+
+	return loadbalancer.ToSVCLoadBalancingAlgo(option.Config.NodePortAlg), nil
+}
 
 func getTopologyAware(svc *slim_corev1.Service) bool {
 	return getAnnotationTopologyAwareHints(svc) ||
@@ -90,6 +101,17 @@ func getAnnotationTopologyAwareHints(svc *slim_corev1.Service) bool {
 		value = svc.ObjectMeta.Annotations[v1.AnnotationTopologyMode]
 	}
 	return !(value == "" || value == "disabled" || value == "Disabled")
+}
+
+func getAnnotationServiceSourceRangesPolicy(svc *slim_corev1.Service) loadbalancer.SVCSourceRangesPolicy {
+	if value, ok := annotation.Get(svc, annotation.ServiceSourceRangesPolicy); ok {
+		tmp := loadbalancer.SVCSourceRangesPolicy(strings.ToLower(value))
+		if tmp == loadbalancer.SVCSourceRangesPolicyDeny {
+			return tmp
+		}
+	}
+
+	return loadbalancer.SVCSourceRangesPolicyAllow
 }
 
 // isValidServiceFrontendIP returns true if the provided service frontend IP address type
@@ -245,10 +267,21 @@ func ParseService(svc *slim_corev1.Service, nodePortAddrs []netip.Addr) (Service
 		uint16(svc.Spec.HealthCheckNodePort), svc.Annotations, svc.Labels, svc.Spec.Selector,
 		svc.GetNamespace(), svcType)
 
-	svcInfo.Shared = getAnnotationShared(svc)
+	svcInfo.SourceRangesPolicy = getAnnotationServiceSourceRangesPolicy(svc)
 	svcInfo.ForwardingMode = getAnnotationServiceForwardingMode(svc)
 	svcInfo.IncludeExternal = getAnnotationIncludeExternal(svc)
 	svcInfo.ServiceAffinity = getAnnotationServiceAffinity(svc)
+	svcInfo.Shared = getAnnotationShared(svc)
+
+	if option.Config.LoadBalancerAlgAnnotation {
+		var err error
+		svcInfo.LoadBalancerAlgo, err = getAnnotationServiceLoadBalancingAlgo(svc)
+		if err != nil {
+			scopedLog.WithError(err).Warnf("Ignoring %q annotation, applying global configuration: %v", annotation.ServiceLoadBalancingAlgo, svcInfo.LoadBalancerAlgo)
+		}
+	} else {
+		svcInfo.LoadBalancerAlgo = loadbalancer.ToSVCLoadBalancingAlgo(option.Config.NodePortAlg)
+	}
 
 	if svc.Spec.SessionAffinity == slim_corev1.ServiceAffinityClientIP {
 		svcInfo.SessionAffinity = true
@@ -407,6 +440,10 @@ type Service struct {
 	// to the backend.
 	ForwardingMode loadbalancer.SVCForwardingMode
 
+	// SourceRangesPolicy controls whether the specified loadBalancerSourceRanges
+	// CIDR set defines an allow- or deny-list.
+	SourceRangesPolicy loadbalancer.SVCSourceRangesPolicy
+
 	// HealthCheckNodePort defines on which port the node runs a HTTP health
 	// check server which may be used by external loadbalancers to determine
 	// if a node has local backends. This will only have effect if both
@@ -425,6 +462,9 @@ type Service struct {
 	// manually.
 	// +deepequal-gen=false
 	K8sExternalIPs map[string]net.IP
+
+	// LoadBalancerAlgo indicates which backend selection algorithm to use.
+	LoadBalancerAlgo loadbalancer.SVCLoadBalancingAlgo
 
 	// LoadBalancerIPs stores LB IPs assigned to the service (string(IP) => IP).
 	//
