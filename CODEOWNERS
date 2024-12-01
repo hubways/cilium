@@ -296,7 +296,7 @@ Makefile* @cilium/build
 /cilium-cli/connectivity/builder/all_ingress_deny_from_outside.go @cilium/sig-encryption
 /cilium-cli/connectivity/builder/bgp_control_plane.go @cilium/sig-bgp
 /cilium-cli/connectivity/builder/cluster_entity_multi_cluster.go @cilium/sig-clustermesh
-/cilium-cli/connectivity/builder/dns_only.go @cilium/sig-clustermesh
+/cilium-cli/connectivity/builder/dns_only.go @cilium/fqdn
 /cilium-cli/connectivity/builder/echo_ingress.go @cilium/sig-servicemesh
 /cilium-cli/connectivity/builder/echo_ingress_auth_always_fail.go @cilium/sig-servicemesh
 /cilium-cli/connectivity/builder/echo_ingress_from_other_client_deny.go @cilium/sig-servicemesh
@@ -645,10 +645,7 @@ Makefile* @cilium/build
 /test/l4lb @cilium/sig-lb @cilium/ci-structure
 /test/nat46x64 @cilium/sig-lb @cilium/ci-structure
 /test/bigtcp @cilium/sig-datapath @cilium/ci-structure
-# BGP tests
-/test/k8s/bgp.go @cilium/sig-bgp @cilium/ci-structure
 # Misc. tests
-/test/k8s/updates.go @cilium/sig-agent @cilium/ci-structure
 /test/runtime/kvstore.go @cilium/kvstore @cilium/ci-structure
 /test/runtime/chaos_agent.go @cilium/sig-agent @cilium/ci-structure
 /tools/ @cilium/contributing
