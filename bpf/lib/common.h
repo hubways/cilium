@@ -198,7 +198,7 @@ ____revalidate_data_pull(struct __ctx_buff *ctx, void **data_, void **data_end_,
 
 	/* Verifier workaround, do this unconditionally: invalid size of register spill. */
 	if (pull)
-		ctx_pull_data(ctx, tot_len);
+		ctx_pull_data(ctx, (__u32)tot_len);
 	data_end = ctx_data_end(ctx);
 	data = ctx_data(ctx);
 	if (data + tot_len > data_end)
@@ -731,7 +731,6 @@ enum metric_dir {
 /* used to identify encrypted overlay traffic post decryption.
  * therefore, SPI bit can be reused to not steal an additional magic mark value.
  */
-#define MARK_MAGIC_DECRYPTED_OVERLAY	0x1D00
 #define MARK_MAGIC_ENCRYPT		0x0E00
 #define MARK_MAGIC_IDENTITY		0x0F00 /* mark carries identity */
 #define MARK_MAGIC_TO_PROXY		0x0200
@@ -1253,7 +1252,7 @@ static __always_inline int redirect_ep(struct __ctx_buff *ctx __maybe_unused,
 	 */
 	if (needs_backlog || !is_defined(ENABLE_HOST_ROUTING) ||
 	    ctx_get_ingress_ifindex(ctx) == 0) {
-		return ctx_redirect(ctx, ifindex, 0);
+		return (int)ctx_redirect(ctx, ifindex, 0);
 	}
 
 	/* When coming from overlay, we need to set packet type
