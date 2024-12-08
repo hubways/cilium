@@ -302,6 +302,10 @@ type Endpoint struct {
 	// Immutable after Endpoint creation.
 	K8sUID string
 
+	// lockdown indicates whether the endpoint is locked down or not do to
+	// a policy map overflow.
+	lockdown bool
+
 	// pod
 	pod atomic.Pointer[slim_corev1.Pod]
 
@@ -807,7 +811,7 @@ func (e *Endpoint) Allows(id identity.NumericIdentity) bool {
 	keyToLookup := policy.IngressKey().WithIdentity(id)
 
 	v, ok := e.desiredPolicy.Get(keyToLookup)
-	return ok && !v.IsDeny
+	return ok && !v.IsDeny()
 }
 
 // String returns endpoint on a JSON format.
@@ -1792,12 +1796,12 @@ func (e *Endpoint) metadataResolver(ctx context.Context,
 		value, _ := annotation.Get(po, annotation.NoTrack, annotation.NoTrackAlias)
 		return value, nil
 	})
-	e.UpdateBandwidthPolicy(bwm, func(ns, podName string) (bandwidthEgress string, err error) {
+	e.UpdateBandwidthPolicy(bwm, func(ns, podName string) (bandwidthEgress string, prio string, err error) {
 		_, k8sMetadata, err := resolveMetadata(ns, podName)
 		if err != nil {
-			return "", filterResolveMetadataError(err)
+			return "", "", filterResolveMetadataError(err)
 		}
-		return k8sMetadata.Annotations[bandwidth.EgressBandwidth], nil
+		return k8sMetadata.Annotations[bandwidth.EgressBandwidth], k8sMetadata.Annotations[bandwidth.Priority], nil
 	})
 
 	// If 'baseLabels' are not set then 'controllerBaseLabels' only contains
@@ -2495,7 +2499,8 @@ func (e *Endpoint) Delete(conf DeleteConfig) []error {
 	}
 	e.setState(StateDisconnecting, "Deleting endpoint")
 
-	if option.Config.IPAM == ipamOption.IPAMENI || option.Config.IPAM == ipamOption.IPAMAzure || option.Config.IPAM == ipamOption.IPAMAlibabaCloud {
+	if option.Config.IPAM == ipamOption.IPAMENI || option.Config.IPAM == ipamOption.IPAMAzure || option.Config.IPAM == ipamOption.IPAMAlibabaCloud ||
+		(option.Config.IPAM == ipamOption.IPAMDelegatedPlugin && option.Config.InstallUplinkRoutesForDelegatedIPAM) {
 		e.getLogger().WithFields(logrus.Fields{
 			"ep":     e.GetID(),
 			"ipAddr": e.GetIPv4Address(),
@@ -2536,7 +2541,7 @@ func (e *Endpoint) Delete(conf DeleteConfig) []error {
 		e.owner.Orchestrator().Unload(e.createEpInfoCache(""))
 
 		// Delete the endpoint's entries from the global cilium_(egress)call_policy
-		// maps and remove per-endpoint cilium_calls_ and cilium_policy_ map pins.
+		// maps and remove per-endpoint cilium_calls_ and cilium_policy_v2_ map pins.
 		if err := e.deleteMaps(); err != nil {
 			errs = append(errs, err...)
 		}
