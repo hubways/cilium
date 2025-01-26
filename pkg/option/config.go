@@ -83,7 +83,7 @@ const (
 	AllowLocalhostPolicy = "policy"
 
 	// AnnotateK8sNode enables annotating a kubernetes node while bootstrapping
-	// the daemon, which can also be disbled using this option.
+	// the daemon, which can also be disabled using this option.
 	AnnotateK8sNode = "annotate-k8s-node"
 
 	// ARPPingRefreshPeriod is the ARP entries refresher period
@@ -972,11 +972,6 @@ const (
 	// EnableLocalNodeRoute controls installation of the route which points
 	// the allocation prefix of the local node.
 	EnableLocalNodeRoute = "enable-local-node-route"
-
-	// EnableWellKnownIdentities enables the use of well-known identities.
-	// This is requires if identiy resolution is required to bring up the
-	// control plane, e.g. when using the managed etcd feature
-	EnableWellKnownIdentities = "enable-well-known-identities"
 
 	// PolicyAuditModeArg argument enables policy audit mode.
 	PolicyAuditModeArg = "policy-audit-mode"
@@ -2025,11 +2020,6 @@ type DaemonConfig struct {
 	// the network policy for cilium-agent.
 	AllowICMPFragNeeded bool
 
-	// EnableWellKnownIdentities enables the use of well-known identities.
-	// This is requires if identiy resolution is required to bring up the
-	// control plane, e.g. when using the managed etcd feature
-	EnableWellKnownIdentities bool
-
 	// Azure options
 
 	// PolicyAuditMode enables non-drop mode for installed policies. In
@@ -2302,7 +2292,6 @@ var (
 		AutoCreateCiliumNodeResource:    defaults.AutoCreateCiliumNodeResource,
 		IdentityAllocationMode:          IdentityAllocationModeKVstore,
 		AllowICMPFragNeeded:             defaults.AllowICMPFragNeeded,
-		EnableWellKnownIdentities:       defaults.EnableWellKnownIdentities,
 		AllocatorListTimeout:            defaults.AllocatorListTimeout,
 		EnableICMPRules:                 defaults.EnableICMPRules,
 		UseCiliumInternalIPForIPsec:     defaults.UseCiliumInternalIPForIPsec,
@@ -2391,14 +2380,33 @@ func (c *DaemonConfig) AreDevicesRequired() bool {
 		c.EnableL2Announcements || c.ForceDeviceRequired || c.EnableIPSecEncryptedOverlay
 }
 
-// When WG & encrypt-node are on, a NodePort BPF to-be forwarded request
-// to a remote node running a selected service endpoint must be encrypted.
-// To make the NodePort's rev-{S,D}NAT translations to happen for a reply
-// from the remote node, we need to attach bpf_host to the Cilium's WG
-// netdev (otherwise, the WG netdev after decrypting the reply will pass
-// it to the stack which drops the packet).
+// NeedBPFHostOnWireGuardDevice returns true if the agent needs to attach
+// a BPF program on the Ingress of Cilium's WireGuard device
 func (c *DaemonConfig) NeedBPFHostOnWireGuardDevice() bool {
-	return c.EnableNodePort && c.EnableWireguard && c.EncryptNode
+	if !c.EnableWireguard {
+		return false
+	}
+
+	// In native routing mode we want to deliver packets to local endpoints
+	// straight from BPF, without passing through the stack.
+	// This matches overlay mode (where bpf_overlay would handle the delivery)
+	// and native routing mode without encryption (where bpf_host at the native
+	// device would handle the delivery).
+	if !c.TunnelingEnabled() {
+		return true
+	}
+
+	// When WG & encrypt-node are on, a NodePort BPF to-be forwarded request
+	// to a remote node running a selected service endpoint must be encrypted.
+	// To make the NodePort's rev-{S,D}NAT translations to happen for a reply
+	// from the remote node, we need to attach bpf_host to the Cilium's WG
+	// netdev (otherwise, the WG netdev after decrypting the reply will pass
+	// it to the stack which drops the packet).
+	if c.EnableNodePort && c.EncryptNode {
+		return true
+	}
+
+	return false
 }
 
 // MasqueradingEnabled returns true if either IPv4 or IPv6 masquerading is enabled.
@@ -2842,7 +2850,6 @@ func (c *DaemonConfig) Populate(vp *viper.Viper) {
 	c.L2AnnouncerRenewDeadline = vp.GetDuration(L2AnnouncerRenewDeadline)
 	c.L2AnnouncerRetryPeriod = vp.GetDuration(L2AnnouncerRetryPeriod)
 	c.WireguardPersistentKeepalive = vp.GetDuration(WireguardPersistentKeepalive)
-	c.EnableWellKnownIdentities = vp.GetBool(EnableWellKnownIdentities)
 	c.EnableXDPPrefilter = vp.GetBool(EnableXDPPrefilter)
 	c.EnableTCX = vp.GetBool(EnableTCX)
 	c.DisableCiliumEndpointCRD = vp.GetBool(DisableCiliumEndpointCRDName)
@@ -3796,6 +3803,7 @@ func (c *DaemonConfig) checksum() [32]byte {
 	sumConfig := *c
 	// Ignore variable parts
 	sumConfig.Opts = nil
+	sumConfig.EncryptInterface = nil
 	cBytes, err := json.Marshal(&sumConfig)
 	if err != nil {
 		return [32]byte{}
@@ -3851,7 +3859,8 @@ func (c *DaemonConfig) diffFromFile() error {
 
 		diff = cmp.Diff(&config, c, opts,
 			cmpopts.IgnoreTypes(&IntOptions{}),
-			cmpopts.IgnoreTypes(&OptionLibrary{}))
+			cmpopts.IgnoreTypes(&OptionLibrary{}),
+			cmpopts.IgnoreFields(DaemonConfig{}, "EncryptInterface"))
 	}
 	return fmt.Errorf("Config differs:\n%s", diff)
 }
