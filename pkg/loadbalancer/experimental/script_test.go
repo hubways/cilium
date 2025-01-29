@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"maps"
-	"net"
 	"net/http"
 	"os"
 	"slices"
@@ -56,12 +55,14 @@ func TestScript(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	t.Cleanup(cancel)
+
 	scripttest.Test(t,
 		ctx,
 		func(t testing.TB, args []string) *script.Engine {
 			h := hive.New(
 				client.FakeClientCell,
 				daemonk8s.ResourcesCell,
+				daemonk8s.TablesCell,
 				Cell,
 				cell.Config(TestConfig{
 					// By default 10% of the time the LBMap operations fail
@@ -113,8 +114,7 @@ func TestScript(t *testing.T) {
 				Cmds: cmds,
 			}
 		}, []string{
-			fmt.Sprintf("PORT1=%d", getRandomOpenPort(t)),
-			fmt.Sprintf("PORT2=%d", getRandomOpenPort(t)),
+			fmt.Sprintf("HEALTHADDR=%s", healthServerAddr),
 		}, "testdata/*.txtar")
 }
 
@@ -155,23 +155,3 @@ var httpGetCmd = script.Command(
 		return nil, err
 	},
 )
-
-func getRandomOpenPort(t *testing.T) int {
-	for range 100 {
-		l, err := net.Listen("tcp", ":0")
-		if err != nil {
-			t.Fatalf("failed to get random open port: %v", err)
-		}
-		addr := l.Addr().(*net.TCPAddr)
-		if addr.Port < 10000 {
-			// To keep things simple for comparing, we'll only accept port numbers
-			// that are 5 chars long.
-			l.Close()
-			continue
-		}
-		defer l.Close()
-		return addr.Port
-	}
-	t.Fatalf("failed to get a random open port number that was >=10000")
-	return 0
-}
