@@ -301,7 +301,7 @@ jobs:
           gcloud container clusters get-credentials ${{ env.clusterName }} --zone ${{ matrix.zone }}
 
       - name: Install Cilium CLI
-        uses: cilium/cilium-cli@f313219850d324b516748ff7b00a6f9fa30d34ae # v0.16.23
+        uses: cilium/cilium-cli@a4936ec2afa58bf755162928456190344a179207 # v0.16.24
         with:
           skip-build: ${{ env.CILIUM_CLI_SKIP_BUILD }}
           image-repo: ${{ env.CILIUM_CLI_IMAGE_REPO }}
@@ -359,7 +359,7 @@ jobs:
         # Limit nslookup to the first (global) DNS server setting
         run: |
           gcloud compute ssh ${{ env.vmName }}-${{ matrix.vmIndex }} --zone ${{ matrix.zone }} \
-            --command "nslookup -d2 -retry=10 -timeout=5 -norecurse clustermesh-apiserver.kube-system.svc.cluster.local \$(systemd-resolve --status | grep -m 1 \"Current DNS Server:\" | cut -d':' -f2)"
+            --command "nslookup -d2 -retry=10 -timeout=5 -norecurse clustermesh-apiserver.kube-system.svc.cluster.local \$(resolvectl status | grep -m 1 \"Current DNS Server:\" | cut -d':' -f2)"
 
       - name: Ping clustermesh-apiserver from VM
         run: |
