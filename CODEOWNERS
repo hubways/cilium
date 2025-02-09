@@ -238,7 +238,7 @@
 /.github/ariane-config.yaml @cilium/github-sec @cilium/ci-structure
 /.github/renovate.json5 @cilium/github-sec @cilium/ci-structure
 /.github/actions/ @cilium/github-sec @cilium/ci-structure
-/.github/actions/ipsec/ @cilium/ipsec @cilium/github-sec @cilium/ci-structure
+/.github/actions/ipsec* @cilium/ipsec @cilium/github-sec @cilium/ci-structure
 /.github/actions/kvstore/ @cilium/sig-clustermesh @cilium/kvstore @cilium/github-sec @cilium/ci-structure
 /.github/workflows/ @cilium/github-sec @cilium/ci-structure
 /.github/workflows/auto-approve.yaml @cilium/cilium-maintainers
@@ -246,7 +246,6 @@
 /.github/workflows/*clustermesh*.yaml @cilium/sig-clustermesh @cilium/github-sec @cilium/ci-structure
 /.github/workflows/*datapath*.yaml @cilium/sig-datapath @cilium/github-sec @cilium/ci-structure
 /.github/workflows/*gateway-api*.yaml @cilium/sig-servicemesh @cilium/github-sec @cilium/ci-structure
-/.github/workflows/*externalworkloads*.yaml @cilium/sig-clustermesh @cilium/github-sec @cilium/ci-structure
 /.github/workflows/*hubble*.yaml @cilium/sig-hubble @cilium/github-sec @cilium/ci-structure
 /.github/workflows/*ipsec*.yaml @cilium/ipsec @cilium/github-sec @cilium/ci-structure
 /.github/workflows/*ingress*.yaml @cilium/sig-servicemesh @cilium/github-sec @cilium/ci-structure
