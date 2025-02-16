@@ -991,6 +991,9 @@
                 "healthPort": {
                   "type": "integer"
                 },
+                "kvstoreMode": {
+                  "type": "string"
+                },
                 "lifecycle": {
                   "type": "object"
                 },
@@ -1490,6 +1493,12 @@
       "type": [
         "null",
         "object"
+      ]
+    },
+    "connectivityProbeFrequencyRatio": {
+      "type": [
+        "null",
+        "number"
       ]
     },
     "conntrackGCInterval": {
@@ -3008,6 +3017,14 @@
               "properties": {
                 "fsGroup": {
                   "type": "integer"
+                },
+                "seccompProfile": {
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
                 }
               },
               "type": "object"
@@ -3086,6 +3103,9 @@
             },
             "securityContext": {
               "properties": {
+                "allowPrivilegeEscalation": {
+                  "type": "boolean"
+                },
                 "capabilities": {
                   "properties": {
                     "drop": {
@@ -3888,6 +3908,20 @@
           "type": "boolean"
         },
         "requireIPv6PodCIDR": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "k8sClientExponentialBackoff": {
+      "properties": {
+        "backoffBaseSeconds": {
+          "type": "integer"
+        },
+        "backoffMaxDurationSeconds": {
+          "type": "integer"
+        },
+        "enabled": {
           "type": "boolean"
         }
       },
@@ -5051,6 +5085,9 @@
           "type": "boolean"
         }
       },
+      "type": "object"
+    },
+    "secretsNamespaceAnnotations": {
       "type": "object"
     },
     "securityContext": {
