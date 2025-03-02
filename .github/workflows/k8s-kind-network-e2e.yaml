@@ -143,7 +143,7 @@ jobs:
           echo sha=${{ steps.default_vars.outputs.sha }} >> $GITHUB_OUTPUT
 
       - name: Install Cilium CLI
-        uses: cilium/cilium-cli@1432ef0e4e0cd766f5c1ee0544759d7a31cd32b2 # v0.17.0
+        uses: cilium/cilium-cli@1ea75a067eb7c4ba11a9f082a365f97a14c331db # v0.18.0
         with:
           skip-build: ${{ env.CILIUM_CLI_SKIP_BUILD }}
           image-repo: ${{ env.CILIUM_CLI_IMAGE_REPO }}
@@ -161,6 +161,20 @@ jobs:
         id: install-cilium
         run: |
           cilium install --wait ${{ steps.vars.outputs.cilium_install_defaults }}
+
+      - name: Create LB IPAM pool
+        run: |
+          # Needed so that Cilium can allocate LoadBalancer service IPs
+          # needed for the tests
+          kubectl apply -f - <<EOF
+          apiVersion: "cilium.io/v2alpha1"
+          kind: CiliumLoadBalancerIPPool
+          metadata:
+            name: "test-lb-pool"
+          spec:
+            blocks:
+            - cidr: "10.0.10.0/24"
+          EOF
 
       - name: Run Kubernetes sig-network test
         run: |
@@ -212,6 +226,11 @@ jobs:
         with:
           title: "Summary of all features tested"
           json-filename: "${{ env.job_name }} ${{ matrix.ipFamily }}"
+
+      - name: Gather metrics
+        uses: ./.github/actions/gather-metrics
+        with:
+          job: "${{ env.job_name }}-${{ matrix.ipFamily }}"
 
       - name: Post-test information gathering
         if: ${{ !success() && steps.install-cilium.outcome != 'skipped' }}
