@@ -871,6 +871,7 @@ nodeport_rev_dnat_ingress_ipv6(struct __ctx_buff *ctx, struct trace_ctx *trace,
 	__be16 src_port __maybe_unused = 0;
 	bool allow_neigh_map = true;
 	int ifindex = 0;
+	__u32 monitor = 0;
 
 	if (!revalidate_data(ctx, &data, &data_end, &ip6))
 		return DROP_INVALID;
@@ -887,9 +888,10 @@ nodeport_rev_dnat_ingress_ipv6(struct __ctx_buff *ctx, struct trace_ctx *trace,
 
 	ret = ct_lazy_lookup6(get_ct_map6(&tuple), &tuple, ctx, l4_off,
 			      CT_INGRESS, SCOPE_REVERSE, CT_ENTRY_NODEPORT,
-			      &ct_state, &trace->monitor);
+			      &ct_state, &monitor);
 	if (ret == CT_REPLY) {
 		trace->reason = TRACE_REASON_CT_REPLY;
+		trace->monitor = monitor;
 		ret = ipv6_l3(ctx, ETH_HLEN, NULL, NULL, METRIC_EGRESS);
 		if (unlikely(ret != CTX_ACT_OK))
 			return ret;
@@ -1236,7 +1238,7 @@ static __always_inline int nodeport_svc_lb6(struct __ctx_buff *ctx,
 		return DROP_IS_CLUSTER_IP;
 
 #if defined(ENABLE_L7_LB)
-	if (lb6_svc_is_l7loadbalancer(svc) && svc->l7_lb_proxy_port > 0) {
+	if (lb6_svc_is_l7_loadbalancer(svc)) {
 # if !defined(IS_BPF_XDP)
 		__be16 proxy_port = (__be16)svc->l7_lb_proxy_port;
 
@@ -1254,13 +1256,18 @@ static __always_inline int nodeport_svc_lb6(struct __ctx_buff *ctx,
 		*punt_to_stack = true;
 #  endif /* ENABLE_TPROXY */
 # endif /* IS_BPF_XDP */
-
 		return CTX_ACT_OK;
 	}
 #endif
 	ret = lb6_local(get_ct_map6(tuple), ctx, l3_off, l4_off,
 			key, tuple, svc, &ct_state_svc,
 			nodeport_xlate6(svc, tuple), ext_err, 0);
+#ifdef ENABLE_L7_LB
+	if (ret == LB_PUNT_TO_STACK) {
+		*punt_to_stack = true;
+		return CTX_ACT_OK;
+	}
+#endif
 #ifdef SERVICE_NO_BACKEND_RESPONSE
 	if (ret == DROP_NO_SERVICE) {
 		edt_set_aggregate(ctx, 0);
@@ -2109,6 +2116,7 @@ nodeport_rev_dnat_ingress_ipv4(struct __ctx_buff *ctx, struct trace_ctx *trace,
 	bool allow_neigh_map = true;
 	bool has_l4_header;
 	__u32 *vrf_id __maybe_unused = NULL;
+	__u32 monitor = 0;
 
 	if (!revalidate_data(ctx, &data, &data_end, &ip4))
 		return DROP_INVALID;
@@ -2144,9 +2152,10 @@ nodeport_rev_dnat_ingress_ipv4(struct __ctx_buff *ctx, struct trace_ctx *trace,
 
 	ret = ct_lazy_lookup4(get_ct_map4(&tuple), &tuple, ctx, ipv4_is_fragment(ip4),
 			      l4_off, has_l4_header, CT_INGRESS, SCOPE_REVERSE,
-			      CT_ENTRY_NODEPORT, &ct_state, &trace->monitor);
+			      CT_ENTRY_NODEPORT, &ct_state, &monitor);
 	if (ret == CT_REPLY) {
 		trace->reason = TRACE_REASON_CT_REPLY;
+		trace->monitor = monitor;
 		ret = lb4_rev_nat(ctx, l3_off, l4_off, ct_state.rev_nat_index, false,
 				  &tuple, has_l4_header);
 		if (IS_ERR(ret))
@@ -2527,7 +2536,7 @@ static __always_inline int nodeport_svc_lb4(struct __ctx_buff *ctx,
 		return DROP_IS_CLUSTER_IP;
 
 #if defined(ENABLE_L7_LB)
-	if (lb4_svc_is_l7loadbalancer(svc) && svc->l7_lb_proxy_port > 0) {
+	if (lb4_svc_is_l7_loadbalancer(svc)) {
 		/* We cannot redirect from the XDP layer to cilium_host.
 		 * Therefore, let the bpf_host to handle the L7 ingress
 		 * request.
@@ -2552,7 +2561,6 @@ static __always_inline int nodeport_svc_lb4(struct __ctx_buff *ctx,
 		*punt_to_stack = true;
 #  endif /* ENABLE_TPROXY */
 # endif /* IS_BPF_XDP */
-
 		return CTX_ACT_OK;
 	}
 #endif
@@ -2564,6 +2572,12 @@ static __always_inline int nodeport_svc_lb4(struct __ctx_buff *ctx,
 		ret = lb4_local(get_ct_map4(tuple), ctx, is_fragment, l3_off, l4_off,
 				key, tuple, svc, &ct_state_svc, has_l4_header,
 				nodeport_xlate4(svc, tuple), &cluster_id, ext_err, 0);
+#ifdef ENABLE_L7_LB
+		if (ret == LB_PUNT_TO_STACK) {
+			*punt_to_stack = true;
+			return CTX_ACT_OK;
+		}
+#endif
 #ifdef SERVICE_NO_BACKEND_RESPONSE
 		if (ret == DROP_NO_SERVICE) {
 			/* Packet is TX'ed back out, avoid EDT false-positives: */

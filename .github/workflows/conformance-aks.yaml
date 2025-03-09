@@ -201,7 +201,6 @@ jobs:
           CILIUM_INSTALL_DEFAULTS="${{ steps.default_vars.outputs.cilium_install_defaults }} \
             --helm-set cluster.name=${{ env.name }} \
             --helm-set loadBalancer.l7.backend=envoy \
-            --helm-set tls.secretsBackend=k8s \
             --helm-set=azure.resourceGroup=${{ env.name }} \
             --helm-set=ipv4.enabled=true \
             --helm-set=ipv6.enabled=true \
@@ -247,7 +246,7 @@ jobs:
             --name ${{ env.name }}
 
       - name: Install Cilium CLI
-        uses: cilium/cilium-cli@1ea75a067eb7c4ba11a9f082a365f97a14c331db # v0.18.0
+        uses: cilium/cilium-cli@45a3879a8cb769c9e41b912635e03a38849c9242 # v0.18.1
         with:
           skip-build: ${{ env.CILIUM_CLI_SKIP_BUILD }}
           image-repo: ${{ env.CILIUM_CLI_IMAGE_REPO }}
