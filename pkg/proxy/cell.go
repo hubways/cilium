@@ -13,8 +13,9 @@ import (
 	"github.com/cilium/cilium/pkg/envoy"
 	"github.com/cilium/cilium/pkg/logging/logfields"
 	"github.com/cilium/cilium/pkg/option"
-	"github.com/cilium/cilium/pkg/proxy/logger"
-	"github.com/cilium/cilium/pkg/proxy/logger/endpoint"
+	"github.com/cilium/cilium/pkg/proxy/accesslog"
+	"github.com/cilium/cilium/pkg/proxy/accesslog/endpoint"
+	"github.com/cilium/cilium/pkg/proxy/defaultdns"
 	"github.com/cilium/cilium/pkg/proxy/proxyports"
 	"github.com/cilium/cilium/pkg/time"
 	"github.com/cilium/cilium/pkg/trigger"
@@ -33,7 +34,7 @@ var Cell = cell.Module(
 	cell.ProvidePrivate(endpoint.NewEndpointInfoRegistry),
 	cell.ProvidePrivate(proxyports.NewProxyPorts),
 	cell.Config(proxyports.ProxyPortsConfig{}),
-	logger.Cell,
+	accesslog.Cell,
 )
 
 type proxyParams struct {
@@ -115,10 +116,12 @@ func newEnvoyProxyIntegration(params envoyProxyIntegrationParams) *envoyProxyInt
 	}
 }
 
-func newDNSProxyIntegration() *dnsProxyIntegration {
+func newDNSProxyIntegration(dnsProxy defaultdns.Proxy) *dnsProxyIntegration {
 	if !option.Config.EnableL7Proxy {
 		return nil
 	}
 
-	return &dnsProxyIntegration{}
+	return &dnsProxyIntegration{
+		dnsProxy: dnsProxy,
+	}
 }

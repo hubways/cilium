@@ -1332,4 +1332,66 @@ const (
 	Operation = "operation"
 
 	KeyPairSN = "keyPairSN"
+
+	AnnotationsOld = "annotationsOld"
+
+	LabelsNew = "labelsNew"
+
+	File = "file"
+
+	Timeout = "timeout"
+
+	EtcdDataDir = "etcdDataDir"
+
+	EtcdClusterName = "etcdClusterName"
+
+	EtcdInitialClusterToken = "etcdInitialClusterToken"
+
+	EtcdListenClientUrl = "loopbackEndpoint"
+
+	EtcdBinary = "etcdBinaryLocation"
+
+	EtcdFlags = "etcdCmd"
+
+	EtcdExitCode = "etcdExitCode"
+
+	EtcdClientConfig = "etcdClientConfig"
+
+	EtcdUsername = "etcdUsername"
+
+	EtcdRoleName = "etcdRoleName"
+
+	EtcdPermission = "etcdPermission"
+
+	EtcdRangeStart = "etcdRangeStart"
+
+	EtcdRangeEnd = "etcdRangeEnd"
+
+	K8sExportName = "K8sExportName"
+
+	ReliablyMissing = "reliablyMissing"
+
+	KVStoreBackendConfigurationSuffix = "kvStoreBackendConfiguration.Suffix"
+
+	KVStoreBackendConfigurationTyp = "kvStoreBackendConfiguration.Typ"
+
+	KVStoreBackendConfigurationBasePath = "kvStoreBackendConfiguration.BasePath"
+
+	ReadFromKVStore = "readFromKVStore"
+
+	TTL = "ttl"
+
+	ConfigPath = "configPath"
+
+	KeepAliveHeartbeat = "keepAliveHeartbeat"
+
+	KeepAliveTimeout = "keepAliveTimeout"
+
+	RateLimit = "rateLimit"
+
+	MaxInflight = "maxInflight"
+
+	ListLimit = "listLimit"
+
+	TimeWindow = "timeWindow"
 )

@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"net"
 	"net/netip"
@@ -820,10 +821,6 @@ const (
 	// KVstoreConnectivityTimeout is the timeout when performing kvstore operations
 	KVstoreConnectivityTimeout = "kvstore-connectivity-timeout"
 
-	// KVstorePodNetworkSupport enables the support for running the Cilium KVstore
-	// in pod network.
-	KVstorePodNetworkSupport = "kvstore-pod-network-support"
-
 	// IdentityChangeGracePeriod is the name of the
 	// IdentityChangeGracePeriod option
 	IdentityChangeGracePeriod = "identity-change-grace-period"
@@ -1296,6 +1293,27 @@ func BindEnvWithLegacyEnvFallback(vp *viper.Viper, optName, legacyEnvName string
 		envName = legacyEnvName
 	}
 	vp.BindEnv(optName, envName)
+}
+
+// LogRegisteredSlogOptions logs all options that where bound to viper.
+func LogRegisteredSlogOptions(vp *viper.Viper, entry *slog.Logger) {
+	keys := vp.AllKeys()
+	slices.Sort(keys)
+	for _, k := range keys {
+		ss := vp.GetStringSlice(k)
+		if len(ss) == 0 {
+			sm := vp.GetStringMap(k)
+			for k, v := range sm {
+				ss = append(ss, fmt.Sprintf("%s=%s", k, v))
+			}
+		}
+
+		if len(ss) > 0 {
+			entry.Info(fmt.Sprintf("  --%s='%s'", k, strings.Join(ss, ",")))
+		} else {
+			entry.Info(fmt.Sprintf("  --%s='%s'", k, vp.GetString(k)))
+		}
+	}
 }
 
 // LogRegisteredOptions logs all options that where bound to viper.
@@ -1788,10 +1806,6 @@ type DaemonConfig struct {
 	// KVstoreConnectivityTimeout is the timeout when performing kvstore operations
 	KVstoreConnectivityTimeout time.Duration
 
-	// KVstorePodNetworkSupport enables the support for running the Cilium KVstore
-	// in pod network.
-	KVstorePodNetworkSupport bool
-
 	// IdentityChangeGracePeriod is the grace period that needs to pass
 	// before an endpoint that has changed its identity will start using
 	// that new identity. During the grace period, the new identity has
@@ -2266,7 +2280,6 @@ var (
 		ToFQDNsMaxIPsPerHost:            defaults.ToFQDNsMaxIPsPerHost,
 		KVstorePeriodicSync:             defaults.KVstorePeriodicSync,
 		KVstoreConnectivityTimeout:      defaults.KVstoreConnectivityTimeout,
-		KVstorePodNetworkSupport:        defaults.KVstorePodNetworkSupport,
 		IdentityChangeGracePeriod:       defaults.IdentityChangeGracePeriod,
 		IdentityRestoreGracePeriod:      defaults.IdentityRestoreGracePeriodK8s,
 		FixedIdentityMapping:            make(map[string]string),
@@ -2506,12 +2519,7 @@ func (c *DaemonConfig) K8sNetworkPolicyEnabled() bool {
 }
 
 func (c *DaemonConfig) PolicyCIDRMatchesNodes() bool {
-	for _, mode := range c.PolicyCIDRMatchMode {
-		if mode == "nodes" {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(c.PolicyCIDRMatchMode, "nodes")
 }
 
 // PerNodeLabelsEnabled returns true if per-node labels feature
@@ -2554,10 +2562,9 @@ func (c *DaemonConfig) LoadBalancerUsesDSR() bool {
 		c.LoadBalancerModeAnnotation
 }
 
-// KVstoreEnabledWithoutPodNetworkSupport returns whether Cilium is configured to connect
-// to an external KVStore, and the support for running it in pod network is disabled.
-func (c *DaemonConfig) KVstoreEnabledWithoutPodNetworkSupport() bool {
-	return c.KVStore != "" && !c.KVstorePodNetworkSupport
+// KVstoreEnabled returns whether Cilium is configured to connect to an external KVStore.
+func (c *DaemonConfig) KVstoreEnabled() bool {
+	return c.KVStore != ""
 }
 
 func (c *DaemonConfig) validateIPv6ClusterAllocCIDR() error {
@@ -2900,7 +2907,6 @@ func (c *DaemonConfig) Populate(vp *viper.Viper) {
 	c.KVstoreLeaseTTL = vp.GetDuration(KVstoreLeaseTTL)
 	c.KVstorePeriodicSync = vp.GetDuration(KVstorePeriodicSync)
 	c.KVstoreConnectivityTimeout = vp.GetDuration(KVstoreConnectivityTimeout)
-	c.KVstorePodNetworkSupport = vp.GetBool(KVstorePodNetworkSupport)
 	c.KVstoreMaxConsecutiveQuorumErrors = vp.GetUint(KVstoreMaxConsecutiveQuorumErrorsName)
 	c.LabelPrefixFile = vp.GetString(LabelPrefixFile)
 	c.Labels = vp.GetStringSlice(Labels)
