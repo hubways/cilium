@@ -69,7 +69,7 @@ k8sServiceHostRef:
   # -- (string) name of the ConfigMap containing the Kubernetes service endpoint
   name:
   # @schema
-  # type: [string, null] 
+  # type: [string, null]
   # @schema
   # -- (string) Key in the ConfigMap containing the Kubernetes service endpoint
   key:
@@ -467,6 +467,8 @@ l2podAnnouncements:
   enabled: false
   # -- Interface used for sending Gratuitous ARP pod announcements
   interface: "eth0"
+  # -- A regular expression matching interfaces used for sending Gratuitous ARP pod announcements
+  # interfacePattern: ""
 # -- This feature set enables virtual BGP routers to be created via
 # CiliumBGPPeeringPolicy CRDs.
 bgpControlPlane:
@@ -1301,6 +1303,7 @@ hubble:
         - sourceLabels:
             - __meta_kubernetes_pod_node_name
           targetLabel: node
+          action: replace
           replacement: ${1}
       # @schema
       # type: [null, array]
@@ -2322,6 +2325,7 @@ prometheus:
       - sourceLabels:
           - __meta_kubernetes_pod_node_name
         targetLabel: node
+        action: replace
         replacement: ${1}
     # @schema
     # type: [null, array]
@@ -2644,6 +2648,7 @@ envoy:
         - sourceLabels:
             - __meta_kubernetes_pod_node_name
           targetLabel: node
+          action: replace
           replacement: ${1}
       # @schema
       # type: [null, array]

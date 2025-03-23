@@ -34,6 +34,7 @@ import (
 	k8sTestUtils "github.com/cilium/cilium/pkg/k8s/testutils"
 	"github.com/cilium/cilium/pkg/loadbalancer"
 	"github.com/cilium/cilium/pkg/loadbalancer/experimental"
+	"github.com/cilium/cilium/pkg/logging"
 	"github.com/cilium/cilium/pkg/maglev"
 	"github.com/cilium/cilium/pkg/option"
 	"github.com/cilium/cilium/pkg/source"
@@ -72,6 +73,7 @@ func RunBenchmark(testSize int, iterations int, loglevel slog.Level, validate bo
 			Log:    log,
 			Pinned: false,
 			Cfg: experimental.ExternalConfig{
+				ZoneMapper: &option.DaemonConfig{},
 				LBMapsConfig: experimental.LBMapsConfig{
 					MaxSockRevNatMapEntries:  3 * testSize,
 					ServiceMapMaxEntries:     3 * testSize,
@@ -369,7 +371,7 @@ func ServicesAndSlices(testSize int) (svcs []*slim_corev1.Service, epSlices []*k
 
 		tmpSlice.Name = fmt.Sprintf("%s-%06d", slice.Name, j)
 
-		epSlices = append(epSlices, k8s.ParseEndpointSliceV1(&tmpSlice))
+		epSlices = append(epSlices, k8s.ParseEndpointSliceV1(logging.DefaultSlogLogger, &tmpSlice))
 	}
 	return
 }
@@ -521,6 +523,7 @@ func testHive(maps experimental.LBMaps,
 	bo **experimental.BPFOps,
 ) *hive.Hive {
 	extConfig := experimental.ExternalConfig{
+		ZoneMapper:        &option.DaemonConfig{},
 		EnableIPv4:        true,
 		EnableIPv6:        true,
 		ExternalClusterIP: false,

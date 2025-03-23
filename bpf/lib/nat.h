@@ -403,6 +403,36 @@ snat_v4_rev_nat_handle_mapping(struct __ctx_buff *ctx,
 
 	*state = __snat_lookup(map, tuple);
 
+	if (*state) {
+		struct ipv4_nat_entry *lookup_result;
+		struct ipv4_nat_entry ostate;
+		struct ipv4_ct_tuple otuple = {};
+		int ret;
+
+		/* Check for the original SNAT entry. If it is missing (e.g. due to LRU
+		 * eviction), it must be restored before returning.
+		 */
+		otuple.saddr = (*state)->to_daddr;
+		otuple.sport = (*state)->to_dport;
+		otuple.daddr = tuple->saddr;
+		otuple.dport = tuple->sport;
+		otuple.nexthdr = tuple->nexthdr;
+		otuple.flags = TUPLE_F_OUT;
+
+		lookup_result = __snat_lookup(map, &otuple);
+		if (!lookup_result) {
+			memset(&ostate, 0, sizeof(ostate));
+			ostate.to_saddr = tuple->daddr;
+			ostate.to_sport = tuple->dport;
+			ostate.common.needs_ct = (*state)->common.needs_ct;
+			ostate.common.created = bpf_mono_now();
+
+			ret = __snat_create(map, &otuple, &ostate);
+			if (ret < 0)
+				return DROP_NAT_NO_MAPPING;
+		}
+	}
+
 	if (*state && (*state)->common.needs_ct) {
 		struct ipv4_ct_tuple tuple_revsnat;
 		int ret;
@@ -1118,6 +1148,8 @@ struct ipv6_nat_target {
 	const __u16 max_port; /* host endianness */
 	bool from_local_endpoint;
 	bool needs_ct;
+	bool egress_gateway; /* NAT is needed because of an egress gateway policy */
+	__u32 ifindex; /* Obtained from EGW policy */
 };
 
 #if defined(ENABLE_IPV6) && defined(ENABLE_NODEPORT)
@@ -1361,6 +1393,36 @@ snat_v6_rev_nat_handle_mapping(struct __ctx_buff *ctx,
 {
 	*state = snat_v6_lookup(tuple);
 
+	if (*state) {
+		struct ipv6_nat_entry *lookup_result;
+		struct ipv6_nat_entry ostate;
+		struct ipv6_ct_tuple otuple = {};
+		int ret;
+
+		/* Check for the original SNAT entry. If it is missing (e.g. due to LRU
+		 * eviction), it must be restored before returning.
+		 */
+		otuple.saddr = (*state)->to_daddr;
+		otuple.sport = (*state)->to_dport;
+		otuple.daddr = tuple->saddr;
+		otuple.dport = tuple->sport;
+		otuple.nexthdr = tuple->nexthdr;
+		otuple.flags = TUPLE_F_OUT;
+
+		lookup_result = snat_v6_lookup(&otuple);
+		if (!lookup_result) {
+			memset(&ostate, 0, sizeof(ostate));
+			ostate.to_saddr = tuple->daddr;
+			ostate.to_sport = tuple->dport;
+			ostate.common.needs_ct = (*state)->common.needs_ct;
+			ostate.common.created = bpf_mono_now();
+
+			ret = __snat_create(&cilium_snat_v6_external, &otuple, &ostate);
+			if (ret < 0)
+				return DROP_NAT_NO_MAPPING;
+		}
+	}
+
 	if (*state && (*state)->common.needs_ct) {
 		struct ipv6_ct_tuple tuple_revsnat;
 		int ret;
@@ -1441,6 +1503,11 @@ snat_v6_nat_can_skip(const struct ipv6_nat_target *target,
 		     const struct ipv6_ct_tuple *tuple)
 {
 	__u16 sport = bpf_ntohs(tuple->sport);
+
+#if defined(ENABLE_EGRESS_GATEWAY_COMMON) && defined(IS_BPF_HOST)
+	if (target->egress_gateway)
+		return false;
+#endif
 
 	return (!target->from_local_endpoint && sport < NAT_MIN_EGRESS);
 }
@@ -1534,6 +1601,22 @@ snat_v6_needs_masquerade(struct __ctx_buff *ctx __maybe_unused,
 			return err;
 		}
 	}
+
+/* Check if the packet matches an egress NAT policy and so needs to be SNAT'ed. */
+#if defined(ENABLE_EGRESS_GATEWAY_COMMON)
+	if (egress_gw_snat_needed_hook_v6(&tuple->saddr, &tuple->daddr, &target->addr,
+					  &target->ifindex)) {
+		if (ipv6_addr_equals(&target->addr, &EGRESS_GATEWAY_NO_EGRESS_IP_V6))
+			return DROP_NO_EGRESS_IP;
+
+		target->egress_gateway = true;
+		/* If the endpoint is local, then the connection is already tracked. */
+		if (!local_ep)
+			target->needs_ct = true;
+
+		return NAT_NEEDED;
+	}
+#endif
 
 # ifdef IPV6_SNAT_EXCLUSION_DST_CIDR
 	{
