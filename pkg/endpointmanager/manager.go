@@ -17,11 +17,13 @@ import (
 	"github.com/cilium/cilium/pkg/completion"
 	"github.com/cilium/cilium/pkg/container/set"
 	"github.com/cilium/cilium/pkg/controller"
+	datapath "github.com/cilium/cilium/pkg/datapath/types"
 	"github.com/cilium/cilium/pkg/endpoint"
 	endpointid "github.com/cilium/cilium/pkg/endpoint/id"
 	"github.com/cilium/cilium/pkg/endpoint/regeneration"
 	"github.com/cilium/cilium/pkg/identity"
 	"github.com/cilium/cilium/pkg/identity/cache"
+	"github.com/cilium/cilium/pkg/identity/identitymanager"
 	"github.com/cilium/cilium/pkg/ipcache"
 	"github.com/cilium/cilium/pkg/lock"
 	"github.com/cilium/cilium/pkg/logging"
@@ -31,6 +33,8 @@ import (
 	"github.com/cilium/cilium/pkg/mcastmanager"
 	"github.com/cilium/cilium/pkg/metrics"
 	"github.com/cilium/cilium/pkg/metrics/metric"
+	monitoragent "github.com/cilium/cilium/pkg/monitor/agent"
+	monitorAPI "github.com/cilium/cilium/pkg/monitor/api"
 	"github.com/cilium/cilium/pkg/node"
 	"github.com/cilium/cilium/pkg/option"
 	"github.com/cilium/cilium/pkg/policy"
@@ -91,12 +95,14 @@ type endpointManager struct {
 
 	policyMapPressure *policyMapPressure
 
-	// locaNodeStore allows to retrieve information and observe changes about
+	// localNodeStore allows to retrieve information and observe changes about
 	// the local node.
 	localNodeStore *node.LocalNodeStore
 
 	// Allocator for local endpoint identifiers.
 	epIDAllocator *epIDAllocator
+
+	monitorAgent monitoragent.Agent
 }
 
 // endpointDeleteFunc is used to abstract away concrete Endpoint Delete
@@ -104,7 +110,7 @@ type endpointManager struct {
 type endpointDeleteFunc func(*endpoint.Endpoint, endpoint.DeleteConfig) []error
 
 // New creates a new endpointManager.
-func New(epSynchronizer EndpointResourceSynchronizer, lns *node.LocalNodeStore, health cell.Health) *endpointManager {
+func New(epSynchronizer EndpointResourceSynchronizer, lns *node.LocalNodeStore, health cell.Health, monitorAgent monitoragent.Agent) *endpointManager {
 	mgr := endpointManager{
 		health:                       health,
 		endpoints:                    make(map[uint16]*endpoint.Endpoint),
@@ -115,6 +121,7 @@ func New(epSynchronizer EndpointResourceSynchronizer, lns *node.LocalNodeStore, 
 		controllers:                  controller.NewManager(),
 		localNodeStore:               lns,
 		epIDAllocator:                newEPIDAllocator(),
+		monitorAgent:                 monitorAgent,
 	}
 	mgr.deleteEndpoint = mgr.removeEndpoint
 	mgr.policyMapPressure = newPolicyMapPressure()
@@ -449,10 +456,14 @@ func (mgr *endpointManager) unexpose(ep *endpoint.Endpoint) {
 }
 
 // removeEndpoint stops the active handling of events by the specified endpoint,
-// and prevents the endpoint from being globally acccessible via other packages.
+// and prevents the endpoint from being globally accessible via other packages.
 func (mgr *endpointManager) removeEndpoint(ep *endpoint.Endpoint, conf endpoint.DeleteConfig) []error {
 	mgr.unexpose(ep)
 	result := ep.Delete(conf)
+
+	if !option.Config.DryMode {
+		_ = mgr.monitorAgent.SendEvent(monitorAPI.MessageTypeAgent, monitorAPI.EndpointDeleteMessage(ep))
+	}
 
 	mgr.mutex.RLock()
 	for s := range mgr.subscribers {
@@ -464,7 +475,7 @@ func (mgr *endpointManager) removeEndpoint(ep *endpoint.Endpoint, conf endpoint.
 }
 
 // RemoveEndpoint stops the active handling of events by the specified endpoint,
-// and prevents the endpoint from being globally acccessible via other packages.
+// and prevents the endpoint from being globally accessible via other packages.
 func (mgr *endpointManager) RemoveEndpoint(ep *endpoint.Endpoint, conf endpoint.DeleteConfig) []error {
 	return mgr.deleteEndpoint(ep, conf)
 }
@@ -689,7 +700,7 @@ func (mgr *endpointManager) RestoreEndpoint(ep *endpoint.Endpoint) error {
 }
 
 // AddEndpoint takes the prepared endpoint object and starts managing it.
-func (mgr *endpointManager) AddEndpoint(owner regeneration.Owner, ep *endpoint.Endpoint) (err error) {
+func (mgr *endpointManager) AddEndpoint(ep *endpoint.Endpoint) (err error) {
 	if ep.ID != 0 {
 		return fmt.Errorf("Endpoint ID is already set to %d", ep.ID)
 	}
@@ -711,6 +722,10 @@ func (mgr *endpointManager) AddEndpoint(owner regeneration.Owner, ep *endpoint.E
 		return err
 	}
 
+	if !option.Config.DryMode {
+		_ = mgr.monitorAgent.SendEvent(monitorAPI.MessageTypeAgent, monitorAPI.EndpointCreateMessage(ep))
+	}
+
 	mgr.mutex.RLock()
 	for s := range mgr.subscribers {
 		s.EndpointCreated(ep)
@@ -722,20 +737,28 @@ func (mgr *endpointManager) AddEndpoint(owner regeneration.Owner, ep *endpoint.E
 
 func (mgr *endpointManager) AddIngressEndpoint(
 	ctx context.Context,
-	owner regeneration.Owner,
+	dnsRulesApi endpoint.DNSRulesAPI,
+	epBuildQueue endpoint.EndpointBuildQueue,
+	loader datapath.Loader,
+	orchestrator datapath.Orchestrator,
+	compilationLock datapath.CompilationLock,
+	bandwidthManager datapath.BandwidthManager,
+	ipTablesManager datapath.IptablesManager,
+	identityManager identitymanager.IDManager,
+	monitorAgent monitoragent.Agent,
 	policyMapFactory policymap.Factory,
-	policyGetter policyRepoGetter,
+	policyRepo policy.PolicyRepository,
 	ipcache *ipcache.IPCache,
 	proxy endpoint.EndpointProxy,
 	allocator cache.IdentityAllocator,
 	ctMapGC ctmap.GCRunner,
 ) error {
-	ep, err := endpoint.CreateIngressEndpoint(owner, policyMapFactory, policyGetter, ipcache, proxy, allocator, ctMapGC)
+	ep, err := endpoint.CreateIngressEndpoint(dnsRulesApi, epBuildQueue, loader, orchestrator, compilationLock, bandwidthManager, ipTablesManager, identityManager, monitorAgent, policyMapFactory, policyRepo, ipcache, proxy, allocator, ctMapGC)
 	if err != nil {
 		return err
 	}
 
-	if err := mgr.AddEndpoint(owner, ep); err != nil {
+	if err := mgr.AddEndpoint(ep); err != nil {
 		return err
 	}
 
@@ -746,20 +769,28 @@ func (mgr *endpointManager) AddIngressEndpoint(
 
 func (mgr *endpointManager) AddHostEndpoint(
 	ctx context.Context,
-	owner regeneration.Owner,
+	dnsRulesApi endpoint.DNSRulesAPI,
+	epBuildQueue endpoint.EndpointBuildQueue,
+	loader datapath.Loader,
+	orchestrator datapath.Orchestrator,
+	compilationLock datapath.CompilationLock,
+	bandwidthManager datapath.BandwidthManager,
+	ipTablesManager datapath.IptablesManager,
+	identityManager identitymanager.IDManager,
+	monitorAgent monitoragent.Agent,
 	policyMapFactory policymap.Factory,
-	policyGetter policyRepoGetter,
+	policyRepo policy.PolicyRepository,
 	ipcache *ipcache.IPCache,
 	proxy endpoint.EndpointProxy,
 	allocator cache.IdentityAllocator,
 	ctMapGC ctmap.GCRunner,
 ) error {
-	ep, err := endpoint.CreateHostEndpoint(owner, policyMapFactory, policyGetter, ipcache, proxy, allocator, ctMapGC)
+	ep, err := endpoint.CreateHostEndpoint(dnsRulesApi, epBuildQueue, loader, orchestrator, compilationLock, bandwidthManager, ipTablesManager, identityManager, monitorAgent, policyMapFactory, policyRepo, ipcache, proxy, allocator, ctMapGC)
 	if err != nil {
 		return err
 	}
 
-	if err := mgr.AddEndpoint(owner, ep); err != nil {
+	if err := mgr.AddEndpoint(ep); err != nil {
 		return err
 	}
 
@@ -768,10 +799,6 @@ func (mgr *endpointManager) AddHostEndpoint(
 	mgr.initHostEndpointLabels(ctx, ep)
 
 	return nil
-}
-
-type policyRepoGetter interface {
-	GetPolicyRepository() policy.PolicyRepository
 }
 
 // InitHostEndpointLabels initializes the host endpoint's labels with the

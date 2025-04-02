@@ -62,7 +62,6 @@ func TestScript(t *testing.T) {
 	t.Cleanup(func() { goleak.VerifyNone(t, leakOpts) })
 
 	version.Force(testutils.DefaultVersion)
-	option.Config.EnableK8sTerminatingEndpoint = true
 
 	var opts []hivetest.LogOption
 	if *debug {
@@ -253,6 +252,11 @@ func (d dummyNodeManager) Subscribe(types.NodeHandler) {
 
 // Unsubscribe implements manager.NodeManager.
 func (d dummyNodeManager) Unsubscribe(types.NodeHandler) {
+	panic("unimplemented")
+}
+
+// SetPrefixClusterMutatorFn implements manager.NodeManager
+func (d dummyNodeManager) SetPrefixClusterMutatorFn(mutator func(*nodeTypes.Node) []cmtypes.PrefixClusterOpts) {
 	panic("unimplemented")
 }
 
