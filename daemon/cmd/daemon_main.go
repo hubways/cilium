@@ -58,8 +58,7 @@ import (
 	"github.com/cilium/cilium/pkg/endpointstate"
 	"github.com/cilium/cilium/pkg/envoy"
 	"github.com/cilium/cilium/pkg/flowdebug"
-	"github.com/cilium/cilium/pkg/fqdn/defaultdns"
-	"github.com/cilium/cilium/pkg/fqdn/namemanager"
+	"github.com/cilium/cilium/pkg/fqdn/bootstrap"
 	fqdnRules "github.com/cilium/cilium/pkg/fqdn/rules"
 	"github.com/cilium/cilium/pkg/hive"
 	hubblecell "github.com/cilium/cilium/pkg/hubble/cell"
@@ -75,7 +74,6 @@ import (
 	k8sSynced "github.com/cilium/cilium/pkg/k8s/synced"
 	"github.com/cilium/cilium/pkg/k8s/watchers"
 	"github.com/cilium/cilium/pkg/kvstore"
-	"github.com/cilium/cilium/pkg/kvstore/store"
 	"github.com/cilium/cilium/pkg/l2announcer"
 	"github.com/cilium/cilium/pkg/labels"
 	"github.com/cilium/cilium/pkg/labelsfilter"
@@ -102,7 +100,6 @@ import (
 	policyDirectory "github.com/cilium/cilium/pkg/policy/directory"
 	"github.com/cilium/cilium/pkg/promise"
 	"github.com/cilium/cilium/pkg/proxy"
-	"github.com/cilium/cilium/pkg/proxy/accesslog"
 	"github.com/cilium/cilium/pkg/rate"
 	"github.com/cilium/cilium/pkg/redirectpolicy"
 	"github.com/cilium/cilium/pkg/service"
@@ -1205,7 +1202,7 @@ func initEnv(vp *viper.Viper) {
 		log.WithError(err).Fatalf("BPF template directory: NOT OK. Please run 'make install-bpf'")
 	}
 
-	if err := probes.CreateHeaderFiles(filepath.Join(option.Config.BpfDir, "include/bpf"), probes.ExecuteHeaderProbes()); err != nil {
+	if err := probes.CreateHeaderFiles(filepath.Join(option.Config.BpfDir, "include/bpf"), probes.ExecuteHeaderProbes(logging.DefaultSlogLogger)); err != nil {
 		log.WithError(err).Fatal("failed to create header files with feature macros")
 	}
 
@@ -1246,7 +1243,6 @@ func initEnv(vp *viper.Viper) {
 	option.Config.Opts.SetBool(option.TraceNotify, option.Config.BPFEventsTraceEnabled)
 	option.Config.Opts.SetBool(option.PolicyTracing, option.Config.EnableTracing)
 	option.Config.Opts.SetBool(option.ConntrackAccounting, option.Config.BPFConntrackAccounting)
-	option.Config.Opts.SetBool(option.ConntrackLocal, false)
 	option.Config.Opts.SetBool(option.PolicyAuditMode, option.Config.PolicyAuditMode)
 	option.Config.Opts.SetBool(option.PolicyAccounting, option.Config.PolicyAccounting)
 	option.Config.Opts.SetBool(option.SourceIPVerification, option.Config.EnableSourceIPVerification)
@@ -1322,7 +1318,7 @@ func initEnv(vp *viper.Viper) {
 		// bpf_host onto physical devices as chosen by configuration.
 		!option.Config.AreDevicesRequired() &&
 		option.Config.IPAM != ipamOption.IPAMENI {
-		link, err := linuxdatapath.NodeDeviceNameWithDefaultRoute()
+		link, err := linuxdatapath.NodeDeviceNameWithDefaultRoute(logging.DefaultSlogLogger)
 		if err != nil {
 			log.WithError(err).Fatal("Ipsec default interface lookup failed, consider \"encrypt-interface\" to manually configure interface.")
 		}
@@ -1354,7 +1350,7 @@ func initEnv(vp *viper.Viper) {
 	}
 
 	if option.Config.EnableBPFTProxy {
-		if probes.HaveProgramHelper(ebpf.SchedCLS, asm.FnSkAssign) != nil {
+		if probes.HaveProgramHelper(logging.DefaultSlogLogger, ebpf.SchedCLS, asm.FnSkAssign) != nil {
 			option.Config.EnableBPFTProxy = false
 			log.Info("Disabled support for BPF TProxy due to missing kernel support for socket assign (Linux 5.7 or later)")
 		}
@@ -1544,7 +1540,6 @@ type daemonParams struct {
 	L2Announcer         *l2announcer.L2Announcer
 	ServiceManager      service.ServiceManager
 	L7Proxy             *proxy.Proxy
-	ProxyAccessLogger   accesslog.ProxyAccessLogger
 	DB                  *statedb.DB
 	APILimiterSet       *rate.APILimiterSet
 	AuthManager         *auth.AuthManager
@@ -1557,7 +1552,8 @@ type daemonParams struct {
 	// This is currently necessary because these maps have not yet been modularized,
 	// and because it depends on parameters which are not provided through hive.
 	CTNATMapGC          ctmap.GCRunner
-	StoreFactory        store.Factory
+	IPIdentityWatcher   *ipcache.IPIdentityWatcher
+	IPIdentitySyncer    *ipcache.IPIdentitySynchronizer
 	EndpointRegenerator *endpoint.Regenerator
 	EndpointBuildQueue  endpoint.EndpointBuildQueue
 	ClusterInfo         cmtypes.ClusterInfo
@@ -1579,10 +1575,9 @@ type daemonParams struct {
 	Hubble              hubblecell.HubbleIntegration
 	LRPManager          *redirectpolicy.Manager
 	MaglevConfig        maglev.Config
-	NameManager         namemanager.NameManager
 	ExpLBConfig         experimental.Config
-	DNSProxy            defaultdns.Proxy
 	DNSRulesAPI         fqdnRules.DNSRulesService
+	DNSProxy            bootstrap.FQDNProxyBootstrapper
 }
 
 func newDaemonPromise(params daemonParams) promise.Promise[*Daemon] {
@@ -1716,7 +1711,7 @@ func startDaemon(d *Daemon, restoredEndpoints *endpointRestoreState, cleaner *da
 			// the collection of stale AllowedIPs entries too early, leading to
 			// the disruption of otherwise valid long running connections.
 			if option.Config.KVStore != "" {
-				if err := ipcache.WaitForKVStoreSync(d.ctx); err != nil {
+				if err := params.IPIdentityWatcher.WaitForSync(d.ctx); err != nil {
 					return
 				}
 			}
@@ -1770,9 +1765,9 @@ func startDaemon(d *Daemon, restoredEndpoints *endpointRestoreState, cleaner *da
 				return
 			}
 		}
-		d.dnsNameManager.CompleteBootstrap()
+		params.DNSProxy.CompleteBootstrap()
 
-		ms := maps.NewMapSweeper(&EndpointMapManager{
+		ms := maps.NewMapSweeper(params.Logger, &EndpointMapManager{
 			EndpointManager: d.endpointManager,
 		}, d.bwManager)
 		ms.CollectStaleMapGarbage()
@@ -1790,7 +1785,7 @@ func startDaemon(d *Daemon, restoredEndpoints *endpointRestoreState, cleaner *da
 	// reasons as the API being served. We want to ensure that this migration
 	// logic runs before any endpoint creates.
 	if option.Config.IPAM == ipamOption.IPAMENI {
-		migrated, failed := linuxrouting.NewMigrator(
+		migrated, failed := linuxrouting.NewMigrator(params.Logger,
 			&eni.InterfaceDB{Clientset: params.Clientset},
 		).MigrateENIDatapath(option.Config.EgressMultiHomeIPRuleCompat)
 		switch {
@@ -1911,7 +1906,7 @@ func initClockSourceOption() {
 	}
 
 	if option.Config.EnableBPFClockProbe {
-		if probes.HaveProgramHelper(ebpf.XDP, asm.FnJiffies64) == nil {
+		if probes.HaveProgramHelper(logging.DefaultSlogLogger, ebpf.XDP, asm.FnJiffies64) == nil {
 			t, err := probes.Jiffies()
 			if err == nil && t > 0 {
 				option.Config.ClockSource = option.ClockSourceJiffies
