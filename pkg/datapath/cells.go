@@ -34,7 +34,7 @@ import (
 	"github.com/cilium/cilium/pkg/datapath/tunnel"
 	"github.com/cilium/cilium/pkg/datapath/types"
 	"github.com/cilium/cilium/pkg/datapath/xdp"
-	"github.com/cilium/cilium/pkg/loadbalancer/experimental"
+	"github.com/cilium/cilium/pkg/loadbalancer"
 	"github.com/cilium/cilium/pkg/logging"
 	"github.com/cilium/cilium/pkg/maglev"
 	"github.com/cilium/cilium/pkg/maps"
@@ -78,7 +78,7 @@ var Cell = cell.Module(
 
 	cell.Provide(newWireguardAgent),
 
-	cell.Provide(func(expConfig experimental.Config, maglev *maglev.Maglev) types.LBMap {
+	cell.Provide(func(expConfig loadbalancer.Config, maglev *maglev.Maglev) types.LBMap {
 		if expConfig.EnableExperimentalLB {
 			// The experimental control-plane comes with its own LBMap implementation.
 			return nil
@@ -149,6 +149,9 @@ var Cell = cell.Module(
 	// opened (from BPF ACT map), closed (from BPF ACT map), and failed
 	// connections (from ctmap's GC).
 	act.Cell,
+
+	// Provides a cache of link names to ifindex mappings
+	link.Cell,
 )
 
 func newWireguardAgent(rootLogger *slog.Logger, lc cell.Lifecycle, sysctl sysctl.Sysctl, health cell.Health, registry job.Registry, db *statedb.DB, mtuTable statedb.Table[mtu.RouteMTU]) *wg.Agent {

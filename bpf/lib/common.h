@@ -346,11 +346,21 @@ struct edt_info {
 
 struct remote_endpoint_info {
 	__u32		sec_identity;
-	__u32		tunnel_endpoint;
+	union {
+		struct {
+			__u32	ip4;
+			__u32	pad1;
+			__u32	pad2;
+			__u32	pad3;
+		};
+		union v6addr	ip6;
+	} tunnel_endpoint;
 	__u16		pad;
 	__u8		key;
 	__u8		flag_skip_tunnel:1,
-			pad2:7;
+			flag_has_tunnel_ep:1,
+			flag_ipv6_tunnel_ep:1,
+			pad2:5;
 };
 
 /*
@@ -703,6 +713,13 @@ enum metric_dir {
 #define MARK_MAGIC_TO_PROXY		0x0200
 #define MARK_MAGIC_SNAT_DONE		0x0300
 #define MARK_MAGIC_OVERLAY		0x0400 /* mark carries identity */
+/* used to indicate encrypted traffic was tunnel encapsulated
+ * this is useful in the IPsec code paths where we need to know if overlay
+ * traffic is encrypted or not.
+ *
+ * the SPI bit can be reused since this magic mark is only used POST encryption.
+ */
+#define MARK_MAGIC_OVERLAY_ENCRYPTED	(MARK_MAGIC_OVERLAY | 0x1000)
 #define MARK_MAGIC_EGW_DONE		0x0500 /* mark carries identity */
 
 #define MARK_MAGIC_KEY_MASK		0xFF00

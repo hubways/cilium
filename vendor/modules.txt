@@ -314,7 +314,7 @@ github.com/cilium/linters/timeafter
 # github.com/cilium/lumberjack/v2 v2.4.1
 ## explicit; go 1.13
 github.com/cilium/lumberjack/v2
-# github.com/cilium/proxy v0.0.0-20250331052455-35234fc3c234
+# github.com/cilium/proxy v0.0.0-20250410004025-67b7ec895b08
 ## explicit; go 1.23.0
 github.com/cilium/proxy/go/cilium/api
 github.com/cilium/proxy/go/contrib/envoy/extensions/filters/network/mysql_proxy/v3
@@ -1173,7 +1173,7 @@ github.com/mdlayher/packet
 # github.com/mdlayher/socket v0.5.1
 ## explicit; go 1.20
 github.com/mdlayher/socket
-# github.com/miekg/dns v1.1.64
+# github.com/miekg/dns v1.1.65
 ## explicit; go 1.22.0
 github.com/miekg/dns
 # github.com/mitchellh/copystructure v1.2.0
@@ -1792,7 +1792,7 @@ golang.zx2c4.com/wireguard/wgctrl/wgtypes
 # gomodules.xyz/jsonpatch/v2 v2.4.0
 ## explicit; go 1.20
 gomodules.xyz/jsonpatch/v2
-# google.golang.org/genproto/googleapis/api v0.0.0-20250324211829-b45e905df463
+# google.golang.org/genproto/googleapis/api v0.0.0-20250407143221-ac9807e6c755
 ## explicit; go 1.23.0
 google.golang.org/genproto/googleapis/api
 google.golang.org/genproto/googleapis/api/annotations
@@ -2668,7 +2668,7 @@ sigs.k8s.io/controller-runtime/pkg/webhook/admission
 sigs.k8s.io/controller-runtime/pkg/webhook/admission/metrics
 sigs.k8s.io/controller-runtime/pkg/webhook/conversion
 sigs.k8s.io/controller-runtime/pkg/webhook/internal/metrics
-# sigs.k8s.io/controller-tools v0.17.2 => github.com/cilium/controller-tools v0.16.5-1
+# sigs.k8s.io/controller-tools v0.17.3 => github.com/cilium/controller-tools v0.16.5-1
 ## explicit; go 1.22.0
 sigs.k8s.io/controller-tools/cmd/controller-gen
 sigs.k8s.io/controller-tools/pkg/crd
@@ -2684,7 +2684,7 @@ sigs.k8s.io/controller-tools/pkg/schemapatcher
 sigs.k8s.io/controller-tools/pkg/schemapatcher/internal/yaml
 sigs.k8s.io/controller-tools/pkg/version
 sigs.k8s.io/controller-tools/pkg/webhook
-# sigs.k8s.io/gateway-api v1.3.0-rc.1.0.20250403230238-850b4085e30c
+# sigs.k8s.io/gateway-api v1.3.0-rc.2
 ## explicit; go 1.24.0
 sigs.k8s.io/gateway-api/apis/v1
 sigs.k8s.io/gateway-api/apis/v1alpha2
@@ -2799,7 +2799,7 @@ sigs.k8s.io/mcs-api/pkg/client/clientset/versioned/typed/apis/v1alpha1/fake
 # sigs.k8s.io/mcs-api/controllers v0.0.0-20250224121229-6c631f4730d0
 ## explicit; go 1.23.0
 sigs.k8s.io/mcs-api/controllers
-# sigs.k8s.io/structured-merge-diff/v4 v4.6.0
+# sigs.k8s.io/structured-merge-diff/v4 v4.7.0
 ## explicit; go 1.13
 sigs.k8s.io/structured-merge-diff/v4/fieldpath
 sigs.k8s.io/structured-merge-diff/v4/merge

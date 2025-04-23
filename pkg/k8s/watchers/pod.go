@@ -36,7 +36,6 @@ import (
 	"github.com/cilium/cilium/pkg/datapath/linux/bandwidth"
 	"github.com/cilium/cilium/pkg/datapath/linux/probes"
 	datapathTables "github.com/cilium/cilium/pkg/datapath/tables"
-	datapath "github.com/cilium/cilium/pkg/datapath/types"
 	"github.com/cilium/cilium/pkg/endpoint"
 	"github.com/cilium/cilium/pkg/endpoint/regeneration"
 	"github.com/cilium/cilium/pkg/endpointmanager"
@@ -90,7 +89,6 @@ type k8sPodWatcherParams struct {
 	Pods              statedb.Table[agentK8s.LocalPod]
 	NodeAddrs         statedb.Table[datapathTables.NodeAddress]
 	LRPManager        *redirectpolicy.Manager
-	BandwidthManager  datapath.BandwidthManager
 	CGroupManager     cgroup.CGroupManager
 }
 
@@ -107,7 +105,6 @@ func newK8sPodWatcher(params k8sPodWatcherParams) *K8sPodWatcher {
 		redirectPolicyManager: params.LRPManager,
 		ipcache:               params.IPCache,
 		cgroupManager:         params.CGroupManager,
-		bandwidthManager:      params.BandwidthManager,
 		resources:             params.Resources,
 		db:                    params.DB,
 		pods:                  params.Pods,
@@ -136,7 +133,6 @@ type K8sPodWatcher struct {
 	redirectPolicyManager redirectPolicyManager
 	ipcache               ipcacheManager
 	cgroupManager         cgroupManager
-	bandwidthManager      datapath.BandwidthManager
 	resources             agentK8s.Resources
 	db                    *statedb.DB
 	pods                  statedb.Table[agentK8s.LocalPod]
@@ -403,13 +399,14 @@ func (k *K8sPodWatcher) updateK8sPodV1(oldK8sPod, newK8sPod *slim_corev1.Pod) er
 			}
 
 			// Synchronize Pod labels with CiliumEndpoint labels if there is a change.
-			updateCiliumEndpointLabels(k.logger, k.clientset, podEP, newK8sPod.Labels)
+			if !option.Config.DisableCiliumEndpointCRD {
+				updateCiliumEndpointLabels(k.logger, k.clientset, podEP, newK8sPod.Labels)
+			}
 		}
 
 		if annotationsChanged {
 			if annoChangedBandwidth {
-				podEP.UpdateBandwidthPolicy(k.bandwidthManager,
-					newK8sPod.Annotations[bandwidth.EgressBandwidth],
+				podEP.UpdateBandwidthPolicy(newK8sPod.Annotations[bandwidth.EgressBandwidth],
 					newK8sPod.Annotations[bandwidth.IngressBandwidth],
 					newK8sPod.Annotations[bandwidth.Priority])
 			}
@@ -557,9 +554,9 @@ func netnsCookieSupported(logger *slog.Logger) bool {
 	return _netnsCookieSupported
 }
 
-func (k *K8sPodWatcher) genServiceMappings(pod *slim_corev1.Pod, podIPs []string, logger *slog.Logger) []loadbalancer.SVC {
+func (k *K8sPodWatcher) genServiceMappings(pod *slim_corev1.Pod, podIPs []string, logger *slog.Logger) []loadbalancer.LegacySVC {
 	var (
-		svcs       []loadbalancer.SVC
+		svcs       []loadbalancer.LegacySVC
 		containers []slim_corev1.Container
 	)
 	containers = append(containers, pod.Spec.InitContainers...)
@@ -591,11 +588,11 @@ func (k *K8sPodWatcher) genServiceMappings(pod *slim_corev1.Pod, podIPs []string
 				continue
 			}
 
-			var bes4 []*loadbalancer.Backend
-			var bes6 []*loadbalancer.Backend
+			var bes4 []*loadbalancer.LegacyBackend
+			var bes6 []*loadbalancer.LegacyBackend
 
 			for _, podIP := range podIPs {
-				be := loadbalancer.Backend{
+				be := loadbalancer.LegacyBackend{
 					L3n4Addr: loadbalancer.L3n4Addr{
 						AddrCluster: cmtypes.MustParseAddrCluster(podIP),
 						L4Addr: loadbalancer.L4Addr{
@@ -659,7 +656,7 @@ func (k *K8sPodWatcher) genServiceMappings(pod *slim_corev1.Pod, podIPs []string
 				if addr.Is4() {
 					if option.Config.EnableIPv4 && len(bes4) > 0 {
 						svcs = append(svcs,
-							loadbalancer.SVC{
+							loadbalancer.LegacySVC{
 								Frontend:         fe,
 								Backends:         bes4,
 								Type:             loadbalancer.SVCTypeHostPort,
@@ -671,7 +668,7 @@ func (k *K8sPodWatcher) genServiceMappings(pod *slim_corev1.Pod, podIPs []string
 				} else {
 					if option.Config.EnableIPv6 && len(bes6) > 0 {
 						svcs = append(svcs,
-							loadbalancer.SVC{
+							loadbalancer.LegacySVC{
 								Frontend:         fe,
 								Backends:         bes6,
 								Type:             loadbalancer.SVCTypeHostPort,
@@ -740,7 +737,7 @@ func (k *K8sPodWatcher) upsertHostPortMapping(oldPod, newPod *slim_corev1.Pod, o
 	}
 
 	for _, dpSvc := range svcs {
-		p := &loadbalancer.SVC{
+		p := &loadbalancer.LegacySVC{
 			Frontend:            dpSvc.Frontend,
 			Backends:            dpSvc.Backends,
 			Type:                dpSvc.Type,
