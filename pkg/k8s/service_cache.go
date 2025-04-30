@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	"github.com/cilium/cilium/pkg/annotation"
+	serviceStore "github.com/cilium/cilium/pkg/clustermesh/store"
 	cmtypes "github.com/cilium/cilium/pkg/clustermesh/types"
 	datapathTables "github.com/cilium/cilium/pkg/datapath/tables"
 	"github.com/cilium/cilium/pkg/ip"
@@ -29,7 +30,6 @@ import (
 	"github.com/cilium/cilium/pkg/logging/logfields"
 	"github.com/cilium/cilium/pkg/node"
 	"github.com/cilium/cilium/pkg/option"
-	serviceStore "github.com/cilium/cilium/pkg/service/store"
 )
 
 // ServiceCacheCell initializes the service cache holds the list of known services
@@ -882,9 +882,24 @@ func (s *ServiceCacheImpl) mergeExternalServiceDeleteLocked(service *serviceStor
 // ability
 func (s *ServiceCacheImpl) DebugStatus() string {
 	s.mutex.RLock()
-	str := spew.Sdump(s)
-	s.mutex.RUnlock()
-	return str
+	defer s.mutex.RUnlock()
+	// Create a temporary struct excluding the fields we want to ignore.
+	dumpable := struct {
+		Config            ServiceCacheConfig
+		Services          map[ServiceID]*Service
+		Endpoints         map[ServiceID]*EndpointSlices
+		ExternalEndpoints map[ServiceID]externalEndpoints
+		SelfNodeZoneLabel string
+	}{
+		Config:            s.config,
+		Services:          s.services,
+		Endpoints:         s.endpoints,
+		ExternalEndpoints: s.externalEndpoints,
+		SelfNodeZoneLabel: s.selfNodeZoneLabel,
+	}
+
+	// Dump the temporary structure.
+	return spew.Sdump(dumpable)
 }
 
 func (s *ServiceCacheImpl) updateSelfNodeLabels(labels map[string]string) {
