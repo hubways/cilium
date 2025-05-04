@@ -523,16 +523,22 @@ BPF_TEST_VERBOSE ?= 0
 
 run_bpf_tests: ## Build and run the BPF unit tests using the cilium-builder container image.
 	DOCKER_ARGS=--privileged RUN_AS_ROOT=1 contrib/scripts/builder.sh \
-		"make" "-j$(shell nproc)" "-C" "bpf/tests/" "run" "BPF_TEST_FILE=$(BPF_TEST_FILE)" "BPF_TEST_DUMP_CTX=$(BPF_TEST_DUMP_CTX)" "V=$(BPF_TEST_VERBOSE)"
+		$(MAKE) $(SUBMAKEOPTS) -j$(shell nproc) -C bpf/tests/ run \
+			"BPF_TEST_FILE=$(BPF_TEST_FILE)" \
+			"BPF_TEST_DUMP_CTX=$(BPF_TEST_DUMP_CTX)" \
+			"LOG_CODEOWNERS=$(LOG_CODEOWNERS)" \
+			"JUNIT_PATH=$(JUNIT_PATH)" \
+			"V=$(BPF_TEST_VERBOSE)"
 
 run-builder: ## Drop into a shell inside a container running the cilium-builder image.
 	DOCKER_ARGS=-it contrib/scripts/builder.sh bash
 
 .PHONY: renovate-local
 renovate-local: ## Run a local linter for the renovate configuration
-	$(CONTAINER_ENGINE) run --rm -ti \
+	@echo "Running renovate --platform=local"
+	@$(CONTAINER_ENGINE) run --rm -ti \
 		-e LOG_LEVEL=debug \
-		-e GITHUB_COM_TOKEN="$(gh auth token)" \
+		-e GITHUB_COM_TOKEN="$(RENOVATE_GITHUB_COM_TOKEN)" \
 		-v /tmp:/tmp \
 		-v $(ROOT_DIR):/usr/src/app \
 		docker.io/renovate/renovate:slim \

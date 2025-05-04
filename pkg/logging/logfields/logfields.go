@@ -1559,6 +1559,12 @@ const (
 
 	CEPUIDOld = "old-" + CEPUID
 
+	HubbleCLIVersion = "hubble-cli-version"
+
+	HubbleRelayVersion = "hubble-relay-version"
+
+	HubbleServerVersion = "hubble-server-version"
+
 	Resources = "resources"
 
 	LastModifiedVersion = "lastModifiedVersion"
@@ -1576,4 +1582,36 @@ const (
 	CurrentVersion = "currentVersion"
 
 	PendingCompletions = "pendingCompletions"
+
+	Exists = "exists"
+
+	MulticastAddr = "multicastAddr"
+
+	IPMask4 = "ipMask4"
+
+	IPMask6 = "ipMask6"
+
+	IPRules = "ipRules"
+
+	Rules = "rules"
+
+	SecID = "secID"
+
+	WrittenBytes = "writtenBytes"
+
+	TotalBytes = "totalBytes"
+
+	Destination = "destination"
+
+	LenEntries = "lenEntries"
+
+	FQDNSelector = "fqdnSelector"
+
+	MatchName = "matchName"
+
+	LenPrefixes = "lenPrefixes"
+
+	LookupIPAddrs = "lookupIPAddrs"
+
+	MatchPattern = "matchPattern"
 )

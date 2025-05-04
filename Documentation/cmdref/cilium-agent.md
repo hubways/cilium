@@ -50,7 +50,6 @@ cilium-agent [flags]
       --bpf-lb-map-max int                                        Maximum number of entries in Cilium BPF lbmap (default 65536)
       --bpf-lb-mode string                                        BPF load balancing mode ("snat", "dsr", "hybrid") (default "snat")
       --bpf-lb-mode-annotation                                    Enable service-level annotation for configuring BPF load balancing mode
-      --bpf-lb-proto-diff                                         Enable support for service protocol differentiation (TCP, UDP, SCTP) (default true)
       --bpf-lb-rss-ipv4-src-cidr string                           BPF load balancing RSS outer source IPv4 CIDR prefix for IPIP
       --bpf-lb-rss-ipv6-src-cidr string                           BPF load balancing RSS outer source IPv6 CIDR prefix for IPIP
       --bpf-lb-sock                                               Enable socket-based LB for E/W traffic
@@ -63,7 +62,7 @@ cilium-agent [flags]
       --bpf-policy-map-max int                                    Maximum number of entries in endpoint policy map (per endpoint) (default 16384)
       --bpf-policy-stats-map-max int                              Maximum number of entries in bpf policy stats map (default 65536)
       --bpf-root string                                           Path to BPF filesystem
-      --bpf-sock-rev-map-max int                                  Maximum number of entries for the SockRevNAT BPF map (default 262144)
+      --bpf-sock-rev-map-max int                                  Maximum number of entries for the SockRevNAT BPF map
       --certificates-directory string                             Root directory to find certificates specified in L7 TLS policy enforcement (default "/var/run/cilium/certs")
       --cgroup-root string                                        Path to Cgroup2 filesystem
       --cluster-health-port int                                   TCP port for cluster-wide network connectivity health API (default 4240)
