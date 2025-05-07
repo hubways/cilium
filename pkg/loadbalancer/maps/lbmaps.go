@@ -301,7 +301,7 @@ func (r *BPFLBMaps) Start(ctx cell.HookContext) (err error) {
 		Type:       ebpf.Array,
 		KeySize:    uint32(unsafe.Sizeof(lbmap.MaglevInnerKey{})),
 		MaxEntries: 1,
-		ValueSize:  lbmap.MaglevBackendLen * uint32(r.MaglevCfg.MaglevTableSize),
+		ValueSize:  lbmap.MaglevBackendLen * uint32(r.MaglevCfg.TableSize),
 	}
 
 	mapsToCreate, mapsToDelete := r.allMaps()
@@ -571,7 +571,7 @@ func (r *BPFLBMaps) DumpMaglev(cb func(lbmap.MaglevOuterKey, lbmap.MaglevOuterVa
 			RevNatID: byteorder.NetworkToHost16(key.(*lbmap.MaglevOuterKey).RevNatID),
 		}
 		maglevValue := value.(*lbmap.MaglevOuterVal)
-		inner, err := lbmap.MaglevInnerMapFromID(maglevValue.FD)
+		inner, err := lbmap.MaglevInnerMapFromID(r.Log, maglevValue.FD)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("cannot open inner map with fd %d: %w", maglevValue.FD, err))
 			return

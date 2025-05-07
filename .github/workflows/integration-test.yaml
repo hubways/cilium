@@ -61,7 +61,7 @@ concurrency:
 
 jobs:
   echo-inputs:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
+    if: github.event_name == 'workflow_dispatch' && always() && vars.ENABLE_CILIUM_CI == 'true'
     name: Echo Workflow Dispatch Inputs
     runs-on: ubuntu-24.04
     steps:
@@ -70,6 +70,8 @@ jobs:
           echo '${{ tojson(inputs) }}'
 
   commit-status-start:
+    # Skip running workflow on forks using variable Kill Switch
+    if: always() && vars.ENABLE_CILIUM_CI == 'true'
     name: Commit Status Start
     runs-on: ubuntu-24.04
     steps:
@@ -79,6 +81,8 @@ jobs:
           sha: ${{ inputs.SHA || github.sha }}
 
   integration-test:
+    # Skip running workflow on forks using variable Kill Switch
+    if: always() && vars.ENABLE_CILIUM_CI == 'true'
     name: Integration Test
     env:
       # GitHub doesn't provide a way to retrieve the name of a job, so we have
@@ -164,7 +168,7 @@ jobs:
         run: echo "clang_dir=$HOME/.clang" >> $GITHUB_OUTPUT
 
       - name: Install LLVM and Clang
-        uses: KyleMayes/install-llvm-action@6ba6e2cd3813def9879be378609d87cb3ef3bac3 # v2.0.6
+        uses: KyleMayes/install-llvm-action@a7a1a882e2d06ebe05d5bb97c3e1f8c984ae96fc # v2.0.7
         with:
           version: "18.1.8"
           directory: ${{ steps.set_clang_dir.outputs.clang_dir }}

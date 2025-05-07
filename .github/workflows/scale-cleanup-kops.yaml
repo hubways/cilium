@@ -26,10 +26,12 @@ env:
   # renovate: datasource=golang-version depName=go
   go_version: 1.24.2
   # renovate: datasource=docker depName=google/cloud-sdk
-  gcloud_version: 519.0.0
+  gcloud_version: 520.0.0
 
 jobs:
   cleanup-kops-clusters:
+    # Skip running workflow on forks using variable Kill Switch
+    if: always() && vars.ENABLE_CILIUM_CI == 'true'
     runs-on: ubuntu-24.04
     name: Cleanup kops clusters
     timeout-minutes: 30

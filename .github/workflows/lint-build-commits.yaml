@@ -26,6 +26,8 @@ concurrency:
 
 jobs:
   compute-vars:
+    # Skip running workflow on forks using variable Kill Switch
+    if: always() && vars.ENABLE_CILIUM_CI == 'true'
     name: Compute variables
     runs-on: ubuntu-22.04
     outputs:
@@ -82,6 +84,8 @@ jobs:
               - 'test/**'
 
   build-commits-cilium:
+    # Skip running workflow on forks using variable Kill Switch
+    if: always() && vars.ENABLE_CILIUM_CI == 'true'
     name: Check if cilium builds for every commit
     runs-on: ubuntu-22.04
     needs: [compute-vars]
@@ -168,6 +172,8 @@ jobs:
         run: git --no-pager log --format=%B -n 1
 
   build-commits-hubble-cli:
+    # Skip running workflow on forks using variable Kill Switch
+    if: always() && vars.ENABLE_CILIUM_CI == 'true'
     name: Check if hubble-cli builds for every commit
     runs-on: ubuntu-22.04
     needs: [compute-vars]
@@ -260,6 +266,8 @@ jobs:
         run: git --no-pager log --format=%B -n 1
 
   build-commits-bpf:
+    # Skip running workflow on forks using variable Kill Switch
+    if: always() && vars.ENABLE_CILIUM_CI == 'true'
     name: Check if bpf builds for every commit
     runs-on: ubuntu-22.04
     needs: [compute-vars]
@@ -353,6 +361,8 @@ jobs:
         run: git --no-pager log --format=%B -n 1
 
   build-commits-test:
+    # Skip running workflow on forks using variable Kill Switch
+    if: always() && vars.ENABLE_CILIUM_CI == 'true'
     name: Check if test builds for every commit
     runs-on: ubuntu-22.04
     needs: [compute-vars]
@@ -397,7 +407,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends libtinfo5
 
       - name: Install LLVM and Clang
-        uses: KyleMayes/install-llvm-action@6ba6e2cd3813def9879be378609d87cb3ef3bac3 # v2.0.6
+        uses: KyleMayes/install-llvm-action@a7a1a882e2d06ebe05d5bb97c3e1f8c984ae96fc # v2.0.7
         with:
           version: "18.1.8"
           directory: ${{ steps.set_clang_dir.outputs.clang_dir }}
