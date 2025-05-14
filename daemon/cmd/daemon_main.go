@@ -938,8 +938,11 @@ func InitGlobalFlags(cmd *cobra.Command, vp *viper.Viper) {
 	flags.Bool(option.EnableBGPControlPlaneStatusReport, true, "Enable the BGP control plane status reporting")
 	option.BindEnv(vp, option.EnableBGPControlPlaneStatusReport)
 
-	flags.String(option.BGPRouterIDAllocationMode, defaults.BGPRouterIDAllocationMode, "BGP router-id allocation mode. Currently supported values: 'default' ")
+	flags.String(option.BGPRouterIDAllocationMode, option.BGPRouterIDAllocationModeDefault, "BGP router-id allocation mode. Currently supported values: 'default' or 'ip-pool'")
 	option.BindEnv(vp, option.BGPRouterIDAllocationMode)
+
+	flags.String(option.BGPRouterIDAllocationIPPool, "", "IP pool to allocate the BGP router-id from when the mode is 'ip-pool'")
+	option.BindEnv(vp, option.BGPRouterIDAllocationIPPool)
 
 	flags.Bool(option.EnablePMTUDiscovery, false, "Enable path MTU discovery to send ICMP fragmentation-needed replies to the client")
 	option.BindEnv(vp, option.EnablePMTUDiscovery)
@@ -1827,16 +1830,11 @@ func initClockSourceOption() {
 	}
 
 	if option.Config.EnableBPFClockProbe {
-		if probes.HaveProgramHelper(logging.DefaultSlogLogger, ebpf.XDP, asm.FnJiffies64) == nil {
-			t, err := probes.Jiffies()
-			if err == nil && t > 0 {
-				option.Config.ClockSource = option.ClockSourceJiffies
-			} else {
-				log.WithError(err).Warningf("Auto-disabling %q feature since kernel doesn't expose jiffies", option.EnableBPFClockProbe)
-				option.Config.EnableBPFClockProbe = false
-			}
+		t, err := probes.Jiffies()
+		if err == nil && t > 0 {
+			option.Config.ClockSource = option.ClockSourceJiffies
 		} else {
-			log.WithError(err).Warningf("Auto-disabling %q feature since kernel support is missing (Linux 5.5 or later required).", option.EnableBPFClockProbe)
+			log.WithError(err).Warningf("Auto-disabling %q feature since kernel doesn't expose jiffies", option.EnableBPFClockProbe)
 			option.Config.EnableBPFClockProbe = false
 		}
 	}

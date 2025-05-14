@@ -23,7 +23,8 @@ cilium-agent [flags]
       --arping-refresh-period duration                            Period for remote node ARP entry refresh (set 0 to disable) (default 30s)
       --auto-create-cilium-node-resource                          Automatically create CiliumNode resource for own node on startup (default true)
       --auto-direct-node-routes                                   Enable automatic L2 routing between nodes
-      --bgp-router-id-allocation-mode string                      BGP router-id allocation mode. Currently supported values: 'default'  (default "default")
+      --bgp-router-id-allocation-ip-pool string                   IP pool to allocate the BGP router-id from when the mode is 'ip-pool'
+      --bgp-router-id-allocation-mode string                      BGP router-id allocation mode. Currently supported values: 'default' or 'ip-pool' (default "default")
       --bpf-auth-map-max int                                      Maximum number of entries in auth map (default 524288)
       --bpf-conntrack-accounting                                  Enable CT accounting for packets and bytes (default false)
       --bpf-ct-global-any-max int                                 Maximum number of entries in non-TCP CT table (default 262144)
@@ -313,6 +314,7 @@ cilium-agent [flags]
       --l2-pod-announcements-interface-pattern string             Regex matching interfaces used for sending gratuitous arp messages
       --label-prefix-file string                                  Valid label prefixes file path
       --labels strings                                            List of label prefixes used to determine identity of an endpoint
+      --lb-state-file string                                      Synchronize load-balancing state from the specified file
       --lib-dir string                                            Directory path to store runtime build environment (default "/var/lib/cilium")
       --local-router-ipv4 string                                  Link-local IPv4 used for Cilium's router devices
       --local-router-ipv6 string                                  Link-local IPv6 used for Cilium's router devices
