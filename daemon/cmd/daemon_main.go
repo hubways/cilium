@@ -62,6 +62,7 @@ import (
 	"github.com/cilium/cilium/pkg/identity"
 	identitycell "github.com/cilium/cilium/pkg/identity/cache/cell"
 	"github.com/cilium/cilium/pkg/identity/identitymanager"
+	identityrestoration "github.com/cilium/cilium/pkg/identity/restoration"
 	"github.com/cilium/cilium/pkg/ipam"
 	ipamOption "github.com/cilium/cilium/pkg/ipam/option"
 	"github.com/cilium/cilium/pkg/ipcache"
@@ -253,6 +254,9 @@ func InitGlobalFlags(cmd *cobra.Command, vp *viper.Viper) {
 
 	flags.Bool(option.EnableHealthChecking, defaults.EnableHealthChecking, "Enable connectivity health checking")
 	option.BindEnv(vp, option.EnableHealthChecking)
+
+	flags.Bool(option.AgentHealthRequireK8sConnectivity, true, "Require Kubernetes connectivity in agent health endpoint")
+	option.BindEnv(vp, option.AgentHealthRequireK8sConnectivity)
 
 	flags.Bool(option.EnableHealthCheckLoadBalancerIP, defaults.EnableHealthCheckLoadBalancerIP, "Enable access of the healthcheck nodePort on the LoadBalancerIP. Needs --enable-health-check-nodeport to be enabled")
 	option.BindEnv(vp, option.EnableHealthCheckLoadBalancerIP)
@@ -1035,7 +1039,8 @@ func initDaemonConfigAndLogging(vp *viper.Viper) {
 		lbmap.SizeofSockRevNat6Key+lbmap.SizeofSockRevNat6Value)
 
 	option.Config.SetupLogging(vp, "cilium-agent")
-	option.Config.Populate(vp)
+
+	option.Config.Populate(logging.DefaultSlogLogger, vp)
 
 	// add hooks after setting up metrics in the option.Config
 	logging.DefaultLogger.Hooks.Add(metrics.NewLoggingHook())
@@ -1348,10 +1353,8 @@ func initEnv(vp *viper.Viper) {
 		log.Fatalf("Cannot specify IPAM mode %s in tunnel mode.", option.Config.IPAM)
 	}
 
-	if option.Config.IPAM == ipamOption.IPAMMultiPool {
-		if option.Config.EnableIPSec {
-			log.Fatalf("Cannot specify IPAM mode %s with %s.", option.Config.IPAM, option.EnableIPSecName)
-		}
+	if option.Config.IPAM == ipamOption.IPAMMultiPool && option.Config.EnableIPSec && !option.Config.TunnelingEnabled() {
+		log.Fatalf("IPAM mode %s with %s is supported only in tunnel mode.", option.Config.IPAM, option.EnableIPSecName)
 	}
 
 	if option.Config.InstallNoConntrackIptRules {
@@ -1478,6 +1481,7 @@ type daemonParams struct {
 	CertManager         certificatemanager.CertificateManager
 	SecretManager       certificatemanager.SecretManager
 	IdentityAllocator   identitycell.CachingIdentityAllocator
+	IdentityRestorer    *identityrestoration.LocalIdentityRestorer
 	JobGroup            job.Group
 	Policy              policy.PolicyRepository
 	IPCache             *ipcache.IPCache
@@ -1550,19 +1554,19 @@ func newDaemonPromise(params daemonParams) (promise.Promise[*Daemon], legacy.Dae
 				// This validation needs to be done outside of the agent until
 				// datapath.NodeAddressing is used consistently across the code base.
 				log.Info("Validating configured node address ranges")
-				if err := node.ValidatePostInit(); err != nil {
+				if err := node.ValidatePostInit(params.Logger); err != nil {
 					return fmt.Errorf("postinit failed: %w", err)
 				}
 
 				// Store config in file before resolving the DaemonConfig promise.
-				err = option.Config.StoreInFile(option.Config.StateDir)
+				err = option.Config.StoreInFile(d.logger, option.Config.StateDir)
 				if err != nil {
-					log.WithError(err).Error("Unable to store Cilium's configuration")
+					d.logger.Error("Unable to store Cilium's configuration", logfields.Error, err)
 				}
 
-				err = option.StoreViperInFile(option.Config.StateDir)
+				err = option.StoreViperInFile(d.logger, option.Config.StateDir)
 				if err != nil {
-					log.WithError(err).Error("Unable to store Viper's configuration")
+					d.logger.Error("Unable to store Viper's configuration", logfields.Error, err)
 				}
 			}
 
@@ -1671,8 +1675,8 @@ func startDaemon(d *Daemon, restoredEndpoints *endpointRestoreState, cleaner *da
 		if !d.endpointManager.IngressEndpointExists() {
 			// Creating Ingress Endpoint depends on the Ingress IPs having been
 			// allocated first. This happens earlier in the agent bootstrap.
-			if (option.Config.EnableIPv4 && len(node.GetIngressIPv4()) == 0) ||
-				(option.Config.EnableIPv6 && len(node.GetIngressIPv6()) == 0) {
+			if (option.Config.EnableIPv4 && len(node.GetIngressIPv4(params.Logger)) == 0) ||
+				(option.Config.EnableIPv6 && len(node.GetIngressIPv6(params.Logger)) == 0) {
 				log.Warn("Ingress IPs are not available, skipping creation of the Ingress Endpoint: Policy enforcement on Cilium Ingress will not work as expected.")
 			} else {
 				log.Info("Creating ingress endpoint")
@@ -1711,7 +1715,7 @@ func startDaemon(d *Daemon, restoredEndpoints *endpointRestoreState, cleaner *da
 		// Sleep for the --identity-restore-grace-period (default: 30 seconds k8s, 10 minutes kvstore), allowing
 		// the normal allocation processes to finish, before releasing restored resources.
 		time.Sleep(option.Config.IdentityRestoreGracePeriod)
-		d.releaseRestoredIdentities()
+		d.identityRestorer.ReleaseRestoredIdentities()
 	}()
 
 	// Migrating the ENI datapath must happen before the API is served to

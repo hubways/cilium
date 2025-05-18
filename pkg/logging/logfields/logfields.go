@@ -677,6 +677,8 @@ const (
 	// Count is a measure being compared to the Limit
 	Count = "count"
 
+	Total = "total"
+
 	// Debug is a boolean value for whether debug is set or not.
 	Debug = "debug"
 
@@ -1584,6 +1586,24 @@ const (
 
 	HubbleServerVersion = "hubble-server-version"
 
+	Handler = "handler"
+
+	NodeOwner = "nodeOwner"
+
+	LenStaleNodes = "lenStaleNodes"
+
+	StaleNodes = "staleNodes"
+
+	SyncInterval = "syncInterval"
+
+	BootID = "bootID"
+
+	LeaseDuration = "leaseDuration"
+
+	RenewDeadline = "renewDeadline"
+
+	RetryPeriod = "retryPeriod"
+
 	Resources = "resources"
 
 	LastModifiedVersion = "lastModifiedVersion"
@@ -1658,6 +1678,14 @@ const (
 
 	KeySize = "keySize"
 
+	Subnets = "subnets"
+
+	Ratio = "ratio"
+
+	OldName = "oldName"
+
+	NewName = "newName"
+
 	ValueSize = "valueSize"
 
 	MaxEntries = "maxEntries"
@@ -1672,9 +1700,31 @@ const (
 
 	EventEnqueueWaitTime = "eventEnqueueWaitTime"
 
+	CalculatedInterval = "calculatedInterval"
+
+	MaxAllowedInterval = "maxAllowedInterval"
+
 	EventConsumeOffQueueWaitTime = "eventConsumeOffQueueWaitTime"
 
 	CachedSource = "cachedSource"
 
 	Info = "info"
+
+	OperatorID = "operatorID"
+
+	NewLeader = "newLeader"
+
+	KVStore = "kvstore"
+
+	LabelSelectorFlagOption = "label-selector"
+
+	RemoveCiliumNodeTaintsFlagOption = "remove-cilium-node-taints"
+
+	SetCiliumNodeTaintsFlagOption = "set-cilium-node-taints"
+
+	SetCiliumIsUpConditionFlagOption = "set-cilium-is-up-condition"
+
+	TimeSinceRestart = "timeSinceRestart"
+
+	TimeSincePodStarted = "timeSincePodStarted"
 )

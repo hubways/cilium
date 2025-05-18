@@ -242,6 +242,7 @@ contributors across the globe, there is almost always someone available to help.
 | clustermesh.apiserver.podDisruptionBudget.enabled | bool | `false` | enable PodDisruptionBudget ref: https://kubernetes.io/docs/concepts/workloads/pods/disruptions/ |
 | clustermesh.apiserver.podDisruptionBudget.maxUnavailable | int | `1` | Maximum number/percentage of pods that may be made unavailable |
 | clustermesh.apiserver.podDisruptionBudget.minAvailable | string | `nil` | Minimum number/percentage of pods that should remain scheduled. When it's set, maxUnavailable must be disabled by `maxUnavailable: null` |
+| clustermesh.apiserver.podDisruptionBudget.unhealthyPodEvictionPolicy | string | `nil` | How are unhealthy, but running, pods counted for eviction |
 | clustermesh.apiserver.podLabels | object | `{}` | Labels to be added to clustermesh-apiserver pods |
 | clustermesh.apiserver.podSecurityContext | object | `{"fsGroup":65532,"runAsGroup":65532,"runAsNonRoot":true,"runAsUser":65532}` | Security context to be added to clustermesh-apiserver pods |
 | clustermesh.apiserver.priorityClassName | string | `""` | The priority class to use for clustermesh-apiserver |
@@ -253,6 +254,7 @@ contributors across the globe, there is almost always someone available to help.
 | clustermesh.apiserver.service.enableSessionAffinity | string | `"HAOnly"` | Defines when to enable session affinity. Each replica in a clustermesh-apiserver deployment runs its own discrete etcd cluster. Remote clients connect to one of the replicas through a shared Kubernetes Service. A client reconnecting to a different backend will require a full resync to ensure data integrity. Session affinity can reduce the likelihood of this happening, but may not be supported by all cloud providers. Possible values:  - "HAOnly" (default) Only enable session affinity for deployments with more than 1 replica.  - "Always" Always enable session affinity.  - "Never" Never enable session affinity. Useful in environments where            session affinity is not supported, but may lead to slightly            degraded performance due to more frequent reconnections. |
 | clustermesh.apiserver.service.externalTrafficPolicy | string | `"Cluster"` | The externalTrafficPolicy of service used for apiserver access. |
 | clustermesh.apiserver.service.internalTrafficPolicy | string | `"Cluster"` | The internalTrafficPolicy of service used for apiserver access. |
+| clustermesh.apiserver.service.labels | object | `{}` | Labels for the clustermesh-apiserver service. |
 | clustermesh.apiserver.service.loadBalancerClass | string | `nil` | Configure a loadBalancerClass. Allows to configure the loadBalancerClass on the clustermesh-apiserver LB service in case the Service type is set to LoadBalancer (requires Kubernetes 1.24+). |
 | clustermesh.apiserver.service.loadBalancerIP | string | `nil` | Configure a specific loadBalancerIP. Allows to configure a specific loadBalancerIP on the clustermesh-apiserver LB service in case the Service type is set to LoadBalancer. |
 | clustermesh.apiserver.service.loadBalancerSourceRanges | list | `[]` | Configure loadBalancerSourceRanges. Allows to configure the source IP ranges allowed to access the clustermesh-apiserver LB service in case the Service type is set to LoadBalancer. |
@@ -391,6 +393,7 @@ contributors across the globe, there is almost always someone available to help.
 | envoy.idleTimeoutDurationSeconds | int | `60` | Set Envoy upstream HTTP idle connection timeout seconds. Does not apply to connections with pending requests. Default 60s |
 | envoy.image | object | `{"digest":"sha256:770ae69b0332237c2a90d87d91109e75434abf0ca1ec9f3982a28daee469d4b8","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.33.3-1746785339-971577e505e5640c1642b4167205cfeaf4647ed1","useDigest":true}` | Envoy container image. |
 | envoy.initialFetchTimeoutSeconds | int | `30` | Time in seconds after which the initial fetch on an xDS stream is considered timed out |
+| envoy.livenessProbe.enabled | bool | `true` | Enable liveness probe for cilium-envoy |
 | envoy.livenessProbe.failureThreshold | int | `10` | failure threshold of liveness probe |
 | envoy.livenessProbe.periodSeconds | int | `30` | interval between checks of the liveness probe |
 | envoy.log.accessLogBufferSize | int | `4096` | Size of the Envoy access log buffer created within the agent in bytes. Tune this value up if you encounter "Envoy: Discarded truncated access log message" errors. Large request/response header sizes (e.g. 16KiB) will require a larger buffer size. |
@@ -426,6 +429,7 @@ contributors across the globe, there is almost always someone available to help.
 | envoy.securityContext.capabilities.keepCapNetBindService | bool | `false` | Keep capability `NET_BIND_SERVICE` for Envoy process. |
 | envoy.securityContext.privileged | bool | `false` | Run the pod with elevated privileges |
 | envoy.securityContext.seLinuxOptions | object | `{"level":"s0","type":"spc_t"}` | SELinux options for the `cilium-envoy` container |
+| envoy.startupProbe.enabled | bool | `true` | Enable startup probe for cilium-envoy |
 | envoy.startupProbe.failureThreshold | int | `105` | failure threshold of startup probe. 105 x 2s translates to the old behaviour of the readiness probe (120s delay + 30 x 3s) |
 | envoy.startupProbe.periodSeconds | int | `2` | interval between checks of the startup probe |
 | envoy.streamIdleTimeoutDurationSeconds | int | `300` | Set Envoy the amount of time that the connection manager will allow a stream to exist with no upstream or downstream activity. default 5 minutes |
@@ -538,6 +542,7 @@ contributors across the globe, there is almost always someone available to help.
 | hubble.relay.podDisruptionBudget.enabled | bool | `false` | enable PodDisruptionBudget ref: https://kubernetes.io/docs/concepts/workloads/pods/disruptions/ |
 | hubble.relay.podDisruptionBudget.maxUnavailable | int | `1` | Maximum number/percentage of pods that may be made unavailable |
 | hubble.relay.podDisruptionBudget.minAvailable | string | `nil` | Minimum number/percentage of pods that should remain scheduled. When it's set, maxUnavailable must be disabled by `maxUnavailable: null` |
+| hubble.relay.podDisruptionBudget.unhealthyPodEvictionPolicy | string | `nil` | How are unhealthy, but running, pods counted for eviction |
 | hubble.relay.podLabels | object | `{}` | Labels to be added to hubble-relay pods |
 | hubble.relay.podSecurityContext | object | `{"fsGroup":65532,"seccompProfile":{"type":"RuntimeDefault"}}` | hubble-relay pod security context |
 | hubble.relay.pprof.address | string | `"localhost"` | Configure pprof listen address for hubble-relay |
@@ -619,6 +624,7 @@ contributors across the globe, there is almost always someone available to help.
 | hubble.ui.podDisruptionBudget.enabled | bool | `false` | enable PodDisruptionBudget ref: https://kubernetes.io/docs/concepts/workloads/pods/disruptions/ |
 | hubble.ui.podDisruptionBudget.maxUnavailable | int | `1` | Maximum number/percentage of pods that may be made unavailable |
 | hubble.ui.podDisruptionBudget.minAvailable | string | `nil` | Minimum number/percentage of pods that should remain scheduled. When it's set, maxUnavailable must be disabled by `maxUnavailable: null` |
+| hubble.ui.podDisruptionBudget.unhealthyPodEvictionPolicy | string | `nil` | How are unhealthy, but running, pods counted for eviction |
 | hubble.ui.podLabels | object | `{}` | Labels to be added to hubble-ui pods |
 | hubble.ui.priorityClassName | string | `""` | The priority class to use for hubble-ui |
 | hubble.ui.replicas | int | `1` | The number of replicas of Hubble UI to deploy. |
@@ -792,6 +798,7 @@ contributors across the globe, there is almost always someone available to help.
 | operator.podDisruptionBudget.enabled | bool | `false` | enable PodDisruptionBudget ref: https://kubernetes.io/docs/concepts/workloads/pods/disruptions/ |
 | operator.podDisruptionBudget.maxUnavailable | int | `1` | Maximum number/percentage of pods that may be made unavailable |
 | operator.podDisruptionBudget.minAvailable | string | `nil` | Minimum number/percentage of pods that should remain scheduled. When it's set, maxUnavailable must be disabled by `maxUnavailable: null` |
+| operator.podDisruptionBudget.unhealthyPodEvictionPolicy | string | `nil` | How are unhealthy, but running, pods counted for eviction |
 | operator.podLabels | object | `{}` | Labels to be added to cilium-operator pods |
 | operator.podSecurityContext | object | `{}` | Security context to be added to cilium-operator pods |
 | operator.pprof.address | string | `"localhost"` | Configure pprof listen address for cilium-operator |
@@ -842,6 +849,7 @@ contributors across the globe, there is almost always someone available to help.
 | preflight.podDisruptionBudget.enabled | bool | `false` | enable PodDisruptionBudget ref: https://kubernetes.io/docs/concepts/workloads/pods/disruptions/ |
 | preflight.podDisruptionBudget.maxUnavailable | int | `1` | Maximum number/percentage of pods that may be made unavailable |
 | preflight.podDisruptionBudget.minAvailable | string | `nil` | Minimum number/percentage of pods that should remain scheduled. When it's set, maxUnavailable must be disabled by `maxUnavailable: null` |
+| preflight.podDisruptionBudget.unhealthyPodEvictionPolicy | string | `nil` | How are unhealthy, but running, pods counted for eviction |
 | preflight.podLabels | object | `{}` | Labels to be added to the preflight pod. |
 | preflight.podSecurityContext | object | `{}` | Security context to be added to preflight pods. |
 | preflight.priorityClassName | string | `""` | The priority class to use for the preflight pod. |

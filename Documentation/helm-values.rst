@@ -768,6 +768,10 @@
      - Minimum number/percentage of pods that should remain scheduled. When it's set, maxUnavailable must be disabled by ``maxUnavailable: null``
      - string
      - ``nil``
+   * - :spelling:ignore:`clustermesh.apiserver.podDisruptionBudget.unhealthyPodEvictionPolicy`
+     - How are unhealthy, but running, pods counted for eviction
+     - string
+     - ``nil``
    * - :spelling:ignore:`clustermesh.apiserver.podLabels`
      - Labels to be added to clustermesh-apiserver pods
      - object
@@ -812,6 +816,10 @@
      - The internalTrafficPolicy of service used for apiserver access.
      - string
      - ``"Cluster"``
+   * - :spelling:ignore:`clustermesh.apiserver.service.labels`
+     - Labels for the clustermesh-apiserver service.
+     - object
+     - ``{}``
    * - :spelling:ignore:`clustermesh.apiserver.service.loadBalancerClass`
      - Configure a loadBalancerClass. Allows to configure the loadBalancerClass on the clustermesh-apiserver LB service in case the Service type is set to LoadBalancer (requires Kubernetes 1.24+).
      - string
@@ -1364,6 +1372,10 @@
      - Time in seconds after which the initial fetch on an xDS stream is considered timed out
      - int
      - ``30``
+   * - :spelling:ignore:`envoy.livenessProbe.enabled`
+     - Enable liveness probe for cilium-envoy
+     - bool
+     - ``true``
    * - :spelling:ignore:`envoy.livenessProbe.failureThreshold`
      - failure threshold of liveness probe
      - int
@@ -1504,6 +1516,10 @@
      - SELinux options for the ``cilium-envoy`` container
      - object
      - ``{"level":"s0","type":"spc_t"}``
+   * - :spelling:ignore:`envoy.startupProbe.enabled`
+     - Enable startup probe for cilium-envoy
+     - bool
+     - ``true``
    * - :spelling:ignore:`envoy.startupProbe.failureThreshold`
      - failure threshold of startup probe. 105 x 2s translates to the old behaviour of the readiness probe (120s delay + 30 x 3s)
      - int
@@ -1952,6 +1968,10 @@
      - Minimum number/percentage of pods that should remain scheduled. When it's set, maxUnavailable must be disabled by ``maxUnavailable: null``
      - string
      - ``nil``
+   * - :spelling:ignore:`hubble.relay.podDisruptionBudget.unhealthyPodEvictionPolicy`
+     - How are unhealthy, but running, pods counted for eviction
+     - string
+     - ``nil``
    * - :spelling:ignore:`hubble.relay.podLabels`
      - Labels to be added to hubble-relay pods
      - object
@@ -2274,6 +2294,10 @@
      - ``1``
    * - :spelling:ignore:`hubble.ui.podDisruptionBudget.minAvailable`
      - Minimum number/percentage of pods that should remain scheduled. When it's set, maxUnavailable must be disabled by ``maxUnavailable: null``
+     - string
+     - ``nil``
+   * - :spelling:ignore:`hubble.ui.podDisruptionBudget.unhealthyPodEvictionPolicy`
+     - How are unhealthy, but running, pods counted for eviction
      - string
      - ``nil``
    * - :spelling:ignore:`hubble.ui.podLabels`
@@ -2968,6 +2992,10 @@
      - Minimum number/percentage of pods that should remain scheduled. When it's set, maxUnavailable must be disabled by ``maxUnavailable: null``
      - string
      - ``nil``
+   * - :spelling:ignore:`operator.podDisruptionBudget.unhealthyPodEvictionPolicy`
+     - How are unhealthy, but running, pods counted for eviction
+     - string
+     - ``nil``
    * - :spelling:ignore:`operator.podLabels`
      - Labels to be added to cilium-operator pods
      - object
@@ -3166,6 +3194,10 @@
      - ``1``
    * - :spelling:ignore:`preflight.podDisruptionBudget.minAvailable`
      - Minimum number/percentage of pods that should remain scheduled. When it's set, maxUnavailable must be disabled by ``maxUnavailable: null``
+     - string
+     - ``nil``
+   * - :spelling:ignore:`preflight.podDisruptionBudget.unhealthyPodEvictionPolicy`
+     - How are unhealthy, but running, pods counted for eviction
      - string
      - ``nil``
    * - :spelling:ignore:`preflight.podLabels`

@@ -1575,6 +1575,11 @@ hubble:
       # @schema
       # -- Maximum number/percentage of pods that may be made unavailable
       maxUnavailable: 1
+      # @schema
+      # type: [null, string]
+      # @schema
+      # -- How are unhealthy, but running, pods counted for eviction
+      unhealthyPodEvictionPolicy: null
     # -- The priority class to use for hubble-relay
     priorityClassName: ""
     # -- Configure termination grace period for hubble relay Deployment.
@@ -1857,6 +1862,11 @@ hubble:
       # @schema
       # -- Maximum number/percentage of pods that may be made unavailable
       maxUnavailable: 1
+      # @schema
+      # type: [null, string]
+      # @schema
+      # -- How are unhealthy, but running, pods counted for eviction
+      unhealthyPodEvictionPolicy: null
     # -- Affinity for hubble-ui
     affinity: {}
     # -- Pod topology spread constraints for hubble-ui
@@ -2539,12 +2549,16 @@ envoy:
   #     memory: 512Mi
 
   startupProbe:
+    # -- Enable startup probe for cilium-envoy
+    enabled: true
     # -- failure threshold of startup probe.
     # 105 x 2s translates to the old behaviour of the readiness probe (120s delay + 30 x 3s)
     failureThreshold: 105
     # -- interval between checks of the startup probe
     periodSeconds: 2
   livenessProbe:
+    # -- Enable liveness probe for cilium-envoy
+    enabled: true
     # -- failure threshold of liveness probe
     failureThreshold: 10
     # -- interval between checks of the liveness probe
@@ -2945,6 +2959,11 @@ operator:
     # @schema
     # -- Maximum number/percentage of pods that may be made unavailable
     maxUnavailable: 1
+    # @schema
+    # type: [null, string]
+    # @schema
+    # -- How are unhealthy, but running, pods counted for eviction
+    unhealthyPodEvictionPolicy: null
   # -- cilium-operator resource limits & requests
   # ref: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
   resources: {}
@@ -3195,6 +3214,11 @@ preflight:
     # @schema
     # -- Maximum number/percentage of pods that may be made unavailable
     maxUnavailable: 1
+    # @schema
+    # type: [null, string]
+    # @schema
+    # -- How are unhealthy, but running, pods counted for eviction
+    unhealthyPodEvictionPolicy: null
   # -- preflight resource limits & requests
   # ref: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
   resources: {}
@@ -3400,6 +3424,8 @@ clustermesh:
       # * EKS: service.beta.kubernetes.io/aws-load-balancer-scheme: "internal"
       # * GKE: networking.gke.io/load-balancer-type: "Internal"
       annotations: {}
+      # -- Labels for the clustermesh-apiserver service.
+      labels: {}
       # @schema
       # enum: [Local, Cluster]
       # @schema
@@ -3492,6 +3518,11 @@ clustermesh:
       # @schema
       # -- Maximum number/percentage of pods that may be made unavailable
       maxUnavailable: 1
+      # @schema
+      # type: [null, string]
+      # @schema
+      # -- How are unhealthy, but running, pods counted for eviction
+      unhealthyPodEvictionPolicy: null
     # -- Resource requests and limits for the clustermesh-apiserver
     resources: {}
     #   requests:

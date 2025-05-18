@@ -67,7 +67,7 @@ env:
 
 jobs:
   echo-inputs:
-    if: github.event_name == 'workflow_dispatch' && always() && vars.ENABLE_CILIUM_CI == 'true'
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     name: Echo Workflow Dispatch Inputs
     runs-on: ubuntu-24.04
     steps:
@@ -77,8 +77,6 @@ jobs:
 
   commit-status-start:
     name: Commit Status Start
-    # Skip running workflow on forks using variable Kill Switch
-    if: always() && vars.ENABLE_CILIUM_CI == 'true'
     runs-on: ubuntu-24.04
     steps:
       - name: Set initial commit status
@@ -87,8 +85,6 @@ jobs:
           sha: ${{ inputs.SHA || github.sha }}
 
   generate-matrix:
-    # Skip running workflow on forks using variable Kill Switch
-    if: always() && vars.ENABLE_CILIUM_CI == 'true'
     name: Generate Matrix
     runs-on: ubuntu-24.04
     outputs:
@@ -116,6 +112,7 @@ jobs:
           # Use complete matrix in case of scheduled run
           # main -> event_name = schedule
           # other stable branches -> PR-number starting with v (e.g. v1.14)
+          # shellcheck disable=SC2193
           if [[ "${{ github.event_name }}" == "schedule" || "${{ inputs.PR-number }}" == v* ]];then
             cp aws-cni.json /tmp/matrix.json
           else
@@ -159,8 +156,6 @@ jobs:
           echo "empty=$(jq '(.include | length) == 0' /tmp/result.json)" >> $GITHUB_OUTPUT
 
   wait-for-images:
-    # Skip running workflow on forks using variable Kill Switch
-    if: always() && vars.ENABLE_CILIUM_CI == 'true'
     name: Wait for images
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -247,9 +242,12 @@ jobs:
             --exclude-code-owners=${CILIUM_CLI_EXCLUDE_OWNERS} \
             --hubble=false --collect-sysdump-on-failure --test '!fqdn,!l7' \
             --external-target amazon.com. --external-ip 1.0.0.1 --external-other-ip 1.1.1.1"
+          # shellcheck disable=SC2046
           echo cilium_install_defaults=${CILIUM_INSTALL_DEFAULTS} >> $GITHUB_OUTPUT
+          # shellcheck disable=SC2046
           echo connectivity_test_defaults=${CONNECTIVITY_TEST_DEFAULTS} >> $GITHUB_OUTPUT
           echo sha=${{ steps.default_vars.outputs.sha }} >> $GITHUB_OUTPUT
+          # shellcheck disable=SC2046
           echo owner=${OWNER} >> $GITHUB_OUTPUT
 
       - name: Install kubectl
@@ -263,8 +261,8 @@ jobs:
       - name: Install eksctl CLI
         run: |
           curl -LO "https://github.com/eksctl-io/eksctl/releases/download/${{ env.eksctl_version }}/eksctl_$(uname -s)_amd64.tar.gz"
-          sudo tar xzvfC eksctl_$(uname -s)_amd64.tar.gz /usr/bin
-          rm eksctl_$(uname -s)_amd64.tar.gz
+          sudo tar xzvfC "eksctl_$(uname -s)_amd64.tar.gz" /usr/bin
+          rm "eksctl_$(uname -s)_amd64.tar.gz"
 
       - name: Set up AWS CLI credentials
         uses: aws-actions/configure-aws-credentials@f24d7193d98baebaeacc7e2227925dd47cc267f5 # v4.2.0
@@ -462,8 +460,8 @@ jobs:
       - name: Install eksctl CLI
         run: |
           curl -LO "https://github.com/eksctl-io/eksctl/releases/download/${{ env.eksctl_version }}/eksctl_$(uname -s)_amd64.tar.gz"
-          sudo tar xzvfC eksctl_$(uname -s)_amd64.tar.gz /usr/bin
-          rm eksctl_$(uname -s)_amd64.tar.gz
+          sudo tar xzvfC "eksctl_$(uname -s)_amd64.tar.gz" /usr/bin
+          rm "eksctl_$(uname -s)_amd64.tar.gz"
 
       - name: Set up AWS CLI credentials
         uses: aws-actions/configure-aws-credentials@f24d7193d98baebaeacc7e2227925dd47cc267f5 # v4.2.0

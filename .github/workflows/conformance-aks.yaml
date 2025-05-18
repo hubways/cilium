@@ -65,7 +65,7 @@ env:
 
 jobs:
   echo-inputs:
-    if: github.event_name == 'workflow_dispatch' && always() && vars.ENABLE_CILIUM_CI == 'true'
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     name: Echo Workflow Dispatch Inputs
     runs-on: ubuntu-24.04
     steps:
@@ -74,8 +74,6 @@ jobs:
           echo '${{ tojson(inputs) }}'
 
   commit-status-start:
-    # Skip running workflow on forks using variable Kill Switch
-    if: always() && vars.ENABLE_CILIUM_CI == 'true'
     name: Commit Status Start
     runs-on: ubuntu-24.04
     steps:
@@ -85,8 +83,6 @@ jobs:
           sha: ${{ inputs.SHA || github.sha }}
 
   generate-matrix:
-    # Skip running workflow on forks using variable Kill Switch
-    if: always() && vars.ENABLE_CILIUM_CI == 'true'
     name: Generate Matrix
     runs-on: ubuntu-24.04
     outputs:
@@ -114,6 +110,7 @@ jobs:
           # Use complete matrix in case of scheduled run
           # main -> event_name = schedule
           # other stable branches -> PR-number starting with v (e.g. v1.14)
+          # shellcheck disable=SC2193
           if [[ "${{ github.event_name }}" == "schedule" || "${{ inputs.PR-number }}" == v* ]];then
             jq '{ "include": [ .include[] | select(.disabled==null) ] }' azure.json > /tmp/matrix.json
           else
@@ -151,8 +148,6 @@ jobs:
           echo "empty=$(jq '(.include | length) == 0' /tmp/result.json)" >> $GITHUB_OUTPUT
 
   wait-for-images:
-    # Skip running workflow on forks using variable Kill Switch
-    if: always() && vars.ENABLE_CILIUM_CI == 'true'
     name: Wait for images
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -341,7 +336,7 @@ jobs:
 
       - name: Create custom IPsec secret
         run: |
-          kubectl create -n kube-system secret generic cilium-ipsec-keys --from-literal=keys="15+ rfc4106(gcm(aes)) $(echo $(dd if=/dev/urandom count=20 bs=1 2> /dev/null | xxd -p -c 64)) 128"
+          kubectl create -n kube-system secret generic cilium-ipsec-keys --from-literal=keys="15+ rfc4106(gcm(aes)) $(dd if=/dev/urandom count=20 bs=1 2> /dev/null | xxd -p -c 64) 128"
 
       - name: Install Cilium with encryption
         run: |
