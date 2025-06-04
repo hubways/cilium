@@ -609,7 +609,7 @@ bpf:
   # @schema
   policyStatsMapMax: 65536
   # @schema
-  # type: [null, number]
+  # type: [null, number, string]
   # @schema
   # -- (float64) Configure auto-sizing for all BPF maps based on available memory.
   # ref: https://docs.cilium.io/en/stable/network/ebpf/maps/
@@ -3373,7 +3373,7 @@ clustermesh:
 
     kvstoremesh:
       # -- Enable KVStoreMesh. KVStoreMesh caches the information retrieved
-      # from the remote clusters in the local etcd instance.
+      # from the remote clusters in the local etcd instance (deprecated - KVStoreMesh will always be enabled once the option is removed).
       enabled: true
 
       # -- TCP port for the KVStoreMesh health API.
