@@ -51,7 +51,6 @@ import (
 	"github.com/cilium/cilium/pkg/logging/logfields"
 	"github.com/cilium/cilium/pkg/maglev"
 	"github.com/cilium/cilium/pkg/maps/ctmap"
-	"github.com/cilium/cilium/pkg/maps/lbmap"
 	"github.com/cilium/cilium/pkg/metrics"
 	monitoragent "github.com/cilium/cilium/pkg/monitor/agent"
 	"github.com/cilium/cilium/pkg/mtu"
@@ -246,9 +245,11 @@ func newDaemon(ctx context.Context, cleaner *daemonCleanup, params *daemonParams
 	// Check the kernel if we can make use of managed neighbor entries which
 	// simplifies and fully 'offloads' L2 resolution handling to the kernel.
 	if !option.Config.DryMode {
-		if err := probes.HaveManagedNeighbors(params.Logger); err == nil {
+		if err := probes.HaveManagedNeighbors(); err == nil {
 			params.Logger.Info("Using Managed Neighbor Kernel support")
 			option.Config.ARPPingKernelManaged = true
+		} else if !errors.Is(err, probes.ErrNotSupported) {
+			return nil, nil, fmt.Errorf("failed to probe managed neighbor support: %w", err)
 		}
 	}
 
@@ -264,20 +265,6 @@ func newDaemon(ctx context.Context, cleaner *daemonCleanup, params *daemonParams
 	}
 
 	ctmap.InitMapInfo(params.MetricsRegistry, option.Config.EnableIPv4, option.Config.EnableIPv6, option.Config.EnableNodePort)
-
-	lbmapInitParams := lbmap.InitParams{
-		IPv4: option.Config.EnableIPv4,
-		IPv6: option.Config.EnableIPv6,
-
-		MaxSockRevNatMapEntries:  params.LBConfig.LBSockRevNatEntries,
-		ServiceMapMaxEntries:     params.LBConfig.LBServiceMapEntries,
-		BackEndMapMaxEntries:     params.LBConfig.LBBackendMapEntries,
-		RevNatMapMaxEntries:      params.LBConfig.LBRevNatEntries,
-		AffinityMapMaxEntries:    params.LBConfig.LBAffinityMapEntries,
-		SourceRangeMapMaxEntries: params.LBConfig.LBSourceRangeMapEntries,
-		MaglevMapMaxEntries:      params.LBConfig.LBMaglevMapEntries,
-	}
-	lbmap.Init(params.MetricsRegistry, lbmapInitParams)
 
 	identity.IterateReservedIdentities(func(_ identity.NumericIdentity, _ *identity.Identity) {
 		metrics.Identity.WithLabelValues(identity.ReservedIdentityType).Inc()
