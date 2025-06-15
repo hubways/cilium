@@ -1371,7 +1371,7 @@
    * - :spelling:ignore:`envoy.image`
      - Envoy container image.
      - object
-     - ``{"digest":"sha256:c4fe15f10b612c845709eda05d449e2735a9a7dc9b799e858d31e6ddac332b29","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.33.3-1749082895-be938e41a8b374f8084ecbf1d6883510e4059620","useDigest":true}``
+     - ``{"digest":"sha256:0ce53e7bae73bc4ed31b029aff08b27913fde50b0f3384b755a2280aa5db8307","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.33.3-1749272486-264be40340a9340c19a875b6954c98b015e6ae41","useDigest":true}``
    * - :spelling:ignore:`envoy.initialFetchTimeoutSeconds`
      - Time in seconds after which the initial fetch on an xDS stream is considered timed out
      - int
@@ -2671,11 +2671,7 @@
    * - :spelling:ignore:`l2NeighDiscovery.enabled`
      - Enable L2 neighbor discovery in the agent
      - bool
-     - ``true``
-   * - :spelling:ignore:`l2NeighDiscovery.refreshPeriod`
-     - Override the agent's default neighbor resolution refresh period.
-     - string
-     - ``"30s"``
+     - ``false``
    * - :spelling:ignore:`l2announcements`
      - Configure L2 announcements
      - object
@@ -2715,15 +2711,11 @@
    * - :spelling:ignore:`loadBalancer`
      - Configure service load balancing
      - object
-     - ``{"acceleration":"disabled","experimental":true,"l7":{"algorithm":"round_robin","backend":"disabled","ports":[]}}``
+     - ``{"acceleration":"disabled","l7":{"algorithm":"round_robin","backend":"disabled","ports":[]}}``
    * - :spelling:ignore:`loadBalancer.acceleration`
      - acceleration is the option to accelerate service handling via XDP Applicable values can be: disabled (do not use XDP), native (XDP BPF program is run directly out of the networking driver's early receive path), or best-effort (use native mode XDP acceleration on devices that support it).
      - string
      - ``"disabled"``
-   * - :spelling:ignore:`loadBalancer.experimental`
-     - experimental enables support for the experimental load-balancing control-plane.
-     - bool
-     - ``true``
    * - :spelling:ignore:`loadBalancer.l7`
      - L7 LoadBalancer
      - object

@@ -36,7 +36,7 @@ concurrency:
 
 env:
   # renovate: datasource=golang-version depName=go
-  go_version: 1.24.3
+  go_version: 1.24.4
   # Adding k8s.local to the end makes kops happy-
   # has stricter DNS naming requirements.
   test_name: node-throughput
@@ -212,7 +212,8 @@ jobs:
         if: ${{ always() }}
         uses: ./.github/actions/post-logic
         with:
-          artifacts_suffix: "${{ env.job_name }}"
+          always_capture_sysdump: true
+          artifacts_suffix: "final"
           job_status: "${{ job.status }}"
 
       - name: Cleanup cluster
