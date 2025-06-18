@@ -22,6 +22,7 @@ import (
 	"github.com/cilium/cilium/pkg/clustermesh/types"
 	"github.com/cilium/cilium/pkg/datapath/tables"
 	"github.com/cilium/cilium/pkg/hive"
+	"github.com/cilium/cilium/pkg/kpr"
 	"github.com/cilium/cilium/pkg/loadbalancer"
 	"github.com/cilium/cilium/pkg/node"
 	"github.com/cilium/cilium/pkg/option"
@@ -57,6 +58,7 @@ func fixture(t testing.TB, hooks ...ServiceHook) (p testParams) {
 			tables.NewNodeAddressTable,
 			statedb.RWTable[tables.NodeAddress].ToTable,
 			source.NewSources,
+			func() kpr.KPRConfig { return kpr.KPRConfig{} },
 		),
 		cell.Invoke(statedb.RegisterTable[tables.NodeAddress]),
 		cell.Invoke(func(p_ testParams) { p = p_ }),
@@ -173,7 +175,7 @@ func TestWriter_Service_UpsertDelete(t *testing.T) {
 		wtxn := p.Writer.WriteTxn()
 		assert.Equal(t, 1, p.ServiceTable.NumObjects(wtxn))
 
-		err := p.Writer.DeleteServiceAndFrontends(wtxn, name)
+		_, err := p.Writer.DeleteServiceAndFrontends(wtxn, name)
 		assert.NoError(t, err, "DeleteService failed")
 
 		_, _, found := p.ServiceTable.Get(wtxn, loadbalancer.ServiceByName(name))
