@@ -126,7 +126,7 @@ jobs:
 
   setup-and-test:
     needs: [wait-for-images, generate-matrix]
-    runs-on: ubuntu-22.04
+    runs-on: ${{ vars.GH_RUNNER_EXTRA_POWER_UBUNTU_LATEST || 'ubuntu-24.04' }}
     name: 'Setup & Test'
     env:
       job_name: 'Setup & Test'
@@ -182,7 +182,7 @@ jobs:
 
           CONCURRENT_CONNECTIVITY_TESTS="!seq-.*"
           if [ "${{ matrix.ipv4 }}" == "false" ]; then
-            CONCURRENT_CONNECTIVITY_TESTS="!(seq-.*|pod-to-world.*|pod-to-cidr|pod-to-pod-encryption-v2)"
+            CONCURRENT_CONNECTIVITY_TESTS="!(seq-.*|pod-to-world.*|pod-to-cidr)"
           fi
           echo concurrent_connectivity_tests=${CONCURRENT_CONNECTIVITY_TESTS} >> $GITHUB_OUTPUT
 
