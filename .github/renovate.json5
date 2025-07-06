@@ -367,6 +367,16 @@
       ]
     },
     {
+      // Disable major updates for go-github as those require updating import paths
+      "enabled": false,
+      "matchPackageNames": [
+        "github.com/google/go-github",
+      ],
+      "matchUpdateTypes": [
+        "major",
+      ],
+    },
+    {
       // Avoid updating patch version for statedb as it might contain breaking changes
       "enabled": false,
       "matchPackageNames": [
@@ -593,7 +603,7 @@
         "quay.io/cilium/cilium-envoy"
       ],
       "versioning": "regex:v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-(?<build>\\d+)-(?<revision>.*)$",
-      "allowedVersions": "/^v1\\.32\\.([0-9]+)-([0-9]+)-.*$/",
+      "allowedVersions": "/^v1\\.33\\.([0-9]+)-([0-9]+)-.*$/",
       "matchBaseBranches": [
         "v1.17",
         "v1.16",
@@ -607,6 +617,7 @@
       "versioning": "regex:v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-(?<build>\\d+)-(?<revision>.*)$",
       "allowedVersions": "/^v1\\.34\\.([0-9]+)-([0-9]+)-.*$/",
       "matchBaseBranches": [
+        "1.18",
         "main",
       ]
     },
