@@ -71,6 +71,10 @@
   {{- end }}
 {{- end -}}
 {{- $ipam := (coalesce .Values.ipam.mode $defaultIPAM) -}}
+{{- if .Values.eni.enabled }}
+  {{- $ipam = "eni" -}}
+{{- end }}
+
 {{- $bpfCtTcpMax := (coalesce .Values.bpf.ctTcpMax $defaultBpfCtTcpMax) -}}
 {{- $bpfCtAnyMax := (coalesce .Values.bpf.ctAnyMax $defaultBpfCtAnyMax) -}}
 {{- $stringValueKPR := (toString .Values.kubeProxyReplacement) -}}
@@ -526,7 +530,7 @@ data:
   {{- end }}
 {{- end }}
 
-  routing-mode: {{ .Values.routingMode | default (ternary "native" "tunnel" .Values.gke.enabled) | quote }}
+  routing-mode: {{ .Values.routingMode | default (ternary "native" "tunnel" (or .Values.eni.enabled .Values.gke.enabled)) | quote }}
   tunnel-protocol: {{ .Values.tunnelProtocol | default "vxlan" | quote }}
 
 {{- if eq .Values.routingMode "native" }}
@@ -1092,18 +1096,10 @@ data:
 
 {{- if (eq $ipam "cluster-pool") }}
 {{- if .Values.ipv4.enabled }}
-  {{- if hasKey .Values.ipam.operator "clusterPoolIPv4PodCIDR" }}
-    {{- /* ipam.operator.clusterPoolIPv4PodCIDR removed in v1.14, remove this failsafe around v1.17 */ -}}
-    {{- fail "Value ipam.operator.clusterPoolIPv4PodCIDR removed, use ipam.operator.clusterPoolIPv4PodCIDRList instead" }}
-  {{- end }}
   cluster-pool-ipv4-cidr: {{ .Values.ipam.operator.clusterPoolIPv4PodCIDRList | join " " | quote }}
   cluster-pool-ipv4-mask-size: {{ .Values.ipam.operator.clusterPoolIPv4MaskSize | quote }}
 {{- end }}
 {{- if .Values.ipv6.enabled }}
-  {{- if hasKey .Values.ipam.operator "clusterPoolIPv6PodCIDR" }}
-    {{- /* ipam.operator.clusterPoolIPv6PodCIDR removed in v1.14, remove this failsafe around v1.17 */ -}}
-    {{- fail "Value ipam.operator.clusterPoolIPv6PodCIDR removed, use ipam.operator.clusterPoolIPv6PodCIDRList instead" }}
-  {{- end }}
   cluster-pool-ipv6-cidr: {{ .Values.ipam.operator.clusterPoolIPv6PodCIDRList | join " " | quote }}
   cluster-pool-ipv6-mask-size: {{ .Values.ipam.operator.clusterPoolIPv6MaskSize | quote }}
 {{- end }}
