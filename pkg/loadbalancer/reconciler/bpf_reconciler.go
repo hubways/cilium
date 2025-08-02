@@ -43,7 +43,7 @@ const (
 	// data sources. For example we might depend on Kubernetes data to connect to the ClusterMesh api-server and
 	// thus may need to first reconcile the Kubernetes services to connect to ClusterMesh (if endpoints have changed
 	// while agent was down).
-	initGracePeriod = 1 * time.Minute
+	initGracePeriod = 10 * time.Second
 )
 
 func newBPFReconciler(p reconciler.Params, g job.Group, cfg loadbalancer.Config, ops *BPFOps, fes statedb.Table[*loadbalancer.Frontend], w *writer.Writer) (reconciler.Reconciler[*loadbalancer.Frontend], error) {
@@ -127,9 +127,9 @@ type BPFOps struct {
 	lastUpdatedAt atomic.Pointer[time.Time]
 
 	serviceIDAlloc     idAllocator[loadbalancer.ServiceID]
-	restoredServiceIDs sets.Set[loadbalancer.ServiceID]
+	restoredServiceIDs map[loadbalancer.L3n4Addr]loadbalancer.ServiceID
 	backendIDAlloc     idAllocator[loadbalancer.BackendID]
-	restoredBackendIDs sets.Set[loadbalancer.BackendID]
+	restoredBackendIDs map[loadbalancer.L3n4Addr]loadbalancer.BackendID
 
 	// restoredQuarantinedBackends are backends that were quarantined for
 	// a specific frontend. This comes into play when we have active health checker.
@@ -214,19 +214,32 @@ func (ops *BPFOps) start(cell.HookContext) (err error) {
 
 func (ops *BPFOps) ResetAndRestore() (err error) {
 	ops.serviceIDAlloc = newIDAllocator(firstFreeServiceID, maxSetOfServiceID)
-	ops.restoredServiceIDs = sets.New[loadbalancer.ServiceID]()
+	ops.restoredServiceIDs = map[loadbalancer.L3n4Addr]loadbalancer.ServiceID{}
 	ops.backendIDAlloc = newIDAllocator(firstFreeBackendID, maxSetOfBackendID)
-	ops.restoredBackendIDs = sets.New[loadbalancer.BackendID]()
+	ops.restoredBackendIDs = map[loadbalancer.L3n4Addr]loadbalancer.BackendID{}
 	ops.backendStates = map[loadbalancer.L3n4Addr]backendState{}
 	ops.backendReferences = map[loadbalancer.L3n4Addr]sets.Set[loadbalancer.L3n4Addr]{}
 	ops.nodePortAddrByPort = map[nodePortAddrKey][]netip.Addr{}
 	ops.prevSourceRanges = map[loadbalancer.L3n4Addr]sets.Set[netip.Prefix]{}
 
 	// Restore backend IDs
+	backendIDToAddress := map[loadbalancer.BackendID]loadbalancer.L3n4Addr{}
 	err = ops.LBMaps.DumpBackend(func(key maps.BackendKey, value maps.BackendValue) {
 		value = value.ToHost()
-		ops.backendIDAlloc.addID(beValueToAddr(value), key.GetID())
-		ops.restoredBackendIDs.Insert(key.GetID())
+		addr := beValueToAddr(value)
+		backendIDToAddress[key.GetID()] = addr
+		if addr.Protocol() == loadbalancer.ANY {
+			// Migrate from 'ANY' protocol by reusing the ID.
+			addr2 := loadbalancer.NewL3n4Addr(loadbalancer.TCP, addr.AddrCluster(), addr.Port(), addr.Scope())
+			ops.restoredBackendIDs[addr2] = key.GetID()
+			addr2 = loadbalancer.NewL3n4Addr(loadbalancer.UDP, addr.AddrCluster(), addr.Port(), addr.Scope())
+			ops.restoredBackendIDs[addr2] = key.GetID()
+			addr2 = loadbalancer.NewL3n4Addr(loadbalancer.SCTP, addr.AddrCluster(), addr.Port(), addr.Scope())
+			ops.restoredBackendIDs[addr2] = key.GetID()
+		} else {
+			ops.restoredBackendIDs[addr] = key.GetID()
+		}
+		ops.backendIDAlloc.nextID = max(ops.backendIDAlloc.nextID, key.GetID()+1)
 	})
 	if err != nil {
 		return fmt.Errorf("restore backend ids: %w", err)
@@ -255,9 +268,20 @@ func (ops *BPFOps) ResetAndRestore() (err error) {
 			continue
 		}
 
-		id := master.GetRevNat()
-		ops.serviceIDAlloc.addID(addr, loadbalancer.ServiceID(id))
-		ops.restoredServiceIDs.Insert(loadbalancer.ServiceID(id))
+		id := loadbalancer.ServiceID(master.GetRevNat())
+
+		if addr.Protocol() == loadbalancer.ANY {
+			// Migrate from 'ANY' protocol by reusing the ID.
+			addr2 := loadbalancer.NewL3n4Addr(loadbalancer.TCP, addr.AddrCluster(), addr.Port(), addr.Scope())
+			ops.restoredServiceIDs[addr2] = id
+			addr2 = loadbalancer.NewL3n4Addr(loadbalancer.UDP, addr.AddrCluster(), addr.Port(), addr.Scope())
+			ops.restoredServiceIDs[addr2] = id
+			addr2 = loadbalancer.NewL3n4Addr(loadbalancer.SCTP, addr.AddrCluster(), addr.Port(), addr.Scope())
+			ops.restoredServiceIDs[addr2] = id
+		} else {
+			ops.restoredServiceIDs[addr] = id
+		}
+		ops.serviceIDAlloc.nextID = max(ops.serviceIDAlloc.nextID, id+1)
 
 		if master.GetQCount() > 0 && len(slots) == 1+master.GetCount()+master.GetQCount() {
 			if ops.restoredQuarantinedBackends == nil {
@@ -269,7 +293,7 @@ func (ops *BPFOps) ResetAndRestore() (err error) {
 				ops.restoredQuarantinedBackends[addr] = backends
 			}
 			for _, slot := range slots[1+master.GetCount():] {
-				if addr, found := ops.backendIDAlloc.idToAddr[slot.GetBackendID()]; found {
+				if addr, found := backendIDToAddress[slot.GetBackendID()]; found {
 					backends.Insert(addr)
 				}
 			}
@@ -308,13 +332,18 @@ func (ops *BPFOps) Delete(_ context.Context, _ statedb.ReadTxn, _ statedb.Revisi
 	}
 
 	if fe.Type == loadbalancer.SVCTypeNodePort ||
-		fe.Type == loadbalancer.SVCTypeHostPort && fe.Address.AddrCluster.IsUnspecified() {
+		fe.Type == loadbalancer.SVCTypeHostPort && fe.Address.AddrCluster().IsUnspecified() {
 
-		key := nodePortAddrKey{family: fe.Address.IsIPv6(), port: fe.Address.Port}
+		key := nodePortAddrKey{family: fe.Address.IsIPv6(), port: fe.Address.Port()}
 		addrs := ops.nodePortAddrByPort[key]
 		for _, addr := range addrs {
 			fe = fe.Clone()
-			fe.Address.AddrCluster = cmtypes.AddrClusterFrom(addr, 0)
+			fe.Address = loadbalancer.NewL3n4Addr(
+				fe.Address.Protocol(),
+				cmtypes.AddrClusterFrom(addr, 0),
+				fe.Address.Port(),
+				fe.Address.Scope(),
+			)
 			if err := ops.deleteFrontend(fe); err != nil {
 				ops.log.Warn("Deleting frontend failed, retrying", logfields.Error, err)
 				return err
@@ -392,16 +421,16 @@ func (ops *BPFOps) deleteFrontend(fe *loadbalancer.Frontend) error {
 	var svcKey maps.ServiceKey
 	var revNatKey maps.RevNatKey
 
-	ip := fe.Address.AddrCluster.AsNetIP()
-	proto, err := u8proto.ParseProtocol(fe.Address.Protocol)
+	ip := fe.Address.AddrCluster().AsNetIP()
+	proto, err := u8proto.ParseProtocol(fe.Address.Protocol())
 	if err != nil {
-		return fmt.Errorf("invalid L4 protocol %q: %w", fe.Address.Protocol, err)
+		return fmt.Errorf("invalid L4 protocol %q: %w", fe.Address.Protocol(), err)
 	}
 	if fe.Address.IsIPv6() {
-		svcKey = maps.NewService6Key(ip, fe.Address.Port, proto, fe.Address.Scope, 0)
+		svcKey = maps.NewService6Key(ip, fe.Address.Port(), proto, fe.Address.Scope(), 0)
 		revNatKey = maps.NewRevNat6Key(uint16(feID))
 	} else {
-		svcKey = maps.NewService4Key(ip, fe.Address.Port, proto, fe.Address.Scope, 0)
+		svcKey = maps.NewService4Key(ip, fe.Address.Port(), proto, fe.Address.Scope(), 0)
 		revNatKey = maps.NewRevNat4Key(feID)
 	}
 
@@ -459,11 +488,12 @@ func (ops *BPFOps) pruneServiceMaps() error {
 			return
 		}
 		proto := loadbalancer.NewL4TypeFromNumber(svcKey.GetProtocol())
-		addr := loadbalancer.L3n4Addr{
-			AddrCluster: ac,
-			L4Addr:      loadbalancer.L4Addr{Protocol: proto, Port: svcKey.GetPort()},
-			Scope:       svcKey.GetScope(),
-		}
+		addr := loadbalancer.NewL3n4Addr(
+			proto,
+			ac,
+			svcKey.GetPort(),
+			svcKey.GetScope(),
+		)
 		expectedSlots := 0
 		if bes, ok := ops.backendReferences[addr]; ok {
 			expectedSlots = 1 + len(bes)
@@ -520,26 +550,8 @@ func (ops *BPFOps) pruneBackendMaps() error {
 }
 
 func (ops *BPFOps) pruneRestoredIDs() error {
-	for id := range ops.restoredServiceIDs {
-		if addr, found := ops.serviceIDAlloc.idToAddr[id]; found {
-			if _, found := ops.backendReferences[addr]; !found {
-				// This ID was restored but no frontend appeared to claim it. Free it.
-				ops.serviceIDAlloc.deleteLocalID(id)
-			}
-		}
-	}
-	for id := range ops.restoredBackendIDs {
-		if addr, found := ops.backendIDAlloc.idToAddr[id]; found {
-			if _, found := ops.backendStates[addr]; !found {
-				// This ID was restored but no frontend appeared to claim it. Free it.
-				ops.backendIDAlloc.deleteLocalID(id)
-			}
-		}
-	}
-
 	ops.restoredServiceIDs = nil
 	ops.restoredBackendIDs = nil
-
 	return nil
 }
 
@@ -662,10 +674,10 @@ func (ops *BPFOps) Update(_ context.Context, txn statedb.ReadTxn, _ statedb.Revi
 	}
 
 	if fe.Type == loadbalancer.SVCTypeNodePort ||
-		fe.Type == loadbalancer.SVCTypeHostPort && fe.Address.AddrCluster.IsUnspecified() {
+		fe.Type == loadbalancer.SVCTypeHostPort && fe.Address.AddrCluster().IsUnspecified() {
 		// For NodePort create entries for each node address.
 		// For HostPort only create them if the address was not specified (HostIP is unset).
-		key := nodePortAddrKey{family: fe.Address.IsIPv6(), port: fe.Address.Port}
+		key := nodePortAddrKey{family: fe.Address.IsIPv6(), port: fe.Address.Port()}
 		old := sets.New(ops.nodePortAddrByPort[key]...)
 
 		// Collect the node addresses suitable for NodePort that match the IP family of
@@ -684,7 +696,12 @@ func (ops *BPFOps) Update(_ context.Context, txn statedb.ReadTxn, _ statedb.Revi
 		// Create the NodePort/HostPort frontends with the node addresses.
 		for _, addr := range nodePortAddrs {
 			fe = fe.Clone()
-			fe.Address.AddrCluster = cmtypes.AddrClusterFrom(addr, 0)
+			fe.Address = loadbalancer.NewL3n4Addr(
+				fe.Address.Protocol(),
+				cmtypes.AddrClusterFrom(addr, 0),
+				fe.Address.Port(),
+				fe.Address.Scope(),
+			)
 			if err := ops.updateFrontend(fe); err != nil {
 				ops.log.Warn("Updating frontend failed",
 					logfields.Error, err,
@@ -698,7 +715,12 @@ func (ops *BPFOps) Update(_ context.Context, txn statedb.ReadTxn, _ statedb.Revi
 		// Delete orphan NodePort/HostPort frontends
 		for addr := range old {
 			fe = fe.Clone()
-			fe.Address.AddrCluster = cmtypes.AddrClusterFrom(addr, 0)
+			fe.Address = loadbalancer.NewL3n4Addr(
+				fe.Address.Protocol(),
+				cmtypes.AddrClusterFrom(addr, 0),
+				fe.Address.Port(),
+				fe.Address.Scope(),
+			)
 			if err := ops.deleteFrontend(fe); err != nil {
 				ops.log.Warn("Deleting orphan frontend failed",
 					logfields.Error, err,
@@ -731,26 +753,34 @@ func (ops *BPFOps) updateFrontend(fe *loadbalancer.Frontend) error {
 
 	// Assign/lookup an identifier for the service. May fail if we have run out of IDs.
 	// The Frontend.ID field is purely for debugging purposes.
-	feID, err := ops.serviceIDAlloc.acquireLocalID(fe.Address)
-	if err != nil {
-		return fmt.Errorf("failed to allocate id: %w", err)
+	var feID loadbalancer.ServiceID
+	if id, found := ops.restoredServiceIDs[fe.Address]; found {
+		feID = id
+		ops.serviceIDAlloc.addID(fe.Address, id)
+		delete(ops.restoredServiceIDs, fe.Address)
+	} else {
+		var err error
+		feID, err = ops.serviceIDAlloc.acquireLocalID(fe.Address)
+		if err != nil {
+			return fmt.Errorf("failed to allocate id: %w", err)
+		}
 	}
 	fe.ID = loadbalancer.ServiceID(feID)
 
 	var svcKey maps.ServiceKey
 	var svcVal maps.ServiceValue
 
-	proto, err := u8proto.ParseProtocol(fe.Address.Protocol)
+	proto, err := u8proto.ParseProtocol(fe.Address.Protocol())
 	if err != nil {
-		return fmt.Errorf("invalid L4 protocol %q: %w", fe.Address.Protocol, err)
+		return fmt.Errorf("invalid L4 protocol %q: %w", fe.Address.Protocol(), err)
 	}
 
-	ip := fe.Address.AddrCluster.AsNetIP()
+	ip := fe.Address.AddrCluster().AsNetIP()
 	if fe.Address.IsIPv6() {
-		svcKey = maps.NewService6Key(ip, fe.Address.Port, proto, fe.Address.Scope, 0)
+		svcKey = maps.NewService6Key(ip, fe.Address.Port(), proto, fe.Address.Scope(), 0)
 		svcVal = &maps.Service6Value{}
 	} else {
-		svcKey = maps.NewService4Key(ip, fe.Address.Port, proto, fe.Address.Scope, 0)
+		svcKey = maps.NewService4Key(ip, fe.Address.Port(), proto, fe.Address.Scope(), 0)
 		svcVal = &maps.Service4Value{}
 	}
 
@@ -817,11 +847,17 @@ func (ops *BPFOps) updateFrontend(fe *loadbalancer.Frontend) error {
 		if s, ok := ops.backendStates[be.Address]; ok && s.id != 0 {
 			beID = s.id
 		} else {
-			acquiredID, err := ops.backendIDAlloc.acquireLocalID(be.Address)
-			if err != nil {
-				return err
+			if id, found := ops.restoredBackendIDs[be.Address]; found {
+				beID = id
+				ops.backendIDAlloc.addID(be.Address, id)
+				delete(ops.restoredBackendIDs, be.Address)
+			} else {
+				var err error
+				beID, err = ops.backendIDAlloc.acquireLocalID(be.Address)
+				if err != nil {
+					return err
+				}
 			}
-			beID = loadbalancer.BackendID(acquiredID)
 		}
 
 		if ops.needsUpdate(be.Address, be.Revision) {
@@ -875,7 +911,7 @@ func (ops *BPFOps) updateFrontend(fe *loadbalancer.Frontend) error {
 			}
 		}
 
-		if !be.UnhealthyUpdatedAt.IsZero() {
+		if be.UnhealthyUpdatedAt != nil {
 			ops.deleteRestoredQuarantinedBackends(fe.Address, be.Address)
 		}
 
@@ -1005,7 +1041,7 @@ func (ops *BPFOps) useMaglev(fe *loadbalancer.Frontend) bool {
 	alg := ops.lbAlgorithm(fe)
 	switch {
 	// Wildcarded frontend is not exposed for external traffic.
-	case fe.Address.AddrCluster.IsUnspecified():
+	case fe.Address.AddrCluster().IsUnspecified():
 		return false
 
 	// Maglev algorithm annotation overrides rest of the checks.
@@ -1087,20 +1123,20 @@ func (ops *BPFOps) cleanupSlots(svcKey maps.ServiceKey, oldCount, newCount int) 
 
 func (ops *BPFOps) upsertBackend(id loadbalancer.BackendID, be *loadbalancer.BackendParams) (err error) {
 	var lbbe maps.Backend
-	proto, err := u8proto.ParseProtocol(be.Address.Protocol)
+	proto, err := u8proto.ParseProtocol(be.Address.Protocol())
 	if err != nil {
-		return fmt.Errorf("invalid L4 protocol %q: %w", be.Address.Protocol, err)
+		return fmt.Errorf("invalid L4 protocol %q: %w", be.Address.Protocol(), err)
 	}
 
-	if be.Address.AddrCluster.Is6() {
-		lbbe, err = maps.NewBackend6V3(id, be.Address.AddrCluster, be.Address.Port, proto,
-			be.State, ops.extCfg.GetZoneID(be.Zone))
+	if be.Address.AddrCluster().Is6() {
+		lbbe, err = maps.NewBackend6V3(id, be.Address.AddrCluster(), be.Address.Port(), proto,
+			be.State, ops.extCfg.GetZoneID(be.GetZone()))
 		if err != nil {
 			return err
 		}
 	} else {
-		lbbe, err = maps.NewBackend4V3(id, be.Address.AddrCluster, be.Address.Port, proto,
-			be.State, ops.extCfg.GetZoneID(be.Zone))
+		lbbe, err = maps.NewBackend4V3(id, be.Address.AddrCluster(), be.Address.Port(), proto,
+			be.State, ops.extCfg.GetZoneID(be.GetZone()))
 		if err != nil {
 			return err
 		}
@@ -1285,7 +1321,9 @@ func (ops *BPFOps) sortedBackends(fe *loadbalancer.Frontend) []backendWithRevisi
 
 	bes := []backendWithRevision{}
 	for be, rev := range fe.Backends {
-		if be.UnhealthyUpdatedAt.IsZero() && quarantined.Has(be.Address) {
+		if be.UnhealthyUpdatedAt == nil && quarantined.Has(be.Address) {
+			// Backend was previously quarantined and we have not health checked it
+			// yet. Use the restored health until health check is performed.
 			be.Unhealthy = true
 		}
 		bes = append(bes, backendWithRevision{&be, rev})
@@ -1302,11 +1340,11 @@ func (ops *BPFOps) sortedBackends(fe *loadbalancer.Frontend) []backendWithRevisi
 		case a.State > b.State:
 			return false
 		default:
-			switch a.Address.AddrCluster.Addr().Compare(b.Address.AddrCluster.Addr()) {
+			switch a.Address.Addr().Compare(b.Address.Addr()) {
 			case -1:
 				return true
 			case 0:
-				return a.Address.Port < b.Address.Port
+				return a.Address.Port() < b.Address.Port()
 			default:
 				return false
 			}
