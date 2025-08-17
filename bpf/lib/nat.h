@@ -77,9 +77,9 @@ __snat_lookup(const void *map, const void *tuple)
 }
 
 static __always_inline __maybe_unused int
-__snat_create(const void *map, const void *tuple, const void *state)
+__snat_create(const void *map, const void *tuple, const void *state, bool noexist)
 {
-	return map_update_elem(map, tuple, state, BPF_NOEXIST);
+	return map_update_elem(map, tuple, state, noexist ? BPF_NOEXIST : BPF_ANY);
 }
 
 static __always_inline __maybe_unused int
@@ -114,7 +114,6 @@ struct ipv4_nat_target {
 	__u32 ifindex; /* Obtained from EGW policy */
 };
 
-#if defined(ENABLE_IPV4) && defined(ENABLE_NODEPORT)
 struct {
 	__uint(type, BPF_MAP_TYPE_LRU_HASH);
 	__type(key, struct ipv4_ct_tuple);
@@ -132,7 +131,6 @@ struct {
 	__uint(max_entries, SNAT_COLLISION_RETRIES + 1);
 } cilium_snat_v4_alloc_retries __section_maps_btf;
 
-#ifdef ENABLE_CLUSTER_AWARE_ADDRESSING
 struct per_cluster_snat_mapping_ipv4_inner_map {
 	__uint(type, BPF_MAP_TYPE_LRU_HASH);
 	__type(key, struct ipv4_ct_tuple);
@@ -143,7 +141,7 @@ struct per_cluster_snat_mapping_ipv4_inner_map {
 };
 #else
 } per_cluster_snat_mapping_ipv4_1 __section_maps_btf,
-  per_cluster_snat_mapping_ipv4_2 __section_maps_btf;
+per_cluster_snat_mapping_ipv4_2 __section_maps_btf;
 #endif
 
 struct {
@@ -153,7 +151,7 @@ struct {
 	__uint(pinning, LIBBPF_PIN_BY_NAME);
 	__uint(max_entries, 256);
 	__array(values, struct per_cluster_snat_mapping_ipv4_inner_map);
-#ifndef BPF_TEST
+	#ifndef BPF_TEST
 } cilium_per_cluster_snat_v4_external __section_maps_btf;
 #else
 } cilium_per_cluster_snat_v4_external __section_maps_btf = {
@@ -163,9 +161,7 @@ struct {
 	},
 };
 #endif
-#endif
 
-#ifdef ENABLE_IP_MASQ_AGENT_IPV4
 struct {
 	__uint(type, BPF_MAP_TYPE_LPM_TRIE);
 	__type(key, struct lpm_v4_key);
@@ -174,8 +170,8 @@ struct {
 	__uint(max_entries, 16384);
 	__uint(map_flags, BPF_F_NO_PREALLOC);
 } cilium_ipmasq_v4 __section_maps_btf;
-#endif
 
+#if defined(ENABLE_IPV4) && defined(ENABLE_NODEPORT)
 static __always_inline void *
 get_cluster_snat_map_v4(__u32 cluster_id __maybe_unused)
 {
@@ -244,7 +240,7 @@ static __always_inline int snat_v4_new_mapping(struct __ctx_buff *ctx, void *map
 		rtuple.dport = bpf_htons(port);
 
 		/* Try to create a RevSNAT entry. */
-		if (__snat_create(map, &rtuple, &rstate) == 0)
+		if (__snat_create(map, &rtuple, &rstate, true) == 0)
 			goto create_nat_entry;
 
 		port = __snat_clamp_port_range(target->min_port,
@@ -270,7 +266,7 @@ create_nat_entry:
 	ostate->common.created = rstate.common.created;
 
 	/* Create the SNAT entry. We just created the RevSNAT entry. */
-	ret = __snat_create(map, otuple, ostate);
+	ret = __snat_create(map, otuple, ostate, false);
 	if (ret < 0) {
 		map_delete_elem(map, &rtuple); /* rollback */
 		if (ext_err)
@@ -352,7 +348,7 @@ snat_v4_nat_handle_mapping(struct __ctx_buff *ctx,
 				rstate.to_dport = tuple->sport;
 				rstate.common.needs_ct = needs_ct;
 				rstate.common.created = bpf_mono_now();
-				ret = __snat_create(map, &rtuple, &rstate);
+				ret = __snat_create(map, &rtuple, &rstate, false);
 				if (ret < 0) {
 					if (ext_err)
 						*ext_err = (__s8)ret;
@@ -424,7 +420,7 @@ snat_v4_rev_nat_handle_mapping(struct __ctx_buff *ctx,
 			ostate.common.needs_ct = (*state)->common.needs_ct;
 			ostate.common.created = bpf_mono_now();
 
-			ret = __snat_create(map, &otuple, &ostate);
+			ret = __snat_create(map, &otuple, &ostate, false);
 			if (ret < 0)
 				return DROP_NAT_NO_MAPPING;
 		}
@@ -1182,7 +1178,6 @@ struct ipv6_nat_target {
 	__u32 ifindex; /* Obtained from EGW policy */
 };
 
-#if defined(ENABLE_IPV6) && defined(ENABLE_NODEPORT)
 struct {
 	__uint(type, BPF_MAP_TYPE_LRU_HASH);
 	__type(key, struct ipv6_ct_tuple);
@@ -1199,7 +1194,6 @@ struct {
 	__uint(max_entries, SNAT_COLLISION_RETRIES + 1);
 } cilium_snat_v6_alloc_retries __section_maps_btf;
 
-#ifdef ENABLE_CLUSTER_AWARE_ADDRESSING
 struct {
 	__uint(type, BPF_MAP_TYPE_ARRAY_OF_MAPS);
 	__type(key, __u32);
@@ -1214,9 +1208,7 @@ struct {
 		__uint(map_flags, LRU_MEM_FLAVOR);
 	});
 } cilium_per_cluster_snat_v6_external __section_maps_btf;
-#endif
 
-#ifdef ENABLE_IP_MASQ_AGENT_IPV6
 struct {
 	__uint(type, BPF_MAP_TYPE_LPM_TRIE);
 	__type(key, struct lpm_v6_key);
@@ -1225,8 +1217,8 @@ struct {
 	__uint(max_entries, 16384);
 	__uint(map_flags, BPF_F_NO_PREALLOC);
 } cilium_ipmasq_v6 __section_maps_btf;
-#endif
 
+#if defined(ENABLE_IPV6) && defined(ENABLE_NODEPORT)
 static __always_inline void *
 get_cluster_snat_map_v6(__u32 cluster_id __maybe_unused)
 {
@@ -1293,7 +1285,7 @@ static __always_inline int snat_v6_new_mapping(struct __ctx_buff *ctx,
 	for (retries = 0; retries < SNAT_COLLISION_RETRIES; retries++) {
 		rtuple.dport = bpf_htons(port);
 
-		if (__snat_create(&cilium_snat_v6_external, &rtuple, &rstate) == 0)
+		if (__snat_create(&cilium_snat_v6_external, &rtuple, &rstate, true) == 0)
 			goto create_nat_entry;
 
 		port = __snat_clamp_port_range(target->min_port,
@@ -1317,7 +1309,7 @@ create_nat_entry:
 	ostate->to_sport = rtuple.dport;
 	ostate->common.created = rstate.common.created;
 
-	ret = __snat_create(&cilium_snat_v6_external, otuple, ostate);
+	ret = __snat_create(&cilium_snat_v6_external, otuple, ostate, false);
 	if (ret < 0) {
 		map_delete_elem(&cilium_snat_v6_external, &rtuple); /* rollback */
 		if (ext_err)
@@ -1391,7 +1383,8 @@ snat_v6_nat_handle_mapping(struct __ctx_buff *ctx,
 				rstate.to_dport = tuple->sport;
 				rstate.common.needs_ct = needs_ct;
 				rstate.common.created = bpf_mono_now();
-				ret = __snat_create(&cilium_snat_v6_external, &rtuple, &rstate);
+				ret = __snat_create(&cilium_snat_v6_external, &rtuple, &rstate,
+						    false);
 				if (ret < 0) {
 					if (ext_err)
 						*ext_err = (__s8)ret;
@@ -1450,7 +1443,7 @@ snat_v6_rev_nat_handle_mapping(struct __ctx_buff *ctx,
 			ostate.common.needs_ct = (*state)->common.needs_ct;
 			ostate.common.created = bpf_mono_now();
 
-			ret = __snat_create(&cilium_snat_v6_external, &otuple, &ostate);
+			ret = __snat_create(&cilium_snat_v6_external, &otuple, &ostate, false);
 			if (ret < 0)
 				return DROP_NAT_NO_MAPPING;
 		}
