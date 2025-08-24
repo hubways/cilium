@@ -280,21 +280,13 @@ bool lb6_svc_is_loopback(const struct lb6_service *svc __maybe_unused)
 static __always_inline
 bool lb4_svc_has_src_range_check(const struct lb4_service *svc __maybe_unused)
 {
-#ifdef ENABLE_SRC_RANGE_CHECK
 	return svc->flags & SVC_FLAG_SOURCE_RANGE;
-#else
-	return false;
-#endif /* ENABLE_SRC_RANGE_CHECK */
 }
 
 static __always_inline
 bool lb6_svc_has_src_range_check(const struct lb6_service *svc __maybe_unused)
 {
-#ifdef ENABLE_SRC_RANGE_CHECK
 	return svc->flags & SVC_FLAG_SOURCE_RANGE;
-#else
-	return false;
-#endif /* ENABLE_SRC_RANGE_CHECK */
 }
 
 static __always_inline
@@ -627,7 +619,6 @@ static __always_inline
 bool lb6_src_range_ok(const struct lb6_service *svc __maybe_unused,
 		      const union v6addr *saddr __maybe_unused)
 {
-#ifdef ENABLE_SRC_RANGE_CHECK
 	struct lb6_src_range_key key;
 	bool verdict = false;
 
@@ -644,9 +635,6 @@ bool lb6_src_range_ok(const struct lb6_service *svc __maybe_unused,
 		verdict = true;
 
 	return verdict ^ !!(svc->flags2 & SVC_FLAG_SOURCE_RANGE_DENY);
-#else
-	return true;
-#endif /* ENABLE_SRC_RANGE_CHECK */
 }
 
 static __always_inline bool
@@ -784,7 +772,7 @@ lb6_select_backend_id_maglev(struct __ctx_buff *ctx __maybe_unused,
 #ifdef LB_SELECTION_PER_SERVICE
 static __always_inline __u32 lb6_algorithm(const struct lb6_service *svc)
 {
-	return svc->affinity_timeout >> LB_ALGORITHM_SHIFT;
+	return svc->affinity_timeout >> LB_ALGORITHM_SHIFT ? : LB_SELECTION;
 }
 
 static __always_inline __u32
@@ -792,13 +780,20 @@ lb6_select_backend_id(struct __ctx_buff *ctx, struct lb6_key *key,
 		      const struct ipv6_ct_tuple *tuple,
 		      const struct lb6_service *svc)
 {
-	switch (lb6_algorithm(svc)) {
+	__u32 alg = lb6_algorithm(svc);
+select:
+	switch (alg) {
 	case LB_SELECTION_MAGLEV:
 		return lb6_select_backend_id_maglev(ctx, key, tuple, svc);
 	case LB_SELECTION_RANDOM:
 		return lb6_select_backend_id_random(ctx, key, tuple, svc);
 	default:
-		return 0;
+		/* We only enter here upon downgrade if some future algorithm
+		 * annotation was select that we do not support as annotation.
+		 * Fallback to default in this case.
+		 */
+		alg = LB_SELECTION;
+		goto select;
 	}
 }
 #elif LB_SELECTION == LB_SELECTION_RANDOM
@@ -806,7 +801,9 @@ lb6_select_backend_id(struct __ctx_buff *ctx, struct lb6_key *key,
 #elif LB_SELECTION == LB_SELECTION_MAGLEV
 # define lb6_select_backend_id	lb6_select_backend_id_maglev
 #elif LB_SELECTION == LB_SELECTION_FIRST
-/* Backend selection for tests that always chooses first slot. */
+/* Backend selection for unit tests that always chooses first slot. This
+ * part is unreachable from agent code enablement.
+ */
 static __always_inline __u32
 lb6_select_backend_id(struct __ctx_buff *ctx __maybe_unused,
 		      struct lb6_key *key __maybe_unused,
@@ -851,7 +848,6 @@ static __always_inline int lb6_xlate(struct __ctx_buff *ctx, __u8 nexthdr,
 			   backend->port);
 }
 
-#ifdef ENABLE_SESSION_AFFINITY
 static __always_inline __u32 lb6_affinity_timeout(const struct lb6_service *svc)
 {
 	return svc->affinity_timeout & AFFINITY_TIMEOUT_MASK;
@@ -933,17 +929,12 @@ lb6_update_affinity_by_addr(const struct lb6_service *svc,
 {
 	__lb6_update_affinity(svc, false, id, backend_id);
 }
-#endif /* ENABLE_SESSION_AFFINITY */
 
 static __always_inline __u32
 lb6_affinity_backend_id_by_netns(const struct lb6_service *svc __maybe_unused,
 				 union lb6_affinity_client_id *id __maybe_unused)
 {
-#if defined(ENABLE_SESSION_AFFINITY)
 	return __lb6_affinity_backend_id(svc, true, id);
-#else
-	return 0;
-#endif
 }
 
 static __always_inline void
@@ -951,9 +942,7 @@ lb6_update_affinity_by_netns(const struct lb6_service *svc __maybe_unused,
 			     union lb6_affinity_client_id *id __maybe_unused,
 			     __u32 backend_id __maybe_unused)
 {
-#if defined(ENABLE_SESSION_AFFINITY)
 	__lb6_update_affinity(svc, true, id, backend_id);
-#endif
 }
 
 static __always_inline int
@@ -1006,11 +995,9 @@ static __always_inline int lb6_local(const void *map, struct __ctx_buff *ctx,
 	struct lb6_backend *backend;
 	__u32 backend_id = 0;
 	int ret;
-#ifdef ENABLE_SESSION_AFFINITY
 	union lb6_affinity_client_id client_id;
 
 	ipv6_addr_copy(&client_id.client_ip, &tuple->saddr);
-#endif
 
 	state->rev_nat_index = svc->rev_nat_index;
 
@@ -1025,7 +1012,6 @@ static __always_inline int lb6_local(const void *map, struct __ctx_buff *ctx,
 		if (unlikely(svc->count == 0))
 			goto no_service;
 
-#ifdef ENABLE_SESSION_AFFINITY
 		if (lb6_svc_is_affinity(svc)) {
 			backend_id = lb6_affinity_backend_id_by_addr(svc, &client_id);
 			if (backend_id != 0) {
@@ -1034,7 +1020,6 @@ static __always_inline int lb6_local(const void *map, struct __ctx_buff *ctx,
 					backend_id = 0;
 			}
 		}
-#endif
 		if (backend_id == 0) {
 			backend_id = lb6_select_backend_id(ctx, key, tuple, svc);
 			backend = lb6_lookup_backend(ctx, backend_id);
@@ -1101,10 +1086,8 @@ static __always_inline int lb6_local(const void *map, struct __ctx_buff *ctx,
 	 * service lookup happens and future lookups use EGRESS or INGRESS.
 	 */
 	tuple->flags = flags;
-#ifdef ENABLE_SESSION_AFFINITY
 	if (lb6_svc_is_affinity(svc))
 		lb6_update_affinity_by_addr(svc, &client_id, backend_id);
-#endif
 
 #if defined(ENABLE_LOCAL_REDIRECT_POLICY)
 	if (netns_cookie > 0 && unlikely(lb6_svc_is_localredirect(svc)) &&
@@ -1358,7 +1341,6 @@ static __always_inline
 bool lb4_src_range_ok(const struct lb4_service *svc __maybe_unused,
 		      __u32 saddr __maybe_unused)
 {
-#ifdef ENABLE_SRC_RANGE_CHECK
 	struct lb4_src_range_key key;
 	bool verdict = false;
 
@@ -1375,9 +1357,6 @@ bool lb4_src_range_ok(const struct lb4_service *svc __maybe_unused,
 		verdict = true;
 
 	return verdict ^ !!(svc->flags2 & SVC_FLAG_SOURCE_RANGE_DENY);
-#else
-	return true;
-#endif /* ENABLE_SRC_RANGE_CHECK */
 }
 
 static __always_inline bool
@@ -1518,7 +1497,7 @@ lb4_select_backend_id_maglev(struct __ctx_buff *ctx __maybe_unused,
 #ifdef LB_SELECTION_PER_SERVICE
 static __always_inline __u32 lb4_algorithm(const struct lb4_service *svc)
 {
-	return svc->affinity_timeout >> LB_ALGORITHM_SHIFT;
+	return svc->affinity_timeout >> LB_ALGORITHM_SHIFT ? : LB_SELECTION;
 }
 
 static __always_inline __u32
@@ -1526,13 +1505,20 @@ lb4_select_backend_id(struct __ctx_buff *ctx, struct lb4_key *key,
 		      const struct ipv4_ct_tuple *tuple,
 		      const struct lb4_service *svc)
 {
-	switch (lb4_algorithm(svc)) {
+	__u32 alg = lb4_algorithm(svc);
+select:
+	switch (alg) {
 	case LB_SELECTION_MAGLEV:
 		return lb4_select_backend_id_maglev(ctx, key, tuple, svc);
 	case LB_SELECTION_RANDOM:
 		return lb4_select_backend_id_random(ctx, key, tuple, svc);
 	default:
-		return 0;
+		/* We only enter here upon downgrade if some future algorithm
+		 * annotation was select that we do not support as annotation.
+		 * Fallback to default in this case.
+		 */
+		alg = LB_SELECTION;
+		goto select;
 	}
 }
 #elif LB_SELECTION == LB_SELECTION_RANDOM
@@ -1540,7 +1526,9 @@ lb4_select_backend_id(struct __ctx_buff *ctx, struct lb4_key *key,
 #elif LB_SELECTION == LB_SELECTION_MAGLEV
 # define lb4_select_backend_id	lb4_select_backend_id_maglev
 #elif LB_SELECTION == LB_SELECTION_FIRST
-/* Backend selection for tests that always chooses first slot. */
+/* Backend selection for unit tests that always chooses first slot. This
+ * part is unreachable from agent code enablement.
+ */
 static __always_inline __u32
 lb4_select_backend_id(struct __ctx_buff *ctx,
 		      struct lb4_key *key,
@@ -1600,7 +1588,6 @@ lb4_xlate(struct __ctx_buff *ctx, __be32 *new_saddr __maybe_unused,
 			       CTX_ACT_OK;
 }
 
-#ifdef ENABLE_SESSION_AFFINITY
 static __always_inline __u32 lb4_affinity_timeout(const struct lb4_service *svc)
 {
 	return svc->affinity_timeout & AFFINITY_TIMEOUT_MASK;
@@ -1680,17 +1667,12 @@ lb4_update_affinity_by_addr(const struct lb4_service *svc,
 {
 	__lb4_update_affinity(svc, false, id, backend_id);
 }
-#endif /* ENABLE_SESSION_AFFINITY */
 
 static __always_inline __u32
 lb4_affinity_backend_id_by_netns(const struct lb4_service *svc __maybe_unused,
 				 union lb4_affinity_client_id *id __maybe_unused)
 {
-#if defined(ENABLE_SESSION_AFFINITY)
 	return __lb4_affinity_backend_id(svc, true, id);
-#else
-	return 0;
-#endif
 }
 
 static __always_inline void
@@ -1698,9 +1680,7 @@ lb4_update_affinity_by_netns(const struct lb4_service *svc __maybe_unused,
 			     union lb4_affinity_client_id *id __maybe_unused,
 			     __u32 backend_id __maybe_unused)
 {
-#if defined(ENABLE_SESSION_AFFINITY)
 	__lb4_update_affinity(svc, true, id, backend_id);
-#endif
 }
 
 static __always_inline int
@@ -1774,11 +1754,9 @@ static __always_inline int lb4_local(const void *map, struct __ctx_buff *ctx,
 	__u32 backend_id = 0;
 	__be32 new_saddr = 0;
 	int ret;
-#ifdef ENABLE_SESSION_AFFINITY
 	union lb4_affinity_client_id client_id = {
 		.client_ip = saddr,
 	};
-#endif
 
 	state->rev_nat_index = svc->rev_nat_index;
 
@@ -1792,7 +1770,6 @@ static __always_inline int lb4_local(const void *map, struct __ctx_buff *ctx,
 		if (unlikely(svc->count == 0))
 			goto no_service;
 
-#ifdef ENABLE_SESSION_AFFINITY
 		if (lb4_svc_is_affinity(svc)) {
 			backend_id = lb4_affinity_backend_id_by_addr(svc, &client_id);
 			if (backend_id != 0) {
@@ -1801,7 +1778,6 @@ static __always_inline int lb4_local(const void *map, struct __ctx_buff *ctx,
 					backend_id = 0;
 			}
 		}
-#endif
 		if (backend_id == 0) {
 			/* No CT entry has been found, so select a svc endpoint */
 			backend_id = lb4_select_backend_id(ctx, key, tuple, svc);
@@ -1873,10 +1849,8 @@ static __always_inline int lb4_local(const void *map, struct __ctx_buff *ctx,
 	 * service lookup happens and future lookups use EGRESS or INGRESS.
 	 */
 	tuple->flags = flags;
-#ifdef ENABLE_SESSION_AFFINITY
 	if (lb4_svc_is_affinity(svc))
 		lb4_update_affinity_by_addr(svc, &client_id, backend_id);
-#endif
 
 #if defined(USE_LOOPBACK_LB) || defined(ENABLE_LOCAL_REDIRECT_POLICY)
 	if (saddr == backend->address) {
