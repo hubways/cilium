@@ -61,9 +61,11 @@ cilium-agent hive [flags]
       --enable-drift-checker                                      Enables support for config drift checker (default true)
       --enable-dynamic-config                                     Enables support for dynamic agent config (default true)
       --enable-dynamic-lifecycle-manager                          Enables support for dynamic lifecycle management
+      --enable-endpoint-health-checking                           Enable connectivity health checking between virtual endpoints (default true)
       --enable-gateway-api                                        Enables Envoy secret sync for Gateway API related TLS secrets
       --enable-gops                                               Enable gops server (default true)
       --enable-health-check-nodeport                              Enables a healthcheck nodePort server for NodePort services with 'healthCheckNodePort' being set (default true)
+      --enable-health-checking                                    Enable connectivity health checking (default true)
       --enable-hubble                                             Enable hubble server
       --enable-hubble-open-metrics                                Enable exporting hubble metrics in OpenMetrics format.
       --enable-ingress-controller                                 Enables Envoy secret sync for Ingress controller related TLS secrets
@@ -78,6 +80,7 @@ cilium-agent hive [flags]
       --enable-l2-neigh-discovery                                 Enables L2 neighbor discovery used by kube-proxy-replacement and IPsec
       --enable-l2-pod-announcements                               Enable announcing Pod IPs with Gratuitous ARP and NDP
       --enable-monitor                                            Enable the monitor unix domain socket server (default true)
+      --enable-no-service-endpoints-routable                      Enable routes when service has 0 endpoints (default true)
       --enable-policy-secrets-sync                                Enables Envoy secret sync for Secrets used in CiliumNetworkPolicy and CiliumClusterwideNetworkPolicy
       --enable-route-mtu-for-cni-chaining                         Enable route MTU for pod netns when CNI chaining is used
       --enable-service-topology                                   Enable support for service topology aware hints
@@ -124,6 +127,7 @@ cilium-agent hive [flags]
       --hubble-export-file-path stdout                            Filepath to write Hubble events to. By specifying stdout the flows are logged instead of written to a rotated file.
       --hubble-flowlogs-config-path string                        Filepath with configuration of hubble flowlogs
       --hubble-listen-address string                              An additional address for Hubble server to listen to, e.g. ":4244"
+      --hubble-lost-event-send-interval duration                  Interval at which lost events are sent from the Observer server, if any. (default 1s)
       --hubble-metrics string                                     List of Hubble metrics to enable.
       --hubble-metrics-server string                              Address to serve Hubble metrics on.
       --hubble-metrics-server-enable-tls                          Run the Hubble metrics server on the given listen address with TLS.

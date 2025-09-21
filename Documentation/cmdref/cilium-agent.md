@@ -165,6 +165,7 @@ cilium-agent [flags]
       --enable-masquerade-to-route-source                         Masquerade packets to the source IP provided from the routing layer rather than interface address
       --enable-monitor                                            Enable the monitor unix domain socket server (default true)
       --enable-nat46x64-gateway                                   Enable NAT46 and NAT64 gateway
+      --enable-no-service-endpoints-routable                      Enable routes when service has 0 endpoints (default true)
       --enable-node-selector-labels                               Enable use of node label based identity
       --enable-pmtu-discovery                                     Enable path MTU discovery to send ICMP fragmentation-needed replies to the client
       --enable-policy string                                      Enable policy enforcement (default "default")
@@ -231,6 +232,7 @@ cilium-agent [flags]
       --hubble-export-file-path stdout                            Filepath to write Hubble events to. By specifying stdout the flows are logged instead of written to a rotated file.
       --hubble-flowlogs-config-path string                        Filepath with configuration of hubble flowlogs
       --hubble-listen-address string                              An additional address for Hubble server to listen to, e.g. ":4244"
+      --hubble-lost-event-send-interval duration                  Interval at which lost events are sent from the Observer server, if any. (default 1s)
       --hubble-metrics string                                     List of Hubble metrics to enable.
       --hubble-metrics-server string                              Address to serve Hubble metrics on.
       --hubble-metrics-server-enable-tls                          Run the Hubble metrics server on the given listen address with TLS.
