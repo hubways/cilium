@@ -77,7 +77,6 @@ cilium-agent hive dot-graph [flags]
       --enable-ingress-controller                                 Enables Envoy secret sync for Ingress controller related TLS secrets
       --enable-ip-masq-agent                                      Enable BPF ip-masq-agent
       --enable-ipsec                                              Enable IPsec
-      --enable-ipsec-encrypted-overlay                            Enable IPsec encrypted overlay. If enabled tunnel traffic will be encrypted before leaving the host. Requires ipsec and tunnel mode vxlan to be enabled.
       --enable-ipsec-key-watcher                                  Enable watcher for IPsec key. If disabled, a restart of the agent will be necessary on key rotations. (default true)
       --enable-ipv4-big-tcp                                       Enable IPv4 BIG TCP option which increases device's maximum GRO/GSO limits for IPv4
       --enable-ipv6-big-tcp                                       Enable IPv6 BIG TCP option which increases device's maximum GRO/GSO limits for IPv6
@@ -225,6 +224,7 @@ cilium-agent hive dot-graph [flags]
       --proxy-xff-num-trusted-hops-ingress uint32                 Number of trusted hops regarding the x-forwarded-for and related HTTP headers for the ingress L7 policy enforcement Envoy listeners.
       --read-cni-conf string                                      CNI configuration file to use as a source for --write-cni-conf-when-ready. If not supplied, a suitable one will be generated.
       --restored-proxy-ports-age-limit uint                       Time after which a restored proxy ports file is considered stale (in minutes) (default 15)
+      --shell-sock-path string                                    Path to the shell UNIX socket (default "/var/run/cilium/shell.sock")
       --standalone-dns-proxy-server-port int                      Global port on which the gRPC server for standalone DNS proxy should listen (default 40045)
       --static-cnp-path string                                    Directory path to watch and load static cilium network policy yaml files.
       --status-collector-failure-threshold duration               The duration after which a probe is considered failed (default 1m0s)

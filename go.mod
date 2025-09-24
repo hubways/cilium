@@ -12,7 +12,7 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.39.0
 	github.com/aws/aws-sdk-go-v2/config v1.31.8
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.7
-	github.com/aws/aws-sdk-go-v2/service/ec2 v1.251.2
+	github.com/aws/aws-sdk-go-v2/service/ec2 v1.253.0
 	github.com/aws/smithy-go v1.23.0
 	github.com/blang/semver/v4 v4.0.0
 	github.com/cespare/xxhash/v2 v2.3.0
@@ -136,8 +136,8 @@ require (
 	k8s.io/utils v0.0.0-20250820121507-0af2bda4dd1d
 	sigs.k8s.io/controller-runtime v0.21.0
 	sigs.k8s.io/gateway-api v1.3.1-0.20250611112659-17a60f668a0d
-	sigs.k8s.io/mcs-api v0.3.0
-	sigs.k8s.io/mcs-api/controllers v0.0.0-20250908090929-79efdd37ed2b
+	sigs.k8s.io/mcs-api v0.3.1-0.20250908090929-79efdd37ed2b
+	sigs.k8s.io/mcs-api/controllers v0.0.0-20250731081715-a807ec696257
 	sigs.k8s.io/yaml v1.6.0
 )
 
