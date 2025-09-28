@@ -1989,7 +1989,7 @@
      - bool
      - ``true``
    * - :spelling:ignore:`hubble.redact.kafka.apiKey`
-     - Enables redacting Kafka's API key. Example:    redact:     enabled: true     kafka:       apiKey: true  You can specify the options from the helm CLI:    --set hubble.redact.enabled="true"   --set hubble.redact.kafka.apiKey="true"
+     - Enables redacting Kafka's API key (deprecated, will be removed in v1.19). Example:    redact:     enabled: true     kafka:       apiKey: true  You can specify the options from the helm CLI:    --set hubble.redact.enabled="true"   --set hubble.redact.kafka.apiKey="true"
      - bool
      - ``true``
    * - :spelling:ignore:`hubble.relay.affinity`
@@ -3240,6 +3240,10 @@
      - policyCIDRMatchMode is a list of entities that may be selected by CIDR selector. The possible value is "nodes".
      - string
      - ``nil``
+   * - :spelling:ignore:`policyDenyResponse`
+     - Configure what the response should be to pod egress traffic denied by network policy. Possible values:  - none (default)  - icmp
+     - string
+     - ``"none"``
    * - :spelling:ignore:`policyEnforcementMode`
      - The agent can be put into one of the three policy enforcement modes: default, always and never. ref: https://docs.cilium.io/en/stable/security/policy/intro/#policy-enforcement-modes
      - string

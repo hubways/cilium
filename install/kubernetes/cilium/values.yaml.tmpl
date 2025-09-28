@@ -1427,7 +1427,7 @@ hubble:
         #   --set hubble.redact.http.headers.deny="Authorization,Proxy-Authorization"
         deny: []
     kafka:
-      # -- Enables redacting Kafka's API key.
+      # -- Enables redacting Kafka's API key (deprecated, will be removed in v1.19).
       # Example:
       #
       #   redact:
@@ -2856,6 +2856,11 @@ tunnelSourcePortRange: 0-0
 #  - reject (default)
 #  - drop
 serviceNoBackendResponse: reject
+# -- Configure what the response should be to pod egress traffic denied by network policy.
+# Possible values:
+#  - none (default)
+#  - icmp
+policyDenyResponse: none
 # -- Configure the underlying network MTU to overwrite auto-detected MTU.
 # This value doesn't change the host network interface MTU i.e. eth0 or ens0.
 # It changes the MTU for cilium_net@cilium_host, cilium_host@cilium_net,
