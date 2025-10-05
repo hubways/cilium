@@ -254,6 +254,7 @@
 /.github/workflows/*hubble*.yaml @cilium/sig-hubble @cilium/github-sec @cilium/ci-structure
 /.github/workflows/*ipsec*.yaml @cilium/ipsec @cilium/github-sec @cilium/ci-structure
 /.github/workflows/*ingress*.yaml @cilium/sig-servicemesh @cilium/github-sec @cilium/ci-structure
+/.github/workflows/*kpr*.yaml @cilium/sig-datapath @cilium/github-sec @cilium/ci-structure
 /.github/actions/cl2-modules/ @cilium/sig-scalability
 /.github/workflows/*scale*.yaml @cilium/sig-scalability @cilium/github-sec @cilium/ci-structure
 /.github/workflows/*perf*.yaml @cilium/sig-scalability @cilium/github-sec @cilium/ci-structure
@@ -367,7 +368,6 @@ Makefile* @cilium/build
 /daemon/ @cilium/sig-agent
 /daemon/cmd/datapath.go @cilium/sig-datapath
 /daemon/cmd/endpoint* @cilium/endpoint
-/daemon/cmd/kube_proxy* @cilium/sig-datapath
 /daemon/cmd/bootstrap_statistics.go @cilium/metrics
 /daemon/cmd/policy* @cilium/sig-policy
 /daemon/cmd/state.go @cilium/endpoint
@@ -662,10 +662,12 @@ Makefile* @cilium/build
 /test/Makefile* @cilium/ci-structure @cilium/build
 # Service handling tests
 /test/k8s/services.go @cilium/sig-lb @cilium/ci-structure
+/test/k8s/lrp.go @cilium/sig-lb
 # Datapath tests
 /test/k8s/bandwidth.go @cilium/sig-datapath @cilium/ci-structure
 /test/k8s/datapath_configuration.go @cilium/sig-datapath @cilium/ci-structure
 # Policy tests
+/test/k8s/chaos.go @cilium/sig-policy
 /test/k8s/net_policies.go @cilium/sig-policy @cilium/ci-structure
 /test/runtime/net_policies.go @cilium/sig-policy @cilium/ci-structure
 # Hubble/monitoring tests
@@ -678,6 +680,8 @@ Makefile* @cilium/build
 # BIG TCP tests
 /test/bigtcp @cilium/sig-datapath @cilium/ci-structure
 # Misc. tests
+/test/k8s/config.go @cilium/sig-k8s
+/test/k8s/pod_mac_address.go @cilium/sig-k8s
 /tools/dpgen @cilium/loader
 /tools/metricslint @cilium/metrics
 /tools/ @cilium/contributing

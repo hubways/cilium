@@ -71,6 +71,9 @@ const (
 	// SubsystemAPILimiter is the subsystem to scope metrics related to the API limiter package.
 	SubsystemAPILimiter = "api_limiter"
 
+	// SubsystemClusterMesh is the subsystem to scope metrics related to the clustermesh area.
+	SubsystemClusterMesh = "clustermesh"
+
 	// CiliumAgentNamespace is used to scope metrics from the Cilium Agent
 	CiliumAgentNamespace = "cilium"
 
@@ -223,9 +226,6 @@ const (
 	// LabelTargetCluster is the label for target cluster name
 	LabelTargetCluster = "target_cluster"
 
-	// LabelLeaderElectionName is the name of leader election
-	LabelLeaderElectionName = "name"
-
 	// Rule label is a label for a L7 rule name.
 	LabelL7Rule = "rule"
 
@@ -255,8 +255,9 @@ var (
 	// LabelValuesBool is metric label value set for boolean type.
 	LabelValuesBool = metric.NewValues(LabelValueTrue, LabelValueFalse)
 
-	// Namespace is used to scope metrics from cilium. It is prepended to metric
-	// names and separated with a '_'
+	// Namespace is used to scope metrics from the current cilium component by
+	// overwriting its value at runtime before hive initialization. It is prepended
+	// to metric names and separated with a '_'
 	Namespace = CiliumAgentNamespace
 
 	registryResolver, registry = promise.New[*Registry]()
