@@ -13,6 +13,9 @@ on:
       SHA:
         description: "SHA under test (head of the PR branch)."
         required: true
+      base-SHA:
+        description: "SHA of the base branch (target branch of the PR)."
+        required: false
       extra-args:
         description: "[JSON object] Arbitrary arguments passed from the trigger comment via regex capture group. Parse with 'fromJson(inputs.extra-args).argName' in workflow."
         required: false
@@ -296,7 +299,7 @@ jobs:
           echo "GATEWAY_API_CONFORMANCE_USABLE_NETWORK_ADDRESSES: $GATEWAY_API_CONFORMANCE_USABLE_NETWORK_ADDRESSES"
           echo "GATEWAY_API_CONFORMANCE_UNUSABLE_NETWORK_ADDRESSES: $GATEWAY_API_CONFORMANCE_UNUSABLE_NETWORK_ADDRESSES"
           # Build test flags based on matrix
-          GATEWAY_TEST_FLAGS="--gateway-class cilium --all-features --allow-crds-mismatch"
+          GATEWAY_TEST_FLAGS="--gateway-class cilium --all-features --allow-crds-mismatch --cleanup-base-resources=false"
           if [ "${{ matrix.conformance-profile }}" == "true" ]; then
             GATEWAY_TEST_FLAGS="$GATEWAY_TEST_FLAGS --skip-tests \"${{ steps.vars.outputs.skipped_tests }}\" --conformance-profiles GATEWAY-HTTP,GATEWAY-TLS,GATEWAY-GRPC,MESH-HTTP,MESH-GRPC --organization cilium --project cilium --url github.com/cilium/cilium --version main --contact https://github.com/cilium/community/blob/main/roles/Maintainers.md --report-output report.yaml"
           else

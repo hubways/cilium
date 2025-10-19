@@ -13,6 +13,9 @@ on:
       SHA:
         description: "SHA under test (head of the PR branch)."
         required: true
+      base-SHA:
+        description: "SHA of the base branch (target branch of the PR)."
+        required: false
       extra-args:
         description: "[JSON object] Arbitrary arguments passed from the trigger comment via regex capture group. Parse with 'fromJson(inputs.extra-args).argName' in workflow."
         required: false
@@ -112,9 +115,7 @@ jobs:
           destination_directory="/tmp/generated/multi-pool"
           mkdir -p "${destination_directory}"
 
-          cat ${work_dir}/{misc,wireguard}.yaml > "${destination_directory}/configs_merged.yaml"
-
-          yq -o=json "${destination_directory}/configs_merged.yaml" | jq . > "${destination_directory}/matrix.json"
+          yq -o=json "${work_dir}/configs.yaml" | jq . > "${destination_directory}/matrix.json"
 
       - name: Generate Matrix
         id: generate-matrix
