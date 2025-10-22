@@ -1188,13 +1188,8 @@ do_netdev(struct __ctx_buff *ctx, __u16 proto, __u32 __maybe_unused identity,
 		ctx_store_meta(ctx, CB_SRC_LABEL, identity);
 
 # if defined(ENABLE_HOST_FIREWALL)
-		if (from_host) {
-			/* If we don't rely on BPF-based masquerading, we need
-			 * to pass the srcid from ipcache to host firewall. See
-			 * comment in ipv4_host_policy_egress() for details.
-			 */
+		if (from_host)
 			ctx_store_meta(ctx, CB_IPCACHE_SRC_LABEL, ipcache_srcid);
-		}
 # endif /* defined(ENABLE_HOST_FIREWALL) */
 
 #ifdef ENABLE_WIREGUARD
@@ -1401,6 +1396,8 @@ int cil_to_netdev(struct __ctx_buff *ctx)
 
 	if (magic == MARK_MAGIC_HOST || magic == MARK_MAGIC_OVERLAY || ctx_mark_is_encrypted(ctx))
 		src_sec_identity = HOST_ID;
+	else if (magic == MARK_MAGIC_PROXY_EGRESS)
+		src_sec_identity = get_identity(ctx);
 #ifdef ENABLE_IDENTITY_MARK
 	else if (magic == MARK_MAGIC_IDENTITY)
 		src_sec_identity = get_identity(ctx);
