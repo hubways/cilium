@@ -273,7 +273,7 @@
      - bool
      - ``false``
    * - :spelling:ignore:`bgpControlPlane`
-     - This feature set enables virtual BGP routers to be created via CiliumBGPPeeringPolicy CRDs.
+     - This feature set enables virtual BGP routers to be created via BGP CRDs.
      - object
      - ``{"enabled":false,"legacyOriginAttribute":{"enabled":false},"routerIDAllocation":{"ipPool":"","mode":"default"},"secretsNamespace":{"create":false,"name":"kube-system"},"statusReport":{"enabled":true}}``
    * - :spelling:ignore:`bgpControlPlane.enabled`
@@ -281,7 +281,7 @@
      - bool
      - ``false``
    * - :spelling:ignore:`bgpControlPlane.legacyOriginAttribute`
-     - Legacy BGP ORIGIN attribute settings (BGPv2 only)
+     - Legacy BGP ORIGIN attribute settings
      - object
      - ``{"enabled":false}``
    * - :spelling:ignore:`bgpControlPlane.legacyOriginAttribute.enabled`
@@ -313,11 +313,11 @@
      - string
      - ``"kube-system"``
    * - :spelling:ignore:`bgpControlPlane.statusReport`
-     - Status reporting settings (BGPv2 only)
+     - Status reporting settings
      - object
      - ``{"enabled":true}``
    * - :spelling:ignore:`bgpControlPlane.statusReport.enabled`
-     - Enable/Disable BGPv2 status reporting It is recommended to enable status reporting in general, but if you have any issue such as high API server load, you can disable it by setting this to false.
+     - Enable/Disable BGP status reporting It is recommended to enable status reporting in general, but if you have any issue such as high API server load, you can disable it by setting this to false.
      - bool
      - ``true``
    * - :spelling:ignore:`bpf.authMapMax`
@@ -432,6 +432,10 @@
      - Configure the typical time between monitor notifications for active connections.
      - string
      - ``"5s"``
+   * - :spelling:ignore:`bpf.monitorTraceIPOption`
+     - Configure the IP tracing option type. This option is used to specify the IP option type to use for tracing. The value must be an integer between 0 and 255. @schema type: [null, integer] minimum: 0 maximum: 255 @schema
+     - int
+     - ``0``
    * - :spelling:ignore:`bpf.natMax`
      - Configure the maximum number of entries for the NAT table.
      - int
@@ -916,6 +920,10 @@
      - clustermesh-apiserver update strategy
      - object
      - ``{"rollingUpdate":{"maxSurge":1,"maxUnavailable":0},"type":"RollingUpdate"}``
+   * - :spelling:ignore:`clustermesh.cacheTTL`
+     - The time to live for the cache of a remote cluster after connectivity is lost. If the connection is not re-established within this duration, the cached data is revoked to prevent stale state. If not specified or set to 0s, the cache is never revoked (default).
+     - string
+     - ``"0s"``
    * - :spelling:ignore:`clustermesh.config`
      - Clustermesh explicit configuration.
      - object
@@ -3123,7 +3131,7 @@
    * - :spelling:ignore:`operator.prometheus`
      - Enable prometheus metrics for cilium-operator on the configured port at /metrics
      - object
-     - ``{"enabled":true,"metricsService":false,"port":9963,"serviceMonitor":{"annotations":{},"enabled":false,"interval":"10s","jobLabel":"","labels":{},"metricRelabelings":null,"relabelings":null,"scrapeTimeout":null}}``
+     - ``{"enabled":true,"metricsService":false,"port":9963,"serviceMonitor":{"annotations":{},"enabled":false,"interval":"10s","jobLabel":"","labels":{},"metricRelabelings":null,"relabelings":null,"scrapeTimeout":null},"tls":{"enabled":false,"server":{"existingSecret":"","mtls":{"enabled":false}}}}``
    * - :spelling:ignore:`operator.prometheus.serviceMonitor.annotations`
      - Annotations to add to ServiceMonitor cilium-operator
      - object
@@ -3156,6 +3164,14 @@
      - Timeout after which scrape is considered to be failed.
      - string
      - ``nil``
+   * - :spelling:ignore:`operator.prometheus.tls`
+     - TLS configuration for Prometheus
+     - object
+     - ``{"enabled":false,"server":{"existingSecret":"","mtls":{"enabled":false}}}``
+   * - :spelling:ignore:`operator.prometheus.tls.server.existingSecret`
+     - Name of the Secret containing the certificate, key and CA files for the Prometheus server.
+     - string
+     - ``""``
    * - :spelling:ignore:`operator.removeNodeTaints`
      - Remove Cilium node taint from Kubernetes nodes that have a healthy Cilium pod running.
      - bool
