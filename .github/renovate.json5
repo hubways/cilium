@@ -220,12 +220,6 @@
       "matchUpdateTypes": [
         "patch"
       ],
-      matchBaseBranches: [
-        "main",
-        "v1.18",
-        "v1.17",
-        "v1.16",
-      ]
     },
     {
       // Do not allow any updates into stable branches.
@@ -237,9 +231,7 @@
         "go.sum"
       ],
       matchBaseBranches: [
-        "v1.18",
-        "v1.17",
-        "v1.16"
+        "!main",
       ]
     },
     {
@@ -303,9 +295,7 @@
         'quay.io/goswagger/swagger',
       ],
       matchBaseBranches: [
-        "v1.18",
-        "v1.17",
-        "v1.16",
+        "!main",
       ],
       matchUpdateTypes: [
         'major',
@@ -325,20 +315,7 @@
         "minor",
       ],
       matchBaseBranches: [
-        "v1.18",
-        "v1.17",
-        "v1.16",
-      ]
-    },
-    {
-      // Do not ping helm/kind since the last version (1.10.0) has a bug which
-      // prevents it from downloading kubectl in older versions.
-      "enabled": false,
-      "matchDepNames": [
-        "helm/kind-action"
-      ],
-      "matchUpdateTypes": [
-        "digest"
+        "!main",
       ]
     },
     {
@@ -408,17 +385,6 @@
       ]
     },
     {
-      "matchPackageNames": [
-        "quay.io/cilium/certgen",
-      ],
-      "allowedVersions": "<0.2.0",
-      "matchBaseBranches": [
-        "v1.18",
-        "v1.17",
-        "v1.16",
-      ]
-    },
-    {
       // Disable major updates for go-github as those require updating import paths
       "enabled": false,
       "matchPackageNames": [
@@ -461,12 +427,6 @@
       "matchDepNames": [
         "cilium/cilium-cli"
       ],
-      "matchBaseBranches": [
-        "main",
-        "v1.18",
-        "v1.17",
-        "v1.16",
-      ]
     },
     {
       "groupName": "Hubble CLI",
@@ -498,9 +458,7 @@
         "golangci/golangci-lint"
       ],
       "matchBaseBranches": [
-        "v1.18",
-        "v1.17",
-        "v1.16",
+        "!main",
       ]
     },
     {
@@ -530,9 +488,7 @@
       ],
       "allowedVersions": "!/bpf-next-.*/",
       "matchBaseBranches": [
-        "v1.18",
-        "v1.17",
-        "v1.16",
+        "!main",
       ],
     },
     {
@@ -787,9 +743,7 @@
         "major"
       ],
       "matchBaseBranches": [
-        "v1.18",
-        "v1.17",
-        "v1.16",
+        "!main",
       ]
     },
     {
@@ -803,9 +757,7 @@
         "minor",
       ],
       "matchBaseBranches": [
-        "v1.18",
-        "v1.17",
-        "v1.16",
+        "!main",
       ]
     }
   ],
