@@ -34,7 +34,6 @@ import (
 	"github.com/cilium/cilium/pkg/crypto/certificatemanager"
 	"github.com/cilium/cilium/pkg/datapath/linux/probes"
 	linuxrouting "github.com/cilium/cilium/pkg/datapath/linux/routing"
-	"github.com/cilium/cilium/pkg/datapath/maps"
 	datapathOption "github.com/cilium/cilium/pkg/datapath/option"
 	datapathTables "github.com/cilium/cilium/pkg/datapath/tables"
 	datapath "github.com/cilium/cilium/pkg/datapath/types"
@@ -64,7 +63,6 @@ import (
 	"github.com/cilium/cilium/pkg/kvstore"
 	"github.com/cilium/cilium/pkg/labels"
 	"github.com/cilium/cilium/pkg/labelsfilter"
-	"github.com/cilium/cilium/pkg/loadbalancer"
 	lbmaps "github.com/cilium/cilium/pkg/loadbalancer/maps"
 	"github.com/cilium/cilium/pkg/loadinfo"
 	"github.com/cilium/cilium/pkg/logging"
@@ -1269,7 +1267,6 @@ type daemonParams struct {
 	CTNATMapGC        ctmap.GCRunner
 	IPIdentityWatcher *ipcache.LocalIPIdentityWatcher
 	ClusterInfo       cmtypes.ClusterInfo
-	BandwidthManager  datapath.BandwidthManager
 	IPsecAgent        datapath.IPsecAgent
 	SyncHostIPs       *syncHostIPs
 	NodeDiscovery     *nodediscovery.NodeDiscovery
@@ -1277,7 +1274,6 @@ type daemonParams struct {
 	CRDSyncPromise    promise.Promise[k8sSynced.CRDSync]
 	IdentityManager   identitymanager.IDManager
 	MaglevConfig      maglev.Config
-	LBConfig          loadbalancer.Config
 	DNSProxy          bootstrap.FQDNProxyBootstrapper
 	DNSNameManager    namemanager.NameManager
 	KPRConfig         kpr.KPRConfig
@@ -1337,7 +1333,7 @@ func daemonLegacyInitialization(params daemonParams) legacy.DaemonInitialization
 			}
 
 			wg.Go(func() {
-				if err := startDaemon(daemonCtx, cleaner, params); err != nil {
+				if err := startDaemon(daemonCtx, params); err != nil {
 					params.Logger.Error("Daemon start failed", logfields.Error, err)
 					params.Shutdowner.Shutdown(hive.ShutdownWithError(err))
 				}
@@ -1358,7 +1354,7 @@ func daemonLegacyInitialization(params daemonParams) legacy.DaemonInitialization
 // startDaemon starts the old unmodular part of the cilium-agent.
 // option.Config has already been exposed via *option.DaemonConfig promise,
 // so it may not be modified here
-func startDaemon(ctx context.Context, cleaner *daemonCleanup, params daemonParams) error {
+func startDaemon(ctx context.Context, params daemonParams) error {
 	bootstrapStats.k8sInit.Start()
 	if params.Clientset.IsEnabled() {
 		// Wait only for certain caches, but not all!
@@ -1417,26 +1413,6 @@ func startDaemon(ctx context.Context, cleaner *daemonCleanup, params daemonParam
 		}
 	}
 
-	go func() {
-		if err := params.EndpointRestorer.WaitForEndpointRestore(ctx); err != nil {
-			return
-		}
-
-		ms := maps.NewMapSweeper(
-			params.Logger,
-			&EndpointMapManager{
-				logger:          params.Logger,
-				EndpointManager: params.EndpointManager,
-			}, params.BandwidthManager, params.LBConfig, params.KPRConfig)
-		ms.CollectStaleMapGarbage()
-		ms.RemoveDisabledMaps()
-
-		// Sleep for the --identity-restore-grace-period (default: 30 seconds k8s, 10 minutes kvstore), allowing
-		// the normal allocation processes to finish, before releasing restored resources.
-		time.Sleep(option.Config.IdentityRestoreGracePeriod)
-		params.IdentityRestorer.ReleaseRestoredIdentities()
-	}()
-
 	// Migrating the ENI datapath must happen before the API is served to
 	// prevent endpoints from being created. It also must be before the health
 	// initialization logic which creates the health endpoint, for the same
@@ -1469,7 +1445,7 @@ func startDaemon(ctx context.Context, cleaner *daemonCleanup, params daemonParam
 
 	bootstrapStats.healthCheck.Start()
 	if params.HealthConfig.IsHealthCheckingEnabled() {
-		if err := params.CiliumHealth.Init(ctx, params.InfraIPAllocator.GetHealthEndpointRouting(), cleaner.cleanupFuncs.Add); err != nil {
+		if err := params.CiliumHealth.Init(ctx, params.InfraIPAllocator.GetHealthEndpointRouting()); err != nil {
 			return fmt.Errorf("failed to initialize cilium health: %w", err)
 		}
 	}

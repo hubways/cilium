@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/netip"
 	"path/filepath"
 	"slices"
@@ -22,11 +23,13 @@ import (
 	"github.com/vishvananda/netlink"
 
 	"github.com/cilium/cilium/pkg/bpf"
+	"github.com/cilium/cilium/pkg/byteorder"
 	"github.com/cilium/cilium/pkg/datapath/config"
 	routeReconciler "github.com/cilium/cilium/pkg/datapath/linux/route/reconciler"
 	"github.com/cilium/cilium/pkg/datapath/linux/safenetlink"
 	"github.com/cilium/cilium/pkg/datapath/linux/sysctl"
 	"github.com/cilium/cilium/pkg/datapath/loader/metrics"
+	datapathOption "github.com/cilium/cilium/pkg/datapath/option"
 	"github.com/cilium/cilium/pkg/datapath/tables"
 	datapath "github.com/cilium/cilium/pkg/datapath/types"
 	"github.com/cilium/cilium/pkg/defaults"
@@ -264,10 +267,16 @@ func netdevRewrites(ep datapath.EndpointConfiguration, lnc *datapath.LocalNodeCo
 	cfg.EnableExtendedIPProtocols = option.Config.EnableExtendedIPProtocols
 	cfg.HostEpID = uint16(lnc.HostEndpointID)
 	cfg.EnableNoServiceEndpointsRoutable = lnc.SvcRouteConfig.EnableNoServiceEndpointsRoutable
+	cfg.EnableNetkit = option.Config.DatapathMode == datapathOption.DatapathModeNetkit ||
+		option.Config.DatapathMode == datapathOption.DatapathModeNetkitL2
 
 	if lnc.EnableWireguard {
 		cfg.WgIfindex = lnc.WireguardIfIndex
 		cfg.WgPort = wgtypes.ListenPort
+	}
+
+	if option.Config.EnableVTEP {
+		cfg.VtepMask = byteorder.NetIPv4ToHost32(net.IP(option.Config.VtepCidrMask))
 	}
 
 	renames := map[string]string{
@@ -411,10 +420,16 @@ func ciliumHostRewrites(ep datapath.EndpointConfiguration, lnc *datapath.LocalNo
 	cfg.SecurityLabel = ep.GetIdentity().Uint32()
 
 	cfg.HostEpID = uint16(lnc.HostEndpointID)
+	cfg.EnableNetkit = option.Config.DatapathMode == datapathOption.DatapathModeNetkit ||
+		option.Config.DatapathMode == datapathOption.DatapathModeNetkitL2
 
 	if lnc.EnableWireguard {
 		cfg.WgIfindex = lnc.WireguardIfIndex
 		cfg.WgPort = wgtypes.ListenPort
+	}
+
+	if option.Config.EnableVTEP {
+		cfg.VtepMask = byteorder.NetIPv4ToHost32(net.IP(option.Config.VtepCidrMask))
 	}
 
 	renames := map[string]string{
@@ -491,6 +506,8 @@ func ciliumNetRewrites(ep datapath.EndpointConfiguration, lnc *datapath.LocalNod
 
 	cfg.EnableExtendedIPProtocols = option.Config.EnableExtendedIPProtocols
 	cfg.EnableNoServiceEndpointsRoutable = lnc.SvcRouteConfig.EnableNoServiceEndpointsRoutable
+	cfg.EnableNetkit = option.Config.DatapathMode == datapathOption.DatapathModeNetkit ||
+		option.Config.DatapathMode == datapathOption.DatapathModeNetkitL2
 
 	ifindex := link.Attrs().Index
 	cfg.InterfaceIfindex = uint32(ifindex)
@@ -500,6 +517,10 @@ func ciliumNetRewrites(ep datapath.EndpointConfiguration, lnc *datapath.LocalNod
 	if lnc.EnableWireguard {
 		cfg.WgIfindex = lnc.WireguardIfIndex
 		cfg.WgPort = wgtypes.ListenPort
+	}
+
+	if option.Config.EnableVTEP {
+		cfg.VtepMask = byteorder.NetIPv4ToHost32(net.IP(option.Config.VtepCidrMask))
 	}
 
 	renames := map[string]string{
@@ -665,6 +686,12 @@ func endpointRewrites(ep datapath.EndpointConfiguration, lnc *datapath.LocalNode
 
 	cfg.HostEpID = uint16(lnc.HostEndpointID)
 	cfg.EnableNoServiceEndpointsRoutable = lnc.SvcRouteConfig.EnableNoServiceEndpointsRoutable
+	cfg.EnableNetkit = option.Config.DatapathMode == datapathOption.DatapathModeNetkit ||
+		option.Config.DatapathMode == datapathOption.DatapathModeNetkitL2
+
+	if option.Config.EnableVTEP {
+		cfg.VtepMask = byteorder.NetIPv4ToHost32(net.IP(option.Config.VtepCidrMask))
+	}
 
 	renames := map[string]string{
 		// Rename the calls and policy maps to include the endpoint's id.
@@ -779,6 +806,12 @@ func replaceOverlayDatapath(ctx context.Context, logger *slog.Logger, lnc *datap
 
 	cfg.EnableExtendedIPProtocols = option.Config.EnableExtendedIPProtocols
 	cfg.EnableNoServiceEndpointsRoutable = lnc.SvcRouteConfig.EnableNoServiceEndpointsRoutable
+	cfg.EnableNetkit = option.Config.DatapathMode == datapathOption.DatapathModeNetkit ||
+		option.Config.DatapathMode == datapathOption.DatapathModeNetkitL2
+
+	if option.Config.EnableVTEP {
+		cfg.VtepMask = byteorder.NetIPv4ToHost32(net.IP(option.Config.VtepCidrMask))
+	}
 
 	var obj overlayObjects
 	commit, err := bpf.LoadAndAssign(logger, &obj, spec, &bpf.CollectionOptions{
@@ -830,6 +863,8 @@ func replaceWireguardDatapath(ctx context.Context, logger *slog.Logger, lnc *dat
 	}
 
 	cfg.EnableExtendedIPProtocols = option.Config.EnableExtendedIPProtocols
+	cfg.EnableNetkit = option.Config.DatapathMode == datapathOption.DatapathModeNetkit ||
+		option.Config.DatapathMode == datapathOption.DatapathModeNetkitL2
 
 	var obj wireguardObjects
 	commit, err := bpf.LoadAndAssign(logger, &obj, spec, &bpf.CollectionOptions{

@@ -108,7 +108,7 @@ static __always_inline __u32
 resolve_srcid_ipv6(struct __ctx_buff *ctx, struct ipv6hdr *ip6,
 		   __u32 real_sec_identity, __u32 *ipcache_sec_identity)
 {
-	struct remote_endpoint_info *info = NULL;
+	const struct remote_endpoint_info *info = NULL;
 	union v6addr *src;
 
 	/* Packets from the proxy will already have a real identity. */
@@ -258,8 +258,8 @@ handle_ipv6_cont(struct __ctx_buff *ctx, __u32 secctx, const bool from_host,
 	struct ipv6hdr *ip6;
 	union v6addr *dst;
 	int l3_off = ETH_HLEN;
-	struct remote_endpoint_info *info = NULL;
-	struct endpoint_info *ep;
+	const struct remote_endpoint_info *info = NULL;
+	const struct endpoint_info *ep;
 	int ret __maybe_unused;
 	__u32 magic = MARK_MAGIC_IDENTITY;
 	bool from_proxy = false;
@@ -553,7 +553,7 @@ static __always_inline __u32
 resolve_srcid_ipv4(struct __ctx_buff *ctx, struct iphdr *ip4,
 		   __u32 real_sec_identity, __u32 *ipcache_sec_identity)
 {
-	struct remote_endpoint_info *info = NULL;
+	const struct remote_endpoint_info *info = NULL;
 
 	/* Packets from the proxy will already have a real identity. */
 	if (identity_is_reserved(real_sec_identity)) {
@@ -683,8 +683,8 @@ handle_ipv4_cont(struct __ctx_buff *ctx, __u32 secctx, const bool from_host,
 	__u32 __maybe_unused from_host_raw;
 	void *data, *data_end;
 	struct iphdr *ip4;
-	struct remote_endpoint_info *info;
-	struct endpoint_info *ep;
+	const struct remote_endpoint_info *info;
+	const struct endpoint_info *ep;
 	int ret __maybe_unused;
 	__u32 magic = MARK_MAGIC_IDENTITY;
 	bool from_proxy = false;
@@ -798,7 +798,7 @@ handle_ipv4_cont(struct __ctx_buff *ctx, __u32 secctx, const bool from_host,
 		struct vtep_key vkey = {};
 		struct vtep_value *vtep;
 
-		vkey.vtep_ip = ip4->daddr & VTEP_MASK;
+		vkey.vtep_ip = ip4->daddr & CONFIG(vtep_mask);
 		vtep = map_lookup_elem(&cilium_vtep_map, &vkey);
 		if (!vtep)
 			goto skip_vtep;
@@ -1537,14 +1537,15 @@ skip_host_firewall:
 	} else {
 		trace.reason |= TRACE_REASON_ENCRYPTED;
 	}
+#endif /* ENABLE_WIREGUARD */
 
-#if defined(ENCRYPTION_STRICT_MODE)
+#if (defined(ENABLE_IPSEC) || defined(ENABLE_WIREGUARD)) &&		\
+     defined(ENCRYPTION_STRICT_MODE)
 	if (!strict_allow(ctx, proto)) {
 		ret = DROP_UNENCRYPTED_TRAFFIC;
 		goto drop_err;
 	}
 #endif /* ENCRYPTION_STRICT_MODE */
-#endif /* ENABLE_WIREGUARD */
 
 #ifdef ENABLE_HEALTH_CHECK
 	ret = lb_handle_health(ctx, proto);
