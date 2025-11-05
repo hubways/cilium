@@ -126,6 +126,7 @@
 # - @cilium/alibabacloud
 # - @cilium/aws
 # - @cilium/azure
+# - @cilium/gke
 #
 # Cilium Internals
 # ++++++++++++++++
@@ -257,11 +258,13 @@
 /.github/workflows/*ingress*.yaml @cilium/sig-servicemesh @cilium/github-sec @cilium/ci-structure
 /.github/workflows/*kpr*.yaml @cilium/sig-datapath @cilium/github-sec @cilium/ci-structure
 /.github/actions/cl2-modules/ @cilium/sig-scalability
+/.github/actions/cl2-modules/l7 @cilium/envoy @cilium/sig-scalability
 /.github/workflows/*scale*.yaml @cilium/sig-scalability @cilium/github-sec @cilium/ci-structure
 /.github/workflows/*perf*.yaml @cilium/sig-scalability @cilium/github-sec @cilium/ci-structure
 /.github/workflows/conformance-aks.yaml @cilium/azure @cilium/ipsec @cilium/github-sec @cilium/ci-structure
 /.github/workflows/conformance-aws-cni.yaml @cilium/aws @cilium/github-sec @cilium/ci-structure
 /.github/workflows/conformance-eks.yaml @cilium/aws @cilium/ipsec @cilium/github-sec @cilium/ci-structure
+/.github/workflows/conformance-gke.yaml @cilium/gke @cilium/ipsec @cilium/github-sec @cilium/ci-structure
 /.github/workflows/conformance-kind-proxy-embedded.yaml @cilium/sig-servicemesh @cilium/github-sec @cilium/ci-structure
 /.github/workflows/tests-ces-migrate.yaml @cilium/sig-scalability @cilium/github-sec @cilium/ci-structure
 /.gitignore @cilium/contributing
@@ -479,7 +482,7 @@ Makefile* @cilium/build
 /netlify.toml @cilium/ci-structure
 /operator/ @cilium/operator
 /operator/doublewrite @cilium/metrics
-/operator/pkg/bgpv2 @cilium/sig-bgp
+/operator/pkg/bgp @cilium/sig-bgp
 /operator/pkg/ciliumendpointslice @cilium/sig-scalability
 /operator/pkg/ciliumenvoyconfig @cilium/sig-servicemesh
 /operator/pkg/controller-runtime @cilium/envoy @cilium/sig-servicemesh
@@ -501,7 +504,7 @@ Makefile* @cilium/build
 /pkg/azure/ @cilium/azure
 /pkg/backoff/ @cilium/sig-agent
 /pkg/bufuuid/ @cilium/sig-scalability
-/pkg/bgpv1/ @cilium/sig-bgp
+/pkg/bgp/ @cilium/sig-bgp
 /pkg/bpf/ @cilium/loader
 /pkg/byteorder/ @cilium/sig-datapath @cilium/api
 /pkg/cgroups/ @cilium/sig-datapath
