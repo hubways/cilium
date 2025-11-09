@@ -14,7 +14,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/cilium/hive/cell"
@@ -846,6 +845,10 @@ func InitGlobalFlags(logger *slog.Logger, cmd *cobra.Command, vp *viper.Viper) {
 	flags.Uint8(option.IPTracingOptionType, 0, "Specifies what IPv4 option type should be used to extract trace information from a packet; a value of 0 (default) disables IP tracing.")
 	option.BindEnv(vp, option.IPTracingOptionType)
 
+	flags.Bool(option.EnableCiliumNodeCRDName, defaults.EnableCiliumNodeCRD, "Enable use of CiliumNode CRD")
+	flags.MarkHidden(option.EnableCiliumNodeCRDName)
+	option.BindEnv(vp, option.EnableCiliumNodeCRDName)
+
 	if err := vp.BindPFlags(flags); err != nil {
 		logging.Fatal(logger, "BindPFlags failed", logfields.Error, err)
 	}
@@ -888,6 +891,8 @@ func initDaemonConfigAndLogging(vp *viper.Viper) {
 
 	// slogloggercheck: using default logger for configuration initialization
 	option.Config.Populate(logging.DefaultSlogLogger, vp)
+	// slogloggercheck: using default logger for configuration initialization
+	option.Config.PopulateEnableCiliumNodeCRD(logging.DefaultSlogLogger, vp)
 
 	// add hooks after setting up metrics in the option.Config
 	logging.AddHandlers(metrics.NewLoggingHook())
@@ -1236,7 +1241,6 @@ type daemonParams struct {
 	KVStoreClient       kvstore.Client
 	WGAgent             wgTypes.WireguardAgent
 	LocalNodeStore      *node.LocalNodeStore
-	Shutdowner          hive.Shutdowner
 	Resources           agentK8s.Resources
 	K8sWatcher          *watchers.K8sWatcher
 	CacheStatus         k8sSynced.CacheStatus
@@ -1261,40 +1265,32 @@ type daemonParams struct {
 	Namespaces          statedb.Table[agentK8s.Namespace]
 	Devices             statedb.Table[*datapathTables.Device]
 	DirectRoutingDevice datapathTables.DirectRoutingDevice
-	// Grab the GC object so that we can start the CT/NAT map garbage collection.
-	// This is currently necessary because these maps have not yet been modularized,
-	// and because it depends on parameters which are not provided through hive.
-	CTNATMapGC        ctmap.GCRunner
-	IPIdentityWatcher *ipcache.LocalIPIdentityWatcher
-	ClusterInfo       cmtypes.ClusterInfo
-	IPsecAgent        datapath.IPsecAgent
-	SyncHostIPs       *syncHostIPs
-	NodeDiscovery     *nodediscovery.NodeDiscovery
-	IPAM              *ipam.IPAM
-	CRDSyncPromise    promise.Promise[k8sSynced.CRDSync]
-	IdentityManager   identitymanager.IDManager
-	MaglevConfig      maglev.Config
-	DNSProxy          bootstrap.FQDNProxyBootstrapper
-	DNSNameManager    namemanager.NameManager
-	KPRConfig         kpr.KPRConfig
-	KPRInitializer    kprinitializer.KPRInitializer
-	IPSecConfig       datapath.IPsecConfig
-	HealthConfig      healthconfig.CiliumHealthConfig
-	InfraIPAllocator  *infraIPAllocator
+	IPIdentityWatcher   *ipcache.LocalIPIdentityWatcher
+	ClusterInfo         cmtypes.ClusterInfo
+	IPsecAgent          datapath.IPsecAgent
+	SyncHostIPs         *syncHostIPs
+	NodeDiscovery       *nodediscovery.NodeDiscovery
+	IPAM                *ipam.IPAM
+	CRDSyncPromise      promise.Promise[k8sSynced.CRDSync]
+	IdentityManager     identitymanager.IDManager
+	MaglevConfig        maglev.Config
+	DNSProxy            bootstrap.FQDNProxyBootstrapper
+	DNSNameManager      namemanager.NameManager
+	KPRConfig           kpr.KPRConfig
+	KPRInitializer      kprinitializer.KPRInitializer
+	IPSecConfig         datapath.IPsecConfig
+	HealthConfig        healthconfig.CiliumHealthConfig
+	InfraIPAllocator    *infraIPAllocator
 }
 
 func daemonLegacyInitialization(params daemonParams) legacy.DaemonInitialization {
 	// daemonCtx is the daemon-wide context cancelled when stopping.
 	daemonCtx, cancelDaemonCtx := context.WithCancel(context.Background())
-	cleaner := NewDaemonCleanup()
-
-	var wg sync.WaitGroup
 
 	params.Lifecycle.Append(cell.Hook{
 		OnStart: func(cell.HookContext) error {
-			if err := configureDaemon(daemonCtx, cleaner, params); err != nil {
+			if err := configureDaemon(daemonCtx, params); err != nil {
 				cancelDaemonCtx()
-				cleaner.Clean()
 				params.CfgResolver.Reject(err)
 				return fmt.Errorf("daemon configuration failed: %w", err)
 			}
@@ -1328,26 +1324,41 @@ func daemonLegacyInitialization(params daemonParams) legacy.DaemonInitialization
 			// 'option.Config.Opts' that are explicitly deemed to be runtime-changeable
 			params.CfgResolver.Resolve(option.Config)
 
-			if option.Config.DryMode {
-				return nil
-			}
-
-			wg.Go(func() {
-				if err := startDaemon(daemonCtx, params); err != nil {
-					params.Logger.Error("Daemon start failed", logfields.Error, err)
-					params.Shutdowner.Shutdown(hive.ShutdownWithError(err))
-				}
-			})
-
 			return nil
 		},
 		OnStop: func(cell.HookContext) error {
 			cancelDaemonCtx()
-			cleaner.Clean()
-			wg.Wait()
+			unloadDNSPolicies(params)
+			pidfile.Clean()
 			return nil
 		},
 	})
+
+	if option.Config.DryMode {
+		return legacy.DaemonInitialization{}
+	}
+
+	// Register job that starts the legacy daemon functionality.
+	// This job itself isn't long-running - it only initializes and kicks off other components.
+	params.JobGroup.Add(job.OneShot("legacy-start", func(ctx context.Context, _ cell.Health) error {
+		if err := startDaemon(ctx, params); err != nil {
+			params.Logger.Error("Daemon start failed", logfields.Error, err)
+			return err
+		}
+		return nil
+	}, job.WithShutdown()))
+
+	// Register job to validate that daemon config is unchanged
+	params.JobGroup.Add(job.Timer(
+		"validate-unchanged-daemon-config",
+		// Validate that Daemon config has not changed, ignoring 'Opts'
+		// that may be modified via config patch events.
+		func(ctx context.Context) error { return option.Config.ValidateUnchanged() },
+		// avoid synhronized run with other
+		// jobs started at same time
+		61*time.Second,
+	))
+
 	return legacy.DaemonInitialization{}
 }
 
@@ -1379,13 +1390,6 @@ func startDaemon(ctx context.Context, params daemonParams) error {
 	}
 
 	params.EndpointRestorer.InitRestore()
-
-	bootstrapStats.enableConntrack.Start()
-	params.Logger.Info("Starting connection tracking garbage collector")
-	params.CTNATMapGC.Enable()
-	params.CTNATMapGC.Observe4().Observe(ctx, ctmap.NatMapNext4, func(err error) {})
-	params.CTNATMapGC.Observe6().Observe(ctx, ctmap.NatMapNext6, func(err error) {})
-	bootstrapStats.enableConntrack.End(true)
 
 	if params.EndpointManager.HostEndpointExists() {
 		params.EndpointManager.InitHostEndpointLabels(ctx)
@@ -1463,22 +1467,7 @@ func startDaemon(ctx context.Context, params daemonParams) error {
 	bootstrapStats.overall.End(true)
 	bootstrapStats.updateMetrics()
 
-	// Register job to validate that daemon config is unchanged
-	registerDaemonConfigValidationJob(params)
-
 	return nil
-}
-
-func registerDaemonConfigValidationJob(params daemonParams) {
-	params.JobGroup.Add(job.Timer(
-		"daemon-validate-config",
-		// Validate that Daemon config has not changed, ignoring 'Opts'
-		// that may be modified via config patch events.
-		func(ctx context.Context) error { return option.Config.ValidateUnchanged() },
-		// avoid synhronized run with other
-		// jobs started at same time
-		61*time.Second,
-	))
 }
 
 func registerEndpointStateResolver(endpointRestorer *endpointRestorer, resolver promise.Resolver[endpointstate.Restorer]) {

@@ -6,14 +6,12 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	agentK8s "github.com/cilium/cilium/daemon/k8s"
 	linuxdatapath "github.com/cilium/cilium/pkg/datapath/linux"
 	"github.com/cilium/cilium/pkg/datapath/linux/ipsec"
 	datapathTables "github.com/cilium/cilium/pkg/datapath/tables"
 	datapath "github.com/cilium/cilium/pkg/datapath/types"
-	"github.com/cilium/cilium/pkg/endpoint"
 	"github.com/cilium/cilium/pkg/endpoint/regeneration"
 	"github.com/cilium/cilium/pkg/identity"
 	ipamOption "github.com/cilium/cilium/pkg/ipam/option"
@@ -46,7 +44,7 @@ func initNodeLocalRoutingRule(params daemonParams) error {
 	return nil
 }
 
-func configureDaemon(ctx context.Context, cleaner *daemonCleanup, params daemonParams) error {
+func configureDaemon(ctx context.Context, params daemonParams) error {
 	var err error
 
 	bootstrapStats.daemonInit.Start()
@@ -77,6 +75,12 @@ func configureDaemon(ctx context.Context, cleaner *daemonCleanup, params daemonP
 	if option.Config.LocalRouterIPv4 != "" || option.Config.LocalRouterIPv6 != "" {
 		if params.IPsecAgent.Enabled() {
 			return fmt.Errorf("Cannot specify %s or %s with %s.", option.LocalRouterIPv4, option.LocalRouterIPv6, datapath.EnableIPSec)
+		}
+	}
+
+	if params.IPsecAgent.Enabled() || params.WGAgent.Enabled() {
+		if !option.Config.EnableCiliumNodeCRD {
+			return fmt.Errorf("CiliumNode CRD cannot be disabled when encryption is enabled with WireGuard (--%s) or IPsec (--%s)", wgTypes.EnableWireguard, datapath.EnableIPSec)
 		}
 	}
 
@@ -128,25 +132,6 @@ func configureDaemon(ctx context.Context, cleaner *daemonCleanup, params daemonP
 
 	bootstrapStats.daemonInit.End(true)
 
-	// Stop all endpoints (its goroutines) on exit.
-	cleaner.cleanupFuncs.Add(func() {
-		params.Logger.Info("Waiting for all endpoints' goroutines to be stopped.")
-		var wg sync.WaitGroup
-
-		eps := params.EndpointManager.GetEndpoints()
-		wg.Add(len(eps))
-
-		for _, ep := range eps {
-			go func(ep *endpoint.Endpoint) {
-				ep.Stop()
-				wg.Done()
-			}(ep)
-		}
-
-		wg.Wait()
-		params.Logger.Info("All endpoints' goroutines stopped.")
-	})
-
 	// Open or create BPF maps.
 	bootstrapStats.mapsInit.Start()
 	err = initMaps(params)
@@ -154,85 +139,6 @@ func configureDaemon(ctx context.Context, cleaner *daemonCleanup, params daemonP
 	if err != nil {
 		params.Logger.Error("error while opening/creating BPF maps", logfields.Error, err)
 		return fmt.Errorf("error while opening/creating BPF maps: %w", err)
-	}
-
-	if option.Config.DNSPolicyUnloadOnShutdown {
-		params.Logger.Debug(
-			"Registering cleanup function to unload DNS policies due to option",
-			logfields.Option, option.DNSPolicyUnloadOnShutdown,
-		)
-
-		// add to pre-cleanup funcs because this needs to run on graceful shutdown, but
-		// before the relevant subystems are being shut down.
-		cleaner.preCleanupFuncs.Add(func() {
-			// Stop k8s watchers
-			params.Logger.Info("Stopping k8s watcher")
-			params.K8sWatcher.StopWatcher()
-
-			// Iterate over the policy repository and remove L7 DNS part
-			needsPolicyRegen := false
-			removeL7DNSRules := func(pr policyAPI.Ports) error {
-				portProtocols := pr.GetPortProtocols()
-				if len(portProtocols) == 0 {
-					return nil
-				}
-				portRule := pr.GetPortRule()
-				if portRule == nil || portRule.Rules == nil {
-					return nil
-				}
-				dnsRules := portRule.Rules.DNS
-				params.Logger.Debug(
-					"Found egress L7 DNS rules",
-					logfields.PortProtocol, portProtocols[0],
-					logfields.DNSRules, dnsRules,
-				)
-
-				// For security reasons, the L7 DNS policy must be a
-				// wildcard in order to trigger this logic.
-				// Otherwise we could invalidate the L7 security
-				// rules. This means if any of the DNS L7 rules
-				// have a matchPattern of * then it is OK to delete
-				// the L7 portion of those rules.
-				hasWildcard := false
-				for _, dns := range dnsRules {
-					if dns.MatchPattern == "*" {
-						hasWildcard = true
-						break
-					}
-				}
-				if hasWildcard {
-					portRule.Rules = nil
-					needsPolicyRegen = true
-				}
-				return nil
-			}
-
-			params.Policy.Iterate(func(rule *policytypes.PolicyEntry) {
-				_ = rule.L4.Iterate(removeL7DNSRules)
-			})
-
-			if !needsPolicyRegen {
-				params.Logger.Info(
-					"No policy recalculation needed to remove DNS rules due to option",
-					logfields.Option, option.DNSPolicyUnloadOnShutdown,
-				)
-				return
-			}
-
-			// Bump revision to trigger policy recalculation
-			params.Logger.Info(
-				"Triggering policy recalculation to remove DNS rules due to option",
-				logfields.Option, option.DNSPolicyUnloadOnShutdown,
-			)
-			params.Policy.BumpRevision()
-			regenerationMetadata := &regeneration.ExternalRegenerationMetadata{
-				Reason:            "unloading DNS rules on graceful shutdown",
-				RegenerationLevel: regeneration.RegenerateWithoutDatapath,
-			}
-			wg := params.EndpointManager.RegenerateAllEndpoints(regenerationMetadata)
-			wg.Wait()
-			params.Logger.Info("All endpoints regenerated after unloading DNS rules on graceful shutdown")
-		})
 	}
 
 	policyAPI.InitEntities(params.ClusterInfo.Name)
@@ -401,7 +307,9 @@ func configureDaemon(ctx context.Context, cleaner *daemonCleanup, params daemonP
 	}
 
 	// Must occur after d.allocateIPs(), see GH-14245 and its fix.
-	params.NodeDiscovery.StartDiscovery(ctx)
+	if option.Config.EnableCiliumNodeCRD {
+		params.NodeDiscovery.StartDiscovery(ctx)
+	}
 
 	// Annotation of the k8s node must happen after discovery of the
 	// PodCIDR range and allocation of the health IPs.
@@ -489,4 +397,78 @@ func configureDaemon(ctx context.Context, cleaner *daemonCleanup, params daemonP
 	}
 
 	return nil
+}
+
+func unloadDNSPolicies(params daemonParams) {
+	if option.Config.DNSPolicyUnloadOnShutdown {
+		// Stop k8s watchers
+		params.Logger.Info("Stopping k8s watcher")
+		params.K8sWatcher.StopWatcher()
+
+		params.Logger.Info("Unload DNS policies")
+
+		// Iterate over the policy repository and remove L7 DNS part
+		needsPolicyRegen := false
+		removeL7DNSRules := func(pr policyAPI.Ports) error {
+			portProtocols := pr.GetPortProtocols()
+			if len(portProtocols) == 0 {
+				return nil
+			}
+			portRule := pr.GetPortRule()
+			if portRule == nil || portRule.Rules == nil {
+				return nil
+			}
+			dnsRules := portRule.Rules.DNS
+			params.Logger.Debug(
+				"Found egress L7 DNS rules",
+				logfields.PortProtocol, portProtocols[0],
+				logfields.DNSRules, dnsRules,
+			)
+
+			// For security reasons, the L7 DNS policy must be a
+			// wildcard in order to trigger this logic.
+			// Otherwise we could invalidate the L7 security
+			// rules. This means if any of the DNS L7 rules
+			// have a matchPattern of * then it is OK to delete
+			// the L7 portion of those rules.
+			hasWildcard := false
+			for _, dns := range dnsRules {
+				if dns.MatchPattern == "*" {
+					hasWildcard = true
+					break
+				}
+			}
+			if hasWildcard {
+				portRule.Rules = nil
+				needsPolicyRegen = true
+			}
+			return nil
+		}
+
+		params.Policy.Iterate(func(rule *policytypes.PolicyEntry) {
+			_ = rule.L4.Iterate(removeL7DNSRules)
+		})
+
+		if !needsPolicyRegen {
+			params.Logger.Info(
+				"No policy recalculation needed to remove DNS rules due to option",
+				logfields.Option, option.DNSPolicyUnloadOnShutdown,
+			)
+			return
+		}
+
+		// Bump revision to trigger policy recalculation
+		params.Logger.Info(
+			"Triggering policy recalculation to remove DNS rules due to option",
+			logfields.Option, option.DNSPolicyUnloadOnShutdown,
+		)
+		params.Policy.BumpRevision()
+		regenerationMetadata := &regeneration.ExternalRegenerationMetadata{
+			Reason:            "unloading DNS rules on graceful shutdown",
+			RegenerationLevel: regeneration.RegenerateWithoutDatapath,
+		}
+		wg := params.EndpointManager.RegenerateAllEndpoints(regenerationMetadata)
+		wg.Wait()
+		params.Logger.Info("All endpoints regenerated after unloading DNS rules on graceful shutdown")
+	}
 }

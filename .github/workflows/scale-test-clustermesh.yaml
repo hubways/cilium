@@ -61,7 +61,7 @@ concurrency:
 
 env:
   # renovate: datasource=golang-version depName=go
-  go_version: 1.25.3
+  go_version: 1.25.4
   # renovate: datasource=docker depName=google/cloud-sdk
   gcloud_version: 545.0.0
   # renovate: datasource=git-refs depName=https://github.com/cilium/scaffolding branch=main
@@ -373,12 +373,13 @@ jobs:
             2>&1 | tee cl2-output.txt
 
       - name: Run common post steps
-        if: ${{ always() }}
+        if: ${{ always() && steps.install-cilium.outcome != 'skipped' }}
         uses: ./.github/actions/post-logic
         with:
           always_capture_sysdump: true
           artifacts_suffix: "final"
           job_status: "${{ job.status }}"
+          capture_features_tested: ${{ steps.run-cl2.outcome != 'skipped' }}
 
       - name: Cleanup cluster
         if: ${{ always() && steps.deploy-cluster.outcome != 'skipped' }}

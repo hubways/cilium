@@ -221,6 +221,10 @@
 # - @cilium/wireguard:
 #   Maintain the kernel WireGuard configuration and datapath impacts related to
 #   ensuring traffic is encrypted correctly when WireGuard mode is enabled.
+# - @cilium/ztunnel:
+#   Maintain the ztunnel mTLS-proxy integration in Cilium to ensure the ztunnel
+#   agent receives the necessary information to successfully proxy pod-to-pod
+#   traffic through mTLS tunnels.
 #
 # END_CODEOWNERS_DOCS
 #
@@ -289,7 +293,8 @@ Makefile* @cilium/build
 /bpf/lib/auth.h @cilium/sig-datapath @cilium/sig-servicemesh
 /bpf/lib/drop_reasons.h @cilium/sig-hubble
 /bpf/lib/egress_gateway.h @cilium/egress-gateway
-/bpf/lib/encrypt.h @cilium/ipsec
+/bpf/lib/encrypt.h @cilium/sig-encryption @cilium/ipsec @cilium/wireguard
+/bpf/lib/ipsec.h @cilium/ipsec
 /bpf/lib/policy.h @cilium/sig-datapath @cilium/sig-policy
 /bpf/lib/proxy.h @cilium/proxy @cilium/sig-datapath
 /bpf/lib/wireguard.h @cilium/wireguard @cilium/sig-datapath
@@ -589,7 +594,6 @@ Makefile* @cilium/build
 /pkg/l2announcer/ @cilium/sig-agent
 /pkg/labels @cilium/sig-policy @cilium/api
 /pkg/labelsfilter @cilium/sig-policy
-/pkg/launcher @cilium/sig-agent
 /pkg/loadbalancer @cilium/sig-lb
 /pkg/loadinfo/ @cilium/sig-agent
 /pkg/lock @cilium/sig-agent
@@ -653,6 +657,7 @@ Makefile* @cilium/build
 /pkg/wal/ @cilium/sig-foundations
 /pkg/wireguard @cilium/wireguard
 /pkg/xds/ @cilium/envoy
+/pkg/ztunnel/ @cilium/ztunnel
 /plugins/cilium-cni/ @cilium/sig-k8s
 /plugins/cilium-docker/ @cilium/docker
 /README.rst @cilium/docs-structure @cilium/release-managers

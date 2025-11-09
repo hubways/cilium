@@ -52,6 +52,7 @@
 #include "lib/tailcall.h"
 #include "lib/overloadable.h"
 #include "lib/encrypt.h"
+#include "lib/ipsec.h"
 #include "lib/wireguard.h"
 #include "lib/l2_responder.h"
 #include "lib/vtep.h"
@@ -1229,7 +1230,10 @@ int cil_from_netdev(struct __ctx_buff *ctx)
 	 * decrypted), we want to run all subsequent logic here. We therefore
 	 * ignore the return value from do_decrypt.
 	 */
-	do_decrypt(ctx, proto);
+	ret = do_decrypt(ctx, proto);
+	if (IS_ERR(ret))
+		goto drop_err;
+
 	if ((ctx->mark & MARK_MAGIC_HOST_MASK) == MARK_MAGIC_DECRYPT)
 		return CTX_ACT_OK;
 #endif
@@ -1720,7 +1724,7 @@ int tail_ipv4_host_policy_ingress(struct __ctx_buff *ctx)
 {
 	struct trace_ctx trace = {
 		.reason = TRACE_REASON_UNKNOWN,
-		.monitor = TRACE_PAYLOAD_LEN,
+		.monitor = 0,
 	};
 	__u32 src_id = ctx_load_meta(ctx, CB_SRC_LABEL);
 	bool traced = ctx_load_meta(ctx, CB_TRACED);
