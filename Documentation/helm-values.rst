@@ -836,6 +836,10 @@
      - The externalTrafficPolicy of service used for apiserver access.
      - string
      - ``"Cluster"``
+   * - :spelling:ignore:`clustermesh.apiserver.service.externallyCreated`
+     - Set externallyCreated to true to create the clustermesh-apiserver service outside this helm chart. For example after external load balancer controllers are created.
+     - bool
+     - ``false``
    * - :spelling:ignore:`clustermesh.apiserver.service.internalTrafficPolicy`
      - The internalTrafficPolicy of service used for apiserver access.
      - string
@@ -872,6 +876,14 @@
      - base64 encoded PEM values for the clustermesh-apiserver admin certificate and private key. Used if 'auto' is not enabled.
      - object
      - ``{"cert":"","key":""}``
+   * - :spelling:ignore:`clustermesh.apiserver.tls.admin.cert`
+     - Deprecated, as secrets will always need to be created externally if ``auto`` is disabled.
+     - string
+     - ``""``
+   * - :spelling:ignore:`clustermesh.apiserver.tls.admin.key`
+     - Deprecated, as secrets will always need to be created externally if ``auto`` is disabled.
+     - string
+     - ``""``
    * - :spelling:ignore:`clustermesh.apiserver.tls.authMode`
      - Configure the clustermesh authentication mode. Supported values: - legacy:     All clusters access remote clustermesh instances with the same               username (i.e., remote). The "remote" certificate must be               generated with CN=remote if provided manually. - migration:  Intermediate mode required to upgrade from legacy to cluster               (and vice versa) with no disruption. Specifically, it enables               the creation of the per-cluster usernames, while still using               the common one for authentication. The "remote" certificate must               be generated with CN=remote if provided manually (same as legacy). - cluster:    Each cluster accesses remote etcd instances with a username               depending on the local cluster name (i.e., remote-\ :raw-html-m2r:`<cluster-name>`\ ).               The "remote" certificate must be generated with CN=remote-\ :raw-html-m2r:`<cluster-name>`               if provided manually. Cluster mode is meaningful only when the same               CA is shared across all clusters part of the mesh.
      - string
@@ -889,25 +901,33 @@
      - int
      - ``1095``
    * - :spelling:ignore:`clustermesh.apiserver.tls.auto.enabled`
-     - When set to true, automatically generate a CA and certificates to enable mTLS between clustermesh-apiserver and external workload instances. If set to false, the certs to be provided by setting appropriate values below.
+     - When set to true, automatically generate a CA and certificates to enable mTLS between clustermesh-apiserver and external workload instances.  When set to false you need to pre-create the following secrets: - clustermesh-apiserver-server-cert - clustermesh-apiserver-admin-cert - clustermesh-apiserver-remote-cert - clustermesh-apiserver-local-cert The above secret should at least contains the keys ``tls.crt`` and ``tls.key`` and optionally ``ca.crt`` if a CA bundle is not configured.
      - bool
      - ``true``
-   * - :spelling:ignore:`clustermesh.apiserver.tls.client`
-     - base64 encoded PEM values for the clustermesh-apiserver client certificate and private key. Used if 'auto' is not enabled.
-     - object
-     - ``{"cert":"","key":""}``
    * - :spelling:ignore:`clustermesh.apiserver.tls.enableSecrets`
-     - Allow users to provide their own certificates Users may need to provide their certificates using a mechanism that requires they provide their own secrets. This setting does not apply to any of the auto-generated mechanisms below, it only restricts the creation of secrets via the ``tls-provided`` templates.
-     - bool
+     - Allow users to provide their own certificates Users may need to provide their certificates using a mechanism that requires they provide their own secrets. This setting does not apply to any of the auto-generated mechanisms below, it only restricts the creation of secrets via the ``tls-provided`` templates. This option is deprecated as secrets are expected to be created externally when 'auto' is not enabled.
+     - deprecated
      - ``true``
    * - :spelling:ignore:`clustermesh.apiserver.tls.remote`
      - base64 encoded PEM values for the clustermesh-apiserver remote cluster certificate and private key. Used if 'auto' is not enabled.
      - object
      - ``{"cert":"","key":""}``
+   * - :spelling:ignore:`clustermesh.apiserver.tls.remote.cert`
+     - Deprecated, as secrets will always need to be created externally if ``auto`` is disabled.
+     - string
+     - ``""``
+   * - :spelling:ignore:`clustermesh.apiserver.tls.remote.key`
+     - Deprecated, as secrets will always need to be created externally if ``auto`` is disabled.
+     - string
+     - ``""``
    * - :spelling:ignore:`clustermesh.apiserver.tls.server`
      - base64 encoded PEM values for the clustermesh-apiserver server certificate and private key. Used if 'auto' is not enabled.
      - object
      - ``{"cert":"","extraDnsNames":[],"extraIpAddresses":[],"key":""}``
+   * - :spelling:ignore:`clustermesh.apiserver.tls.server.cert`
+     - Deprecated, as secrets will always need to be created externally if ``auto`` is disabled.
+     - string
+     - ``""``
    * - :spelling:ignore:`clustermesh.apiserver.tls.server.extraDnsNames`
      - Extra DNS names added to certificate when it's auto generated
      - list
@@ -916,6 +936,10 @@
      - Extra IP addresses added to certificate when it's auto generated
      - list
      - ``[]``
+   * - :spelling:ignore:`clustermesh.apiserver.tls.server.key`
+     - Deprecated, as secrets will always need to be created externally if ``auto`` is disabled.
+     - string
+     - ``""``
    * - :spelling:ignore:`clustermesh.apiserver.tolerations`
      - Node tolerations for pod assignment on nodes with taints ref: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
      - list
@@ -945,7 +969,7 @@
      - string
      - ``"mesh.cilium.io"``
    * - :spelling:ignore:`clustermesh.config.enabled`
-     - Enable the Clustermesh explicit configuration.
+     - Enable the Clustermesh explicit configuration. If set to false, you need to provide the following secrets yourself: - cilium-clustermesh (used by cilium-agent/cilium-operator to connect to   the local etcd instance if KVStoreMesh is enabled or the remote clusters   if KVStoreMesh is disabled) - cilium-kvstoremesh (used by KVStoreMesh to connect to the remote clusters)
      - bool
      - ``false``
    * - :spelling:ignore:`clustermesh.enableEndpointSliceSynchronization`
@@ -1831,11 +1855,11 @@
    * - :spelling:ignore:`hubble.export`
      - Hubble flows export.
      - object
-     - ``{"dynamic":{"config":{"configMapName":"cilium-flowlog-config","content":[{"excludeFilters":[],"fieldMask":[],"fileCompress":false,"fileMaxBackups":5,"fileMaxSizeMb":10,"filePath":"/var/run/cilium/hubble/events.log","includeFilters":[],"name":"all"}],"createConfigMap":true},"enabled":false},"static":{"allowList":[],"denyList":[],"enabled":false,"fieldMask":[],"fileCompress":false,"fileMaxBackups":5,"fileMaxSizeMb":10,"filePath":"/var/run/cilium/hubble/events.log"}}``
+     - ``{"dynamic":{"config":{"configMapName":"cilium-flowlog-config","content":[{"aggregationInterval":"0s","excludeFilters":[],"fieldAggregate":[],"fieldMask":[],"fileCompress":false,"fileMaxBackups":5,"fileMaxSizeMb":10,"filePath":"/var/run/cilium/hubble/events.log","includeFilters":[],"name":"all"}],"createConfigMap":true},"enabled":false},"static":{"aggregationInterval":"0s","allowList":[],"denyList":[],"enabled":false,"fieldAggregate":[],"fieldMask":[],"fileCompress":false,"fileMaxBackups":5,"fileMaxSizeMb":10,"filePath":"/var/run/cilium/hubble/events.log"}}``
    * - :spelling:ignore:`hubble.export.dynamic`
      - - Dynamic exporters configuration. Dynamic exporters may be reconfigured without a need of agent restarts.
      - object
-     - ``{"config":{"configMapName":"cilium-flowlog-config","content":[{"excludeFilters":[],"fieldMask":[],"fileCompress":false,"fileMaxBackups":5,"fileMaxSizeMb":10,"filePath":"/var/run/cilium/hubble/events.log","includeFilters":[],"name":"all"}],"createConfigMap":true},"enabled":false}``
+     - ``{"config":{"configMapName":"cilium-flowlog-config","content":[{"aggregationInterval":"0s","excludeFilters":[],"fieldAggregate":[],"fieldMask":[],"fileCompress":false,"fileMaxBackups":5,"fileMaxSizeMb":10,"filePath":"/var/run/cilium/hubble/events.log","includeFilters":[],"name":"all"}],"createConfigMap":true},"enabled":false}``
    * - :spelling:ignore:`hubble.export.dynamic.config.configMapName`
      - -- Name of configmap with configuration that may be altered to reconfigure exporters within a running agents.
      - string
@@ -1843,7 +1867,7 @@
    * - :spelling:ignore:`hubble.export.dynamic.config.content`
      - -- Exporters configuration in YAML format.
      - list
-     - ``[{"excludeFilters":[],"fieldMask":[],"fileCompress":false,"fileMaxBackups":5,"fileMaxSizeMb":10,"filePath":"/var/run/cilium/hubble/events.log","includeFilters":[],"name":"all"}]``
+     - ``[{"aggregationInterval":"0s","excludeFilters":[],"fieldAggregate":[],"fieldMask":[],"fileCompress":false,"fileMaxBackups":5,"fileMaxSizeMb":10,"filePath":"/var/run/cilium/hubble/events.log","includeFilters":[],"name":"all"}]``
    * - :spelling:ignore:`hubble.export.dynamic.config.createConfigMap`
      - -- True if helm installer should create config map. Switch to false if you want to self maintain the file content.
      - bool
@@ -1851,7 +1875,11 @@
    * - :spelling:ignore:`hubble.export.static`
      - - Static exporter configuration. Static exporter is bound to agent lifecycle.
      - object
-     - ``{"allowList":[],"denyList":[],"enabled":false,"fieldMask":[],"fileCompress":false,"fileMaxBackups":5,"fileMaxSizeMb":10,"filePath":"/var/run/cilium/hubble/events.log"}``
+     - ``{"aggregationInterval":"0s","allowList":[],"denyList":[],"enabled":false,"fieldAggregate":[],"fieldMask":[],"fileCompress":false,"fileMaxBackups":5,"fileMaxSizeMb":10,"filePath":"/var/run/cilium/hubble/events.log"}``
+   * - :spelling:ignore:`hubble.export.static.aggregationInterval`
+     - - Defines the interval at which to aggregate before exporting Hubble flows.     Aggregation feature is only enabled when fieldAggregate is specified and aggregationInterval > 0s.
+     - string
+     - ``"0s"``
    * - :spelling:ignore:`hubble.export.static.fileCompress`
      - - Enable compression of rotated files.
      - bool
@@ -2889,7 +2917,7 @@
      - string
      - ``"cilium"``
    * - :spelling:ignore:`namespaceOverride`
-     - namespaceOverride allows to override the destination namespace for Cilium resources. This property allows to use Cilium as part of an Umbrella Chart with different targets.
+     - namespaceOverride allows to override the destination namespace for Cilium resources.
      - string
      - ``""``
    * - :spelling:ignore:`nat.mapStatsEntries`
@@ -3248,6 +3276,10 @@
      - Enable path MTU discovery to send ICMP fragmentation-needed replies to the client.
      - bool
      - ``false``
+   * - :spelling:ignore:`pmtuDiscovery.packetizationLayerPMTUD`
+     - Enable kernel probing path MTU discovery for Pods which uses different message sizes to search for correct MTU value.
+     - object
+     - ``{"enabled":true}``
    * - :spelling:ignore:`podAnnotations`
      - Annotations to be added to agent pods
      - object

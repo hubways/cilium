@@ -248,7 +248,7 @@ jobs:
           echo "test default: ${CONNECTIVITY_TEST_DEFAULTS}"
 
       - name: Setup bootid file
-        uses: cilium/little-vm-helper@01debd6cb7e5514cfdb4a33e776bdc647bc5306e # v0.0.27
+        uses: cilium/little-vm-helper@ad43ff511dd5365a0011ae9f864ec959c36daebf # v0.0.28
         with:
           provision: 'false'
           cmd: |
@@ -392,7 +392,9 @@ jobs:
         uses: ./.github/actions/conn-disrupt-test-check
         with:
           job-name: ${{ env.job_name }}-${{ matrix.name }}-post-rotate
-          extra-connectivity-test-flags: ${{ steps.vars-conn.outputs.connectivity_test_defaults }}
+          # Opt-out from `no-ipsec-xfrm-error`, seeing XfrmOutPolBlock errors.
+          tests: 'no-interrupted-connections'
+          extra-connectivity-test-flags: "${{ steps.vars-conn.outputs.connectivity_test_defaults }} --include-conn-disrupt-test"
 
       - name: Start unencrypted packets check for tests
         uses: ./.github/actions/bpftrace/start

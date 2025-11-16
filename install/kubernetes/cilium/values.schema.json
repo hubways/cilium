@@ -1327,6 +1327,9 @@
                     "Cluster"
                   ]
                 },
+                "externallyCreated": {
+                  "type": "boolean"
+                },
                 "internalTrafficPolicy": {
                   "enum": [
                     "Local",
@@ -1392,17 +1395,6 @@
                       "type": "boolean"
                     },
                     "method": {
-                      "type": "string"
-                    }
-                  },
-                  "type": "object"
-                },
-                "client": {
-                  "properties": {
-                    "cert": {
-                      "type": "string"
-                    },
-                    "key": {
                       "type": "string"
                     }
                   },
@@ -2726,7 +2718,14 @@
                         "anyOf": [
                           {
                             "properties": {
+                              "aggregationInterval": {
+                                "type": "string"
+                              },
                               "excludeFilters": {
+                                "items": {},
+                                "type": "array"
+                              },
+                              "fieldAggregate": {
                                 "items": {},
                                 "type": "array"
                               },
@@ -2773,6 +2772,9 @@
             },
             "static": {
               "properties": {
+                "aggregationInterval": {
+                  "type": "string"
+                },
                 "allowList": {
                   "items": {},
                   "type": "array"
@@ -2783,6 +2785,10 @@
                 },
                 "enabled": {
                   "type": "boolean"
+                },
+                "fieldAggregate": {
+                  "items": {},
+                  "type": "array"
                 },
                 "fieldMask": {
                   "items": {},
@@ -5056,6 +5062,14 @@
       "properties": {
         "enabled": {
           "type": "boolean"
+        },
+        "packetizationLayerPMTUD": {
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          },
+          "type": "object"
         }
       },
       "type": "object"

@@ -892,11 +892,6 @@ const (
 	// K8sEnableAPIDiscovery enables Kubernetes API discovery
 	K8sEnableAPIDiscovery = "enable-k8s-api-discovery"
 
-	// EgressMultiHomeIPRuleCompat instructs Cilium to use a new scheme to
-	// store rules and routes under ENI and Azure IPAM modes, if false.
-	// Otherwise, it will use the old scheme.
-	EgressMultiHomeIPRuleCompat = "egress-multi-home-ip-rule-compat"
-
 	// Install ingress/egress routes through uplink on host for Pods when working with
 	// delegated IPAM plugin.
 	InstallUplinkRoutesForDelegatedIPAM = "install-uplink-routes-for-delegated-ipam"
@@ -1002,6 +997,9 @@ const (
 
 	// EnableCiliumNodeCRD is the name of the option to enable use of the CiliumNode CRD
 	EnableCiliumNodeCRDName = "enable-ciliumnode-crd"
+
+	// EnablePacketizationLayerPMTUD enables kernel plpmtud discovery on Pod netns.
+	EnablePacketizationLayerPMTUD = "enable-packetization-layer-pmtud"
 )
 
 // Default string arguments
@@ -1756,11 +1754,6 @@ type DaemonConfig struct {
 	// This is only enabled for cilium-operator
 	K8sEnableLeasesFallbackDiscovery bool
 
-	// EgressMultiHomeIPRuleCompat instructs Cilium to use a new scheme to
-	// store rules and routes under ENI and Azure IPAM modes, if false.
-	// Otherwise, it will use the old scheme.
-	EgressMultiHomeIPRuleCompat bool
-
 	// Install ingress/egress routes through uplink on host for Pods when working with
 	// delegated IPAM plugin.
 	InstallUplinkRoutesForDelegatedIPAM bool
@@ -1905,6 +1898,9 @@ type DaemonConfig struct {
 
 	// EnableCiliumNodeCRD enables the use of CiliumNode CRD
 	EnableCiliumNodeCRD bool
+
+	// EnablePacketizationLayerPMTUD enables kernel packetization layer path mtu discovery on Pod netns.
+	EnablePacketizationLayerPMTUD bool
 }
 
 var (
@@ -2599,7 +2595,7 @@ func (c *DaemonConfig) Populate(logger *slog.Logger, vp *viper.Viper) {
 	c.BootIDFile = vp.GetString(BootIDFilename)
 	c.EnableExtendedIPProtocols = vp.GetBool(EnableExtendedIPProtocols)
 	c.IPTracingOptionType = vp.GetUint(IPTracingOptionType)
-
+	c.EnablePacketizationLayerPMTUD = vp.GetBool(EnablePacketizationLayerPMTUD)
 	c.ServiceNoBackendResponse = vp.GetString(ServiceNoBackendResponse)
 	switch c.ServiceNoBackendResponse {
 	case ServiceNoBackendResponseReject, ServiceNoBackendResponseDrop:
@@ -2618,7 +2614,6 @@ func (c *DaemonConfig) Populate(logger *slog.Logger, vp *viper.Viper) {
 	default:
 		logging.Fatal(logger, "Invalid value for --%s: %s (must be 'icmp' or 'none')", PolicyDenyResponse, c.PolicyDenyResponse)
 	}
-	c.EgressMultiHomeIPRuleCompat = vp.GetBool(EgressMultiHomeIPRuleCompat)
 	c.InstallUplinkRoutesForDelegatedIPAM = vp.GetBool(InstallUplinkRoutesForDelegatedIPAM)
 
 	vlanBPFBypassIDs := vp.GetStringSlice(VLANBPFBypass)
@@ -3337,6 +3332,7 @@ func (c *DaemonConfig) diffFromFile() error {
 	if err != nil {
 		return err
 	}
+	defer f.Close()
 
 	fi, err := f.Stat()
 	if err != nil {

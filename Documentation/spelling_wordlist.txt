@@ -98,6 +98,7 @@ NewProto
 Nic
 O'Reilly
 PaaS
+Packetization
 Palantir
 Pepelnjak
 Perfdash
@@ -149,6 +150,7 @@ Zhou
 aarch
 addr
 agentNotReadyTaintKey
+aggregationInterval
 alibabacloud
 allocatable
 allocateLoadBalancerNodePorts
@@ -348,11 +350,13 @@ extTrafficPolicy
 extern
 externalIPs
 externalTrafficPolicy
+externallyCreated
 extraConfig
 facto
 failover
 fcfs
 fec
+fieldAggregate
 filesystem
 filesystems
 firewalling
