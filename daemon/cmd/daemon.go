@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cilium/cilium/daemon/infraendpoints"
 	agentK8s "github.com/cilium/cilium/daemon/k8s"
 	linuxdatapath "github.com/cilium/cilium/pkg/datapath/linux"
 	"github.com/cilium/cilium/pkg/datapath/linux/ipsec"
@@ -104,7 +105,6 @@ func initAndValidateDaemonConfig(params daemonConfigParams) error {
 	// the feature does not influence the decision which BPF maps should be
 	// created.
 	if err := params.KPRInitializer.InitKubeProxyReplacementOptions(); err != nil {
-		params.Logger.Error("unable to initialize kube-proxy replacement options", logfields.Error, err)
 		return fmt.Errorf("unable to initialize kube-proxy replacement options: %w", err)
 	}
 
@@ -129,18 +129,14 @@ func initAndValidateDaemonConfig(params daemonConfigParams) error {
 				option.MasqueradeInterfaces, option.Devices)
 		}
 		if err != nil {
-			params.Logger.Error("unable to initialize BPF masquerade support", logfields.Error, err)
 			return fmt.Errorf("unable to initialize BPF masquerade support: %w", err)
 		}
 		if params.DaemonConfig.EnableMasqueradeRouteSource {
-			params.Logger.Error("BPF masquerading does not yet support masquerading to source IP from routing layer")
 			return fmt.Errorf("BPF masquerading to route source (--%s=\"true\") currently not supported with BPF-based masquerading (--%s=\"true\")", option.EnableMasqueradeRouteSource, option.EnableBPFMasquerade)
 		}
 	} else if params.DaemonConfig.EnableIPMasqAgent {
-		params.Logger.Error(fmt.Sprintf("BPF ip-masq-agent requires (--%s=\"true\" or --%s=\"true\") and --%s=\"true\"", option.EnableIPv4Masquerade, option.EnableIPv6Masquerade, option.EnableBPFMasquerade))
 		return fmt.Errorf("BPF ip-masq-agent requires (--%s=\"true\" or --%s=\"true\") and --%s=\"true\"", option.EnableIPv4Masquerade, option.EnableIPv6Masquerade, option.EnableBPFMasquerade)
 	} else if !params.DaemonConfig.MasqueradingEnabled() && params.DaemonConfig.EnableBPFMasquerade {
-		params.Logger.Error("IPv4 and IPv6 masquerading are both disabled, BPF masquerading requires at least one to be enabled")
 		return fmt.Errorf("BPF masquerade requires (--%s=\"true\" or --%s=\"true\")", option.EnableIPv4Masquerade, option.EnableIPv6Masquerade)
 	}
 
@@ -176,7 +172,6 @@ func configureDaemon(ctx context.Context, params daemonParams) error {
 	err = initMaps(params)
 	bootstrapStats.mapsInit.EndError(err)
 	if err != nil {
-		params.Logger.Error("error while opening/creating BPF maps", logfields.Error, err)
 		return fmt.Errorf("error while opening/creating BPF maps: %w", err)
 	}
 
@@ -215,7 +210,6 @@ func configureDaemon(ctx context.Context, params daemonParams) error {
 		}
 
 		if err := agentK8s.WaitForNodeInformation(ctx, params.Logger, params.Resources.LocalNode, params.Resources.LocalCiliumNode); err != nil {
-			params.Logger.Error("unable to connect to get node spec from apiserver", logfields.Error, err)
 			return fmt.Errorf("unable to connect to get node spec from apiserver: %w", err)
 		}
 
@@ -244,33 +238,20 @@ func configureDaemon(ctx context.Context, params daemonParams) error {
 
 	nativeDevices, _ := datapathTables.SelectedDevices(params.Devices, rxn)
 	if err := params.KPRInitializer.FinishKubeProxyReplacementInit(nativeDevices, drdName); err != nil {
-		params.Logger.Error("failed to finalise LB initialization", logfields.Error, err)
 		return fmt.Errorf("failed to finalise LB initialization: %w", err)
 	}
-	if len(nativeDevices) == 0 {
-		if params.DaemonConfig.EnableHostFirewall {
-			const msg = "Host firewall's external facing device could not be determined. Use --%s to specify."
-			params.Logger.Error(
-				fmt.Sprintf(msg, option.Devices),
-				logfields.Error, err,
-			)
-			return fmt.Errorf(msg, option.Devices)
-		}
+	if len(nativeDevices) == 0 && params.DaemonConfig.EnableHostFirewall {
+		return fmt.Errorf("failed to determine host firewall's external facing device (use --%s to specify)", option.Devices)
 	}
 
+	// Launch the K8s watchers in parallel as we continue to process other
+	// daemon options.
 	// Some of the k8s watchers rely on option flags set above (specifically
 	// EnableBPFMasquerade), so we should only start them once the flag values
 	// are set.
-	if params.Clientset.IsEnabled() {
-		bootstrapStats.k8sInit.Start()
-
-		// Launch the K8s watchers in parallel as we continue to process other
-		// daemon options.
-		params.K8sWatcher.InitK8sSubsystem(ctx, params.CacheStatus)
-		bootstrapStats.k8sInit.End(true)
-	} else {
-		close(params.CacheStatus)
-	}
+	bootstrapStats.k8sInit.Start()
+	params.K8sWatcher.InitK8sSubsystem(ctx)
+	bootstrapStats.k8sInit.End(true)
 
 	bootstrapStats.cleanup.Start()
 	err = clearCiliumVeths(params.Logger)
@@ -283,7 +264,7 @@ func configureDaemon(ctx context.Context, params daemonParams) error {
 	// the Kubernetes or CiliumNode resource in the K8s subsystem from call
 	// k8s.WaitForNodeInformation(). These will be used later after starting
 	// IPAM initialization to finish off the `cilium_host` IP restoration.
-	var restoredRouterIPs restoredIPs
+	var restoredRouterIPs infraendpoints.RestoredIPs
 	restoredRouterIPs.IPv4FromK8s, restoredRouterIPs.IPv6FromK8s = node.GetInternalIPv4Router(params.Logger), node.GetIPv6Router(params.Logger)
 	// Fetch the router IPs from the filesystem in case they were set a priori
 	restoredRouterIPs.IPv4FromFS, restoredRouterIPs.IPv6FromFS = node.ExtractCiliumHostIPFromFS(params.Logger)
@@ -403,6 +384,9 @@ func configureDaemon(ctx context.Context, params daemonParams) error {
 			return fmt.Errorf("postinit failed: %w", err)
 		}
 	}
+
+	bootstrapStats.overall.End(true)
+	bootstrapStats.updateMetrics()
 
 	return nil
 }
