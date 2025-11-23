@@ -50,7 +50,8 @@
     "on sunday"
   ],
   postUpdateOptions: [
-    "gomodTidy"
+    // update source import paths on major updates
+    "gomodUpdateImportPaths"
   ],
   // This ignorePaths configuration option overrides the config:base preset and
   // should not be removed.
@@ -206,11 +207,7 @@
         "go.mod",
         "go.sum"
       ],
-      "postUpdateOptions": [
-        // update source import paths on major updates
-        "gomodUpdateImportPaths"
-      ],
-      matchBaseBranches: [
+      "matchBaseBranches": [
         "main"
       ]
     },
@@ -275,9 +272,7 @@
         // Stop updating envoy control plane packages until they pushed the
         // tag to stop go mod from erroring. See https://github.com/cilium/cilium/issues/41574
         "github.com/envoyproxy/go-control-plane/contrib",
-        "github.com/envoyproxy/go-control-plane/envoy",
-        // We can't update to helm v4 until https://github.com/helm/helm/issues/31525 is fixed
-        "helm.sh/helm/v4"
+        "github.com/envoyproxy/go-control-plane/envoy"
       ],
       "matchPackagePatterns": [
         // We can't update these libraries until github.com/shoenig/go-m1cpu
@@ -289,7 +284,9 @@
         // Once we decide to spend cycles on ginkgo v2 we should update the
         // dependency manually.
         "github.com/onsi/ginkgo",
-        "github.com/onsi/gomega/*"
+        "github.com/onsi/gomega/*",
+        // We can't update to helm v4 until https://github.com/helm/helm/issues/31525 is fixed
+        "helm.sh/helm/*"
       ]
     },
     {
@@ -399,16 +396,6 @@
         "v1.17",
         "v1.16",
       ]
-    },
-    {
-      // Disable major updates for go-github as those require updating import paths
-      "enabled": false,
-      "matchPackageNames": [
-        "github.com/google/go-github/v*",
-      ],
-      "matchUpdateTypes": [
-        "major",
-      ],
     },
     {
       // Avoid updating patch version for statedb as it might contain breaking changes
@@ -580,7 +567,8 @@
           "make -C Documentation update-cmdref"
         ],
         "fileFilters": [
-          "Documentation/cmdref/cilium_connectivity_test.md"
+          "Documentation/cmdref/cilium_connectivity_test.md",
+          "Documentation/cmdref/cilium_connectivity_perf.md"
         ],
         "executionMode": "update"
       }

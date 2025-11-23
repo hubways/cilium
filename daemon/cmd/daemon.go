@@ -14,13 +14,10 @@ import (
 	datapathTables "github.com/cilium/cilium/pkg/datapath/tables"
 	datapath "github.com/cilium/cilium/pkg/datapath/types"
 	"github.com/cilium/cilium/pkg/endpoint/regeneration"
-	"github.com/cilium/cilium/pkg/identity"
 	ipamOption "github.com/cilium/cilium/pkg/ipam/option"
 	"github.com/cilium/cilium/pkg/k8s"
-	"github.com/cilium/cilium/pkg/labels"
 	"github.com/cilium/cilium/pkg/logging/logfields"
 	"github.com/cilium/cilium/pkg/maps/ctmap"
-	"github.com/cilium/cilium/pkg/metrics"
 	"github.com/cilium/cilium/pkg/node"
 	nodeTypes "github.com/cilium/cilium/pkg/node/types"
 	"github.com/cilium/cilium/pkg/option"
@@ -150,11 +147,6 @@ func configureDaemon(ctx context.Context, params daemonParams) error {
 
 	ctmap.InitMapInfo(params.MetricsRegistry, params.DaemonConfig.EnableIPv4, params.DaemonConfig.EnableIPv6, params.KPRConfig.KubeProxyReplacement || params.DaemonConfig.EnableBPFMasquerade)
 
-	identity.IterateReservedIdentities(func(_ identity.NumericIdentity, _ *identity.Identity) {
-		metrics.Identity.WithLabelValues(identity.ReservedIdentityType).Inc()
-		metrics.IdentityLabelSources.WithLabelValues(labels.LabelSourceReserved).Inc()
-	})
-
 	// Collect CIDR identities from the "old" bpf ipcache and restore them
 	// in to the metadata layer.
 	if params.DaemonConfig.RestoreState && !params.DaemonConfig.DryMode {
@@ -174,8 +166,6 @@ func configureDaemon(ctx context.Context, params daemonParams) error {
 	if err != nil {
 		return fmt.Errorf("error while opening/creating BPF maps: %w", err)
 	}
-
-	policyAPI.InitEntities(params.ClusterInfo.Name)
 
 	bootstrapStats.restore.Start()
 	// fetch old endpoints before k8s is configured.
