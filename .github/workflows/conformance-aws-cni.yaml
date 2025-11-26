@@ -91,7 +91,7 @@ jobs:
       empty: ${{ steps.set-matrix.outputs.empty }}
     steps:
       - name: Checkout context ref (trusted)
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
         with:
           ref: ${{ inputs.context-ref || github.sha }}
           persist-credentials: false
@@ -153,7 +153,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout context ref (trusted)
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
         with:
           ref: ${{ inputs.context-ref || github.sha }}
           persist-credentials: false
@@ -193,7 +193,7 @@ jobs:
           comment_on_pr: false
 
       - name: Checkout context ref (trusted)
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
         with:
           ref: ${{ inputs.context-ref || github.sha }}
           persist-credentials: false
@@ -215,6 +215,16 @@ jobs:
           external-target: 'amazon.com.'
           hubble: false
           test-concurrency: 3
+
+      - name: Get PR base branch
+        id: get-base-branch
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BASE_BRANCH=$(gh pr view ${{ inputs.PR-number }} --json baseRefName -q .baseRefName)
+          echo "base-branch=$BASE_BRANCH" >> $GITHUB_OUTPUT
+          echo "Base branch for PR #${{ inputs.PR-number }}: $BASE_BRANCH"
 
       - name: Set up job variables
         id: vars
@@ -328,7 +338,7 @@ jobs:
       # Warning: since this is a privileged workflow, subsequent workflow job
       # steps must take care not to execute untrusted code.
       - name: Checkout pull request branch (NOT TRUSTED)
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
         with:
           ref: ${{ steps.vars.outputs.sha }}
           persist-credentials: false
@@ -382,12 +392,21 @@ jobs:
           CLUSTER_NAME="${{ steps.setup-cluster.outputs.cluster_name }}"
           REGION="${{ matrix.region }}"
 
+          # Use base branch from PR if available, otherwise fall back to
+          # context-ref or current branch
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            REF="${{ steps.get-base-branch.outputs.base-branch }}"
+          else
+            REF="${{ github.ref_name }}"
+          fi
+
           echo "Triggering delete-eks-clusters workflow with:"
           echo "  Cluster: $CLUSTER_NAME"
           echo "  Region: $REGION"
+          echo "  Ref: $REF"
 
           gh workflow run eks-cluster-delete.yaml \
-            --ref ${{ github.ref_name }} \
+            --ref "$REF" \
             --field cluster_name="$CLUSTER_NAME" \
             --field region="$REGION"
         env:
