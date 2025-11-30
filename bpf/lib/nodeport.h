@@ -1340,6 +1340,7 @@ static __always_inline int nodeport_svc_lb6(struct __ctx_buff *ctx,
 					    __s8 *ext_err)
 {
 	struct ct_state ct_state_svc = {};
+	const struct lb6_backend *backend;
 	bool backend_local;
 	__u32 monitor = 0;
 	int ret;
@@ -1384,9 +1385,8 @@ static __always_inline int nodeport_svc_lb6(struct __ctx_buff *ctx,
 		return CTX_ACT_OK;
 	}
 #endif
-	ret = lb6_local(get_ct_map6(tuple), ctx, l3_off, fraginfo, l4_off,
-			key, tuple, svc, &ct_state_svc,
-			nodeport_xlate6(svc, tuple), ext_err, 0);
+	ret = lb6_local(get_ct_map6(tuple), ctx, fraginfo, l4_off,
+			key, tuple, svc, &ct_state_svc, &backend, ext_err);
 	if (IS_ERR(ret)) {
 		if (ret == DROP_NO_SERVICE) {
 			if (!CONFIG(enable_no_service_endpoints_routable))
@@ -1395,14 +1395,27 @@ static __always_inline int nodeport_svc_lb6(struct __ctx_buff *ctx,
 			edt_set_aggregate(ctx, 0);
 			ret = tail_call_internal(ctx, CILIUM_CALL_IPV6_NO_SERVICE,
 									 ext_err);
+			return ret;
 #endif
 		}
-		if (ret == LB_PUNT_TO_STACK) {
-			*punt_to_stack = true;
-			return CTX_ACT_OK;
-		}
+
 		return ret;
 	}
+
+	if (lb6_svc_is_l7_punt_proxy(svc) &&
+	    __lookup_ip6_endpoint(&backend->address)) {
+		ctx_skip_nodeport_set(ctx);
+		*punt_to_stack = true;
+		return CTX_ACT_OK;
+	}
+
+	if (nodeport_xlate6(svc, tuple))
+		return CTX_ACT_OK;
+
+	ret = lb6_dnat_request(ctx, backend, l3_off, fraginfo, l4_off,
+			       key, tuple, false);
+	if (IS_ERR(ret))
+		return ret;
 
 	backend_local = __lookup_ip6_endpoint(&tuple->daddr);
 	if (!backend_local && lb6_svc_is_hostport(svc))
@@ -2743,28 +2756,48 @@ static __always_inline int nodeport_svc_lb4(struct __ctx_buff *ctx,
 		if (!ret)
 			return NAT_46X64_RECIRC;
 	} else {
-		ret = lb4_local(get_ct_map4(tuple), ctx, l3_off, fraginfo, l4_off,
-				key, tuple, svc, &ct_state_svc,
-				nodeport_xlate4(svc, tuple), &cluster_id, ext_err, 0);
-	}
-	if (IS_ERR(ret)) {
-		if (ret == DROP_NO_SERVICE) {
-			if (!CONFIG(enable_no_service_endpoints_routable))
-				return handle_nonroutable_endpoints_v4(svc);
+		const struct lb4_backend *backend;
+
+		ret = lb4_local(get_ct_map4(tuple), ctx, fraginfo, l4_off,
+				key, tuple, svc, &ct_state_svc, &backend,
+				ext_err);
+		if (IS_ERR(ret)) {
+			if (ret == DROP_NO_SERVICE) {
+				if (!CONFIG(enable_no_service_endpoints_routable))
+					return handle_nonroutable_endpoints_v4(svc);
 
 #ifdef SERVICE_NO_BACKEND_RESPONSE
-			/* Packet is TX'ed back out, avoid EDT false-positives: */
-			edt_set_aggregate(ctx, 0);
-			ret = tail_call_internal(ctx, CILIUM_CALL_IPV4_NO_SERVICE,
-						 ext_err);
+				/* Packet is TX'ed back out, avoid EDT false-positives: */
+				edt_set_aggregate(ctx, 0);
+				ret = tail_call_internal(ctx, CILIUM_CALL_IPV4_NO_SERVICE,
+							 ext_err);
+				return ret;
 #endif
+			}
+
+			return ret;
 		}
-		if (ret == LB_PUNT_TO_STACK) {
+
+		if (lb4_svc_is_l7_punt_proxy(svc) &&
+		    __lookup_ip4_endpoint(backend->address)) {
+			ctx_skip_nodeport_set(ctx);
 			*punt_to_stack = true;
 			return CTX_ACT_OK;
 		}
-		return ret;
+
+		if (nodeport_xlate4(svc, tuple))
+			return CTX_ACT_OK;
+
+#ifdef ENABLE_CLUSTER_AWARE_ADDRESSING
+		cluster_id = backend->cluster_id;
+#endif
+
+		ret = lb4_dnat_request(ctx, backend, l3_off, fraginfo, l4_off,
+				       key, tuple, false);
 	}
+
+	if (IS_ERR(ret))
+		return ret;
 
 	backend_local = __lookup_ip4_endpoint(tuple->daddr);
 	if (!backend_local && lb4_svc_is_hostport(svc))
