@@ -215,12 +215,8 @@ func TestL3WithIngressDenyWildcard(t *testing.T) {
 	repo := td.repo
 	td.bootstrapRepo(GenerateL3IngressDenyRules, 1000, t)
 
-	idFooSelectLabelArray := labels.ParseSelectLabelArray("id=foo")
-	idFooSelectLabels := labels.Labels{}
-	for _, lbl := range idFooSelectLabelArray {
-		idFooSelectLabels[lbl.Key] = lbl
-	}
-	fooIdentity := identity.NewIdentity(12345, idFooSelectLabels)
+	idFooLabels := labels.ParseLabelArray("id=foo").Labels()
+	fooIdentity := identity.NewIdentity(12345, idFooLabels)
 	td.addIdentity(fooIdentity)
 
 	selFoo := api.NewESFromLabels(labels.ParseSelectLabel("id=foo"))
@@ -284,13 +280,8 @@ func TestL3WithLocalHostWildcardd(t *testing.T) {
 	repo := td.repo
 	td.bootstrapRepo(GenerateL3IngressDenyRules, 1000, t)
 
-	idFooSelectLabelArray := labels.ParseSelectLabelArray("id=foo")
-	idFooSelectLabels := labels.Labels{}
-	for _, lbl := range idFooSelectLabelArray {
-		idFooSelectLabels[lbl.Key] = lbl
-	}
-
-	fooIdentity := identity.NewIdentity(12345, idFooSelectLabels)
+	idFooLabels := labels.ParseLabelArray("id=foo").Labels()
+	fooIdentity := identity.NewIdentity(12345, idFooLabels)
 	td.addIdentity(fooIdentity)
 
 	// Emulate Kubernetes mode with allow from localhost
@@ -324,7 +315,7 @@ func TestL3WithLocalHostWildcardd(t *testing.T) {
 	policy := selPolicy.DistillPolicy(logger, DummyOwner{logger: logger}, nil)
 	policy.Ready()
 
-	cachedSelectorHost := td.sc.FindCachedIdentitySelector(api.ReservedEndpointSelectors[labels.IDNameHost])
+	cachedSelectorHost := td.sc.findCachedIdentitySelector(api.ReservedEndpointSelectors[labels.IDNameHost])
 	require.NotNil(t, cachedSelectorHost)
 
 	expectedEndpointPolicy := EndpointPolicy{
@@ -369,12 +360,8 @@ func TestMapStateWithIngressDenyWildcard(t *testing.T) {
 		labels.NewLabel(LabelKeyPolicyDerivedFrom, LabelAllowAnyEgress, labels.LabelSourceReserved),
 	}
 
-	idFooSelectLabelArray := labels.ParseSelectLabelArray("id=foo")
-	idFooSelectLabels := labels.Labels{}
-	for _, lbl := range idFooSelectLabelArray {
-		idFooSelectLabels[lbl.Key] = lbl
-	}
-	fooIdentity := identity.NewIdentity(12345, idFooSelectLabels)
+	idFooLabels := labels.ParseLabelArray("id=foo").Labels()
+	fooIdentity := identity.NewIdentity(12345, idFooLabels)
 	td.addIdentity(fooIdentity)
 
 	selFoo := api.NewESFromLabels(labels.ParseSelectLabel("id=foo"))
@@ -469,12 +456,8 @@ func TestMapStateWithIngressDeny(t *testing.T) {
 		labels.NewLabel(LabelKeyPolicyDerivedFrom, LabelAllowAnyEgress, labels.LabelSourceReserved),
 	}
 
-	idFooSelectLabelArray := labels.ParseSelectLabelArray("id=foo")
-	idFooSelectLabels := labels.Labels{}
-	for _, lbl := range idFooSelectLabelArray {
-		idFooSelectLabels[lbl.Key] = lbl
-	}
-	fooIdentity := identity.NewIdentity(12345, idFooSelectLabels)
+	idFooLabels := labels.ParseLabelArray("id=foo").Labels()
+	fooIdentity := identity.NewIdentity(12345, idFooLabels)
 	td.addIdentity(fooIdentity)
 
 	lblTest := labels.ParseLabel("id=resolve_test_1")
@@ -540,16 +523,16 @@ func TestMapStateWithIngressDeny(t *testing.T) {
 	wg.Wait()
 	require.Len(t, policy.policyMapChanges.synced, 4)
 
-	cachedSelectorWorld := td.sc.FindCachedIdentitySelector(api.ReservedEndpointSelectors[labels.IDNameWorld])
+	cachedSelectorWorld := td.sc.findCachedIdentitySelector(api.ReservedEndpointSelectors[labels.IDNameWorld])
 	require.NotNil(t, cachedSelectorWorld)
 
-	cachedSelectorWorldV4 := td.sc.FindCachedIdentitySelector(api.ReservedEndpointSelectors[labels.IDNameWorldIPv4])
+	cachedSelectorWorldV4 := td.sc.findCachedIdentitySelector(api.ReservedEndpointSelectors[labels.IDNameWorldIPv4])
 	require.NotNil(t, cachedSelectorWorldV4)
 
-	cachedSelectorWorldV6 := td.sc.FindCachedIdentitySelector(api.ReservedEndpointSelectors[labels.IDNameWorldIPv6])
+	cachedSelectorWorldV6 := td.sc.findCachedIdentitySelector(api.ReservedEndpointSelectors[labels.IDNameWorldIPv6])
 	require.NotNil(t, cachedSelectorWorldV6)
 
-	cachedSelectorTest := td.sc.FindCachedIdentitySelector(api.NewESFromLabels(lblTest))
+	cachedSelectorTest := td.sc.findCachedIdentitySelector(api.NewESFromLabels(lblTest))
 	require.NotNil(t, cachedSelectorTest)
 
 	rule1MapStateEntry := denyEntry().withLabels(labels.LabelArrayList{ruleLabel})
@@ -613,7 +596,7 @@ func TestMapStateWithIngressDeny(t *testing.T) {
 	// Verify that cached selector is not found after Detach().
 	// Note that this depends on the other tests NOT using the same selector concurrently!
 	policy.SelectorPolicy.detach(true, 0)
-	cachedSelectorTest = td.sc.FindCachedIdentitySelector(api.NewESFromLabels(lblTest))
+	cachedSelectorTest = td.sc.findCachedIdentitySelector(api.NewESFromLabels(lblTest))
 	require.Nil(t, cachedSelectorTest)
 
 	// compare policyMapState separately

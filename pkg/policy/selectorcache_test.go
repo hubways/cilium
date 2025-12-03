@@ -19,6 +19,7 @@ import (
 	"github.com/cilium/cilium/pkg/labels"
 	"github.com/cilium/cilium/pkg/lock"
 	"github.com/cilium/cilium/pkg/policy/api"
+	"github.com/cilium/cilium/pkg/policy/types"
 	policytypes "github.com/cilium/cilium/pkg/policy/types"
 	testidentity "github.com/cilium/cilium/pkg/testutils/identity"
 )
@@ -57,11 +58,22 @@ func haveNid(nid identity.NumericIdentity, selections []identity.NumericIdentity
 	return slices.Contains(selections, nid)
 }
 
+// findCachedIdentitySelector finds the given api.EndpointSelector in the
+// selector cache, returning nil if one can not be found.
+// NOTE: Only used for testing.
+func (sc *SelectorCache) findCachedIdentitySelector(selector api.EndpointSelector) types.CachedSelector {
+	key := selector.CachedString()
+	sc.mutex.RLock()
+	idSel, _ := sc.selectors.Get(key)
+	sc.mutex.RUnlock()
+	return idSel
+}
+
 func (csu *cachedSelectionUser) AddIdentitySelector(sel api.EndpointSelector) CachedSelector {
 	csu.updateMutex.Lock()
 	defer csu.updateMutex.Unlock()
 
-	cached, added := csu.sc.AddIdentitySelector(csu, EmptyStringLabels, sel)
+	cached, added := csu.sc.AddIdentitySelectorForTest(csu, EmptyStringLabels, sel)
 	require.NotNil(csu.t, cached)
 
 	_, exists := csu.selections[cached]
@@ -79,7 +91,10 @@ func (csu *cachedSelectionUser) AddFQDNSelector(sel api.FQDNSelector) CachedSele
 	csu.updateMutex.Lock()
 	defer csu.updateMutex.Unlock()
 
-	cached, added := csu.sc.AddFQDNSelector(csu, EmptyStringLabels, sel)
+	var cached types.CachedSelector
+	css, added := csu.sc.AddSelectors(csu, EmptyStringLabels, types.ToSelectors(sel)...)
+	cached = css[0]
+
 	require.NotNil(csu.t, cached)
 
 	_, exists := csu.selections[cached]
@@ -275,7 +290,7 @@ func TestAddRemoveSelector(t *testing.T) {
 	user2.RemoveSelector(cached3)
 
 	// All identities removed
-	require.Empty(t, sc.selectors)
+	require.True(t, sc.selectors.Empty())
 }
 
 func TestMultipleIdentitySelectors(t *testing.T) {
@@ -289,8 +304,8 @@ func TestMultipleIdentitySelectors(t *testing.T) {
 		1234: labels.Labels{"app": labels.NewLabel("app", "test", labels.LabelSourceK8s)}.LabelArray(),
 		2345: labels.Labels{"app": labels.NewLabel("app", "test2", labels.LabelSourceK8s)}.LabelArray(),
 
-		li1: labels.GetCIDRLabels(netip.MustParsePrefix("10.0.0.1/32")).LabelArray(),
-		li2: labels.GetCIDRLabels(netip.MustParsePrefix("10.0.0.0/8")).LabelArray(),
+		li1: labels.GetCIDRLabelArray(netip.MustParsePrefix("10.0.0.1/32")),
+		li2: labels.GetCIDRLabelArray(netip.MustParsePrefix("10.0.0.0/8")),
 	}, nil, wg)
 	wg.Wait()
 
@@ -336,7 +351,7 @@ func TestMultipleIdentitySelectors(t *testing.T) {
 	user1.RemoveSelector(cached2)
 
 	// All identities removed
-	require.Empty(t, sc.selectors)
+	require.True(t, sc.selectors.Empty())
 }
 
 func TestIdentityUpdates(t *testing.T) {
@@ -409,7 +424,7 @@ func TestIdentityUpdates(t *testing.T) {
 	user1.RemoveSelector(cached2)
 
 	// All identities removed
-	require.Empty(t, sc.selectors)
+	require.True(t, sc.selectors.Empty())
 }
 
 func TestIdentityUpdatesMultipleUsers(t *testing.T) {
@@ -489,7 +504,7 @@ func TestIdentityUpdatesMultipleUsers(t *testing.T) {
 	user2.RemoveSelector(cached2)
 
 	// All identities removed
-	require.Empty(t, sc.selectors)
+	require.True(t, sc.selectors.Empty())
 }
 
 func TestTransactionalUpdate(t *testing.T) {
@@ -500,8 +515,8 @@ func TestTransactionalUpdate(t *testing.T) {
 	li1 := identity.IdentityScopeLocal
 	li2 := li1 + 1
 	sc.UpdateIdentities(identity.IdentityMap{
-		li1: labels.GetCIDRLabels(netip.MustParsePrefix("10.0.0.1/32")).LabelArray(),
-		li2: labels.GetCIDRLabels(netip.MustParsePrefix("10.0.0.0/8")).LabelArray(),
+		li1: labels.GetCIDRLabelArray(netip.MustParsePrefix("10.0.0.1/32")),
+		li2: labels.GetCIDRLabelArray(netip.MustParsePrefix("10.0.0.0/8")),
 	}, nil, wg)
 	wg.Wait()
 
@@ -530,8 +545,8 @@ func TestTransactionalUpdate(t *testing.T) {
 	li4 := li3 + 1
 	wg = &sync.WaitGroup{}
 	sc.UpdateIdentities(identity.IdentityMap{
-		li3: labels.GetCIDRLabels(netip.MustParsePrefix("10.0.0.0/31")).LabelArray(),
-		li4: labels.GetCIDRLabels(netip.MustParsePrefix("10.0.0.0/7")).LabelArray(),
+		li3: labels.GetCIDRLabelArray(netip.MustParsePrefix("10.0.0.0/31")),
+		li4: labels.GetCIDRLabelArray(netip.MustParsePrefix("10.0.0.0/7")),
 	}, nil, wg)
 	wg.Wait()
 
@@ -553,7 +568,7 @@ func TestTransactionalUpdate(t *testing.T) {
 	// Remove some identities from the identity cache
 	wg = &sync.WaitGroup{}
 	sc.UpdateIdentities(nil, identity.IdentityMap{
-		li1: labels.GetCIDRLabels(netip.MustParsePrefix("10.0.0.1/32")).LabelArray(),
+		li1: labels.GetCIDRLabelArray(netip.MustParsePrefix("10.0.0.1/32")),
 	}, wg)
 	wg.Wait()
 
@@ -583,7 +598,7 @@ func TestTransactionalUpdate(t *testing.T) {
 	user1.RemoveSelector(cs7)
 
 	// All identities removed
-	require.Empty(t, sc.selectors)
+	require.True(t, sc.selectors.Empty())
 }
 
 func TestSelectorCacheCanSkipUpdate(t *testing.T) {

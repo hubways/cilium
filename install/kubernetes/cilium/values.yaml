@@ -2512,6 +2512,9 @@ envoy:
   xffNumTrustedHopsL7PolicyIngress: 0
   # -- Number of trusted hops regarding the x-forwarded-for and related HTTP headers for the egress L7 policy enforcement Envoy listeners.
   xffNumTrustedHopsL7PolicyEgress: 0
+  # -- For cases when CiliumEnvoyConfig is not used directly (Ingress, Gateway), configures Cilium BPF Metadata listener filter
+  # to use the original source address when extracting the metadata for a request.
+  useOriginalSourceAddress: true
   # @schema
   # type: [null, string]
   # @schema
@@ -2526,9 +2529,9 @@ envoy:
     # @schema
     override: ~
     repository: "quay.io/cilium/cilium-envoy"
-    tag: "v1.35.3-1763805254-768d5a2892ffd7012014681e8a7547124e57fc53"
+    tag: "v1.35.3-1764238404-a890eb288598920fc146308ef4b05004f2ee7bcf"
     pullPolicy: "Always"
-    digest: "sha256:24d8c3f2ee34472155f41c178004d44f02bb9d4b888340b0e10a337b053fdc39"
+    digest: "sha256:5a5403c2847af60352f2ae0c69642b0484b741a8ca5c15b34737e10553c64e08"
     useDigest: true
   # -- Init containers added to the cilium Envoy DaemonSet.
   initContainers: []
@@ -3249,9 +3252,9 @@ preflight:
       # @schema
       override: ~
       repository: "quay.io/cilium/cilium-envoy"
-      tag: "v1.35.3-1763805254-768d5a2892ffd7012014681e8a7547124e57fc53"
+      tag: "v1.35.3-1764238404-a890eb288598920fc146308ef4b05004f2ee7bcf"
       pullPolicy: "Always"
-      digest: "sha256:24d8c3f2ee34472155f41c178004d44f02bb9d4b888340b0e10a337b053fdc39"
+      digest: "sha256:5a5403c2847af60352f2ae0c69642b0484b741a8ca5c15b34737e10553c64e08"
       useDigest: true
   # -- The priority class to use for the preflight pod.
   priorityClassName: ""
@@ -3351,7 +3354,9 @@ enableCriticalPriorityClass: true
 # on AArch64 as the images do not currently ship a version of Envoy.
 #disableEnvoyVersionCheck: false
 clustermesh:
-  # -- Deploy clustermesh-apiserver for clustermesh
+  # -- Deploy clustermesh-apiserver for clustermesh. This option is typically
+  # used with ``clustermesh.config.enabled=true``. Refer to the 
+  # ``clustermesh.config.enabled=true``documentation for more information.
   useAPIServer: false
   # -- The maximum number of clusters to support in a ClusterMesh. This value
   # cannot be changed on running clusters, and all clusters in a ClusterMesh
@@ -3376,11 +3381,14 @@ clustermesh:
   # -- Clustermesh explicit configuration.
   config:
     # -- Enable the Clustermesh explicit configuration.
-    # If set to false, you need to provide the following secrets yourself:
-    # - cilium-clustermesh (used by cilium-agent/cilium-operator to connect to
+    # If set to false, you need to provide the following resources yourself:
+    # - (Secret) cilium-clustermesh (used by cilium-agent/cilium-operator to connect to
     #   the local etcd instance if KVStoreMesh is enabled or the remote clusters
     #   if KVStoreMesh is disabled)
-    # - cilium-kvstoremesh (used by KVStoreMesh to connect to the remote clusters)
+    # - (Secret) cilium-kvstoremesh (used by KVStoreMesh to connect to the remote clusters)
+    # - (ConfigMap) clustermesh-remote-users (used to create one etcd user per remote cluster
+    #   if clustermesh-apiserver is used and `clustermesh.apiserver.tls.authMode` is not
+    #   set to `legacy`)
     enabled: false
     # -- Default dns domain for the Clustermesh API servers
     # This is used in the case cluster addresses are not provided
@@ -3755,7 +3763,7 @@ clustermesh:
       #               The "remote" certificate must be generated with CN=remote-<cluster-name>
       #               if provided manually. Cluster mode is meaningful only when the same
       #               CA is shared across all clusters part of the mesh.
-      authMode: legacy
+      authMode: migration
       # -- (deprecated) Allow users to provide their own certificates
       # Users may need to provide their certificates using
       # a mechanism that requires they provide their own secrets.

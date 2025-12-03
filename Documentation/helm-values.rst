@@ -887,7 +887,7 @@
    * - :spelling:ignore:`clustermesh.apiserver.tls.authMode`
      - Configure the clustermesh authentication mode. Supported values: - legacy:     All clusters access remote clustermesh instances with the same               username (i.e., remote). The "remote" certificate must be               generated with CN=remote if provided manually. - migration:  Intermediate mode required to upgrade from legacy to cluster               (and vice versa) with no disruption. Specifically, it enables               the creation of the per-cluster usernames, while still using               the common one for authentication. The "remote" certificate must               be generated with CN=remote if provided manually (same as legacy). - cluster:    Each cluster accesses remote etcd instances with a username               depending on the local cluster name (i.e., remote-\ :raw-html-m2r:`<cluster-name>`\ ).               The "remote" certificate must be generated with CN=remote-\ :raw-html-m2r:`<cluster-name>`               if provided manually. Cluster mode is meaningful only when the same               CA is shared across all clusters part of the mesh.
      - string
-     - ``"legacy"``
+     - ``"migration"``
    * - :spelling:ignore:`clustermesh.apiserver.tls.auto`
      - Configure automatic TLS certificates generation. A Kubernetes CronJob is used the generate any certificates not provided by the user at installation time.
      - object
@@ -969,7 +969,7 @@
      - string
      - ``"mesh.cilium.io"``
    * - :spelling:ignore:`clustermesh.config.enabled`
-     - Enable the Clustermesh explicit configuration. If set to false, you need to provide the following secrets yourself: - cilium-clustermesh (used by cilium-agent/cilium-operator to connect to   the local etcd instance if KVStoreMesh is enabled or the remote clusters   if KVStoreMesh is disabled) - cilium-kvstoremesh (used by KVStoreMesh to connect to the remote clusters)
+     - Enable the Clustermesh explicit configuration. If set to false, you need to provide the following resources yourself: - (Secret) cilium-clustermesh (used by cilium-agent/cilium-operator to connect to   the local etcd instance if KVStoreMesh is enabled or the remote clusters   if KVStoreMesh is disabled) - (Secret) cilium-kvstoremesh (used by KVStoreMesh to connect to the remote clusters) - (ConfigMap) clustermesh-remote-users (used to create one etcd user per remote cluster   if clustermesh-apiserver is used and ``clustermesh.apiserver.tls.authMode`` is not   set to ``legacy``\ )
      - bool
      - ``false``
    * - :spelling:ignore:`clustermesh.enableEndpointSliceSynchronization`
@@ -1069,7 +1069,7 @@
      - bool
      - ``true``
    * - :spelling:ignore:`clustermesh.useAPIServer`
-     - Deploy clustermesh-apiserver for clustermesh
+     - Deploy clustermesh-apiserver for clustermesh. This option is typically used with ``clustermesh.config.enabled=true``. Refer to the  ``clustermesh.config.enabled=true``\ documentation for more information.
      - bool
      - ``false``
    * - :spelling:ignore:`cni.binPath`
@@ -1499,7 +1499,7 @@
    * - :spelling:ignore:`envoy.image`
      - Envoy container image.
      - object
-     - ``{"digest":"sha256:24d8c3f2ee34472155f41c178004d44f02bb9d4b888340b0e10a337b053fdc39","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.35.3-1763805254-768d5a2892ffd7012014681e8a7547124e57fc53","useDigest":true}``
+     - ``{"digest":"sha256:5a5403c2847af60352f2ae0c69642b0484b741a8ca5c15b34737e10553c64e08","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.35.3-1764238404-a890eb288598920fc146308ef4b05004f2ee7bcf","useDigest":true}``
    * - :spelling:ignore:`envoy.initContainers`
      - Init containers added to the cilium Envoy DaemonSet.
      - list
@@ -1680,6 +1680,10 @@
      - cilium-envoy update strategy ref: https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/#updating-a-daemonset
      - object
      - ``{"rollingUpdate":{"maxUnavailable":2},"type":"RollingUpdate"}``
+   * - :spelling:ignore:`envoy.useOriginalSourceAddress`
+     - For cases when CiliumEnvoyConfig is not used directly (Ingress, Gateway), configures Cilium BPF Metadata listener filter to use the original source address when extracting the metadata for a request.
+     - bool
+     - ``true``
    * - :spelling:ignore:`envoy.xffNumTrustedHopsL7PolicyEgress`
      - Number of trusted hops regarding the x-forwarded-for and related HTTP headers for the egress L7 policy enforcement Envoy listeners.
      - int
@@ -3343,7 +3347,7 @@
    * - :spelling:ignore:`preflight.envoy.image`
      - Envoy pre-flight image.
      - object
-     - ``{"digest":"sha256:24d8c3f2ee34472155f41c178004d44f02bb9d4b888340b0e10a337b053fdc39","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.35.3-1763805254-768d5a2892ffd7012014681e8a7547124e57fc53","useDigest":true}``
+     - ``{"digest":"sha256:5a5403c2847af60352f2ae0c69642b0484b741a8ca5c15b34737e10553c64e08","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.35.3-1764238404-a890eb288598920fc146308ef4b05004f2ee7bcf","useDigest":true}``
    * - :spelling:ignore:`preflight.extraEnv`
      - Additional preflight environment variables.
      - list
