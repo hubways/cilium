@@ -922,12 +922,11 @@ func (e *Endpoint) deleteMaps() []error {
 	return errors
 }
 
-// garbageCollectConntrack will run the ctmap.GC() on either the endpoint's
-// local conntrack table or the global conntrack table.
+// garbageCollectConntrack will run the ctmap.GC() on the conntrack tables.
 //
 // The endpoint lock must be held
 func (e *Endpoint) garbageCollectConntrack(filter ctmap.GCFilter) {
-	for _, m := range ctmap.GlobalMaps(option.Config.EnableIPv4, option.Config.EnableIPv6) {
+	for _, m := range ctmap.Maps(option.Config.EnableIPv4, option.Config.EnableIPv6) {
 		if err := m.Open(); err != nil {
 			// If the CT table doesn't exist, there's nothing to GC.
 			if os.IsNotExist(err) {
@@ -1181,24 +1180,18 @@ func (e *Endpoint) applyPolicyMapChangesLocked(regenContext *regenerationContext
 	// 'e.desiredPolicy' access.
 	if !e.IsProxyDisabled() {
 		if updateEnvoy {
-			e.getLogger().Debug(
-				"applyPolicyMapChanges: Updating Envoy NetworkPolicy",
-				logfields.SelectorCacheVersion, e.desiredPolicy.VersionHandle,
-			)
+			e.getLogger().Debug("applyPolicyMapChanges: Updating Envoy NetworkPolicy")
 			stats.proxyPolicyCalculation.Start()
 			var rf revert.RevertFunc
-			err, rf = e.proxy.UpdateNetworkPolicy(e, &e.desiredPolicy.SelectorPolicy.L4Policy, e.desiredPolicy.SelectorPolicy.IngressPolicyEnabled, e.desiredPolicy.SelectorPolicy.EgressPolicyEnabled, proxyWaitGroup)
+			err, rf = e.proxy.UpdateNetworkPolicy(e, e.desiredPolicy, proxyWaitGroup)
 			stats.proxyPolicyCalculation.End(err == nil)
 			if err == nil {
 				datapathRegenCtxt.revertStack.Push(rf)
 			}
 		} else if hasEnvoyRedirect {
 			// Wait for a possible ongoing update to be done if there were no current changes.
-			e.getLogger().Debug(
-				"applyPolicyMapChanges: Using current Networkpolicy",
-				logfields.SelectorCacheVersion, e.desiredPolicy.VersionHandle,
-			)
-			e.proxy.UseCurrentNetworkPolicy(e, &e.desiredPolicy.SelectorPolicy.L4Policy, proxyWaitGroup)
+			e.getLogger().Debug("applyPolicyMapChanges: Using current Networkpolicy")
+			e.proxy.UseCurrentNetworkPolicy(e, e.desiredPolicy, proxyWaitGroup)
 		}
 	}
 
