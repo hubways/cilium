@@ -118,10 +118,21 @@ type CtMapRecord struct {
 
 // InitMapInfo builds the information about different CT maps for the
 // combination of L3/L4 protocols.
-func InitMapInfo(registry *metrics.Registry, v4, v6, natRequired bool) {
-	global4Map, global6Map := nat.GlobalMaps(registry, v4, v6, natRequired)
+func InitMapInfo(registry *metrics.Registry, v4, v6 bool, nat4 nat.NatMap4, nat6 nat.NatMap6) {
+	var global4Map, global6Map *nat.Map
 	global4MapLock := &lock.Mutex{}
 	global6MapLock := &lock.Mutex{}
+
+	if nat4 != nil {
+		if m, ok := nat4.(*nat.Map); ok && m != nil {
+			global4Map = m
+		}
+	}
+	if nat6 != nil {
+		if m, ok := nat6.(*nat.Map); ok && m != nil {
+			global6Map = m
+		}
+	}
 
 	mapInfo = map[mapType]mapAttributes{
 		mapTypeIPv4TCPGlobal: {natMap: global4Map, natMapLock: global4MapLock},
@@ -332,20 +343,18 @@ func doGCForFamily(m *Map, filter GCFilter, next4, next6 func(GCEvent), ipv6 boo
 			m.Logger.Error("Unable to get per-cluster NAT map", logfields.Error, err)
 		} else {
 			natMap = natm
+			err := natMap.Open()
+			if err != nil {
+				m.Logger.Error("Unable to open per-cluster NAT map", logfields.Error, err)
+				natMap = nil
+			} else {
+				defer natMap.Close()
+			}
 		}
 	}
 
 	stats := statStartGc(m, logResults)
 	defer stats.finish()
-
-	if natMap != nil {
-		err := natMap.Open()
-		if err == nil {
-			defer natMap.Close()
-		} else {
-			natMap = nil
-		}
-	}
 
 	// We serialize the deletions in order to avoid forced map walk restarts
 	// when keys are being evicted underneath us from concurrent goroutines.
@@ -519,14 +528,41 @@ func GC(m *Map, filter GCFilter, next4, next6 func(GCEvent)) (int, error) {
 // CT GC to remove corresponding SNAT entries.
 // See the unit test TestPrivilegedOrphanNatGC for more examples.
 func PurgeOrphanNATEntries(ctMapTCP, ctMapAny *Map) *NatGCStats {
+	var natMap *nat.Map
+
 	// Both CT maps should point to the same natMap, so use the first one
 	// to determine natMap
-	ctMap := mapInfo[ctMapTCP.mapType]
-	if ctMap.natMapLock != nil {
-		ctMap.natMapLock.Lock()
-		defer ctMap.natMapLock.Unlock()
+	if ctMapTCP.clusterID == 0 {
+		// global map handling
+		ctMap := mapInfo[ctMapTCP.mapType]
+		if ctMap.natMapLock != nil {
+			ctMap.natMapLock.Lock()
+			defer ctMap.natMapLock.Unlock()
+		}
+		natMap = ctMap.natMap
+	} else {
+		// per-cluster map handling
+		var family = nat.IPv4
+		if ctMapTCP.mapType.isIPv6() {
+			family = nat.IPv6
+		}
+
+		natm, err := nat.GetClusterNATMap(ctMapTCP.clusterID, family)
+		if err != nil {
+			ctMapTCP.Logger.Error("Unable to get per-cluster NAT map", logfields.Error, err)
+		} else {
+			natMap = natm
+		}
+
+		if natMap != nil {
+			if err := natMap.Open(); err != nil {
+				natMap.Logger.Error("Unable to open per-cluster NAT map", logfields.Error, err)
+				return nil
+			}
+			defer natMap.Close()
+		}
 	}
-	natMap := ctMap.natMap
+
 	if natMap == nil {
 		return nil
 	}
@@ -535,7 +571,7 @@ func PurgeOrphanNATEntries(ctMapTCP, ctMapAny *Map) *NatGCStats {
 	if ctMapTCP.mapType.isIPv6() {
 		family = gcFamilyIPv6
 	}
-	stats := newNatGCStats(natMap, family)
+	stats := newNatGCStats(natMap, family, ctMapTCP.clusterID)
 	defer stats.finish()
 	egressEntriesToDelete := make([]nat.NatKey, 0)
 	ingressEntriesToDelete := make([]nat.NatKey, 0)
