@@ -143,7 +143,7 @@
    * - :spelling:ignore:`authentication.mutual.spire.install.initImage`
      - init container image of SPIRE agent and server
      - object
-     - ``{"digest":"sha256:e3652a00a2fabd16ce889f0aa32c38eec347b997e73bd09e69c962ec7f8732ee","override":null,"pullPolicy":"Always","repository":"docker.io/library/busybox","tag":"1.37.0","useDigest":true}``
+     - ``{"digest":"sha256:d80cd694d3e9467884fcb94b8ca1e20437d8a501096cdf367a5a1918a34fc2fd","override":null,"pullPolicy":"Always","repository":"docker.io/library/busybox","tag":"1.37.0","useDigest":true}``
    * - :spelling:ignore:`authentication.mutual.spire.install.namespace`
      - SPIRE namespace to install into
      - string
@@ -1547,7 +1547,7 @@
    * - :spelling:ignore:`envoy.image`
      - Envoy container image.
      - object
-     - ``{"digest":"sha256:2a821c32b668952bc4c41abf35a278f6ae37079785f229c24c2b47d6e861c341","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.35.3-1764736996-e3dbcd7cf576759ae331f0e30e195be3347be58f","useDigest":true}``
+     - ``{"digest":"sha256:51625735217b0c691c1f8ea4d1798699fc9bbbe64a5af4e18373de138a216a4f","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.35.3-1765281138-98b3234dbc846e52e43793cc8d458f67cee324a4","useDigest":true}``
    * - :spelling:ignore:`envoy.initContainers`
      - Init containers added to the cilium Envoy DaemonSet.
      - list
@@ -3116,6 +3116,10 @@
      - node-init update strategy
      - object
      - ``{"type":"RollingUpdate"}``
+   * - :spelling:ignore:`nodeinit.waitForCloudInit`
+     - wait for Cloud init to finish on the host and assume the node has cloud init installed
+     - bool
+     - ``false``
    * - :spelling:ignore:`operator.affinity`
      - Affinity for cilium-operator
      - object
@@ -3407,7 +3411,7 @@
    * - :spelling:ignore:`preflight.envoy.image`
      - Envoy pre-flight image.
      - object
-     - ``{"digest":"sha256:2a821c32b668952bc4c41abf35a278f6ae37079785f229c24c2b47d6e861c341","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.35.3-1764736996-e3dbcd7cf576759ae331f0e30e195be3347be58f","useDigest":true}``
+     - ``{"digest":"sha256:51625735217b0c691c1f8ea4d1798699fc9bbbe64a5af4e18373de138a216a4f","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.35.3-1765281138-98b3234dbc846e52e43793cc8d458f67cee324a4","useDigest":true}``
    * - :spelling:ignore:`preflight.extraEnv`
      - Additional preflight environment variables.
      - list

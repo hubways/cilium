@@ -10,7 +10,6 @@ import (
 
 	"github.com/cilium/hive/hivetest"
 
-	"github.com/cilium/cilium/pkg/container/versioned"
 	"github.com/cilium/cilium/pkg/identity"
 	"github.com/cilium/cilium/pkg/labels"
 	"github.com/cilium/cilium/pkg/option"
@@ -31,7 +30,7 @@ func TestMapState_AccumulateMapChanges_Ordered(t *testing.T) {
 	}
 
 	logger := hivetest.Logger(t)
-	selectorCache := testNewSelectorCache(logger, identityCache)
+	selectorCache := testNewSelectorCache(t, logger, identityCache)
 
 	type args struct {
 		cs       *testCachedSelector
@@ -169,11 +168,8 @@ func TestMapState_AccumulateMapChanges_Ordered(t *testing.T) {
 			value := newMapStateEntry(x.level, NilRuleOrigin, proxyPort, 0, x.deny, x.authReq)
 			policyMaps.AccumulateMapChanges(adds, deletes, []Key{key}, value)
 		}
-		policyMaps.SyncMapChanges(versioned.LatestTx)
-		handle, _ := policyMaps.consumeMapChanges(epPolicy, allFeatures)
-		if handle != nil {
-			handle.Close()
-		}
+		policyMaps.SyncMapChanges(types.MockSelectorSnapshot())
+		policyMaps.consumeMapChanges(epPolicy, allFeatures)
 		policyMapState.validatePortProto(t)
 		require.True(t, policyMapState.Equal(&tt.state), "%s (MapState):\n%s", tt.name, policyMapState.diff(&tt.state))
 	}
@@ -251,7 +247,7 @@ func TestOrderedPolicyValidation(t *testing.T) {
 		identity1111:      labels1111,
 		identity1100:      labels1100,
 	}
-	selectorCache := testNewSelectorCache(logger, identityCache)
+	selectorCache := testNewSelectorCache(t, logger, identityCache)
 	identity := identity.NewIdentityFromLabelArray(identityFoo, labelsFoo)
 
 	type probe struct {

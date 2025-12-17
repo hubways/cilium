@@ -12,7 +12,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"k8s.io/utils/clock"
 	"k8s.io/utils/ptr"
 
 	"github.com/cilium/cilium/api/v1/models"
@@ -63,7 +62,6 @@ type remoteCluster struct {
 	disableDrainOnDisconnection bool
 
 	logger *slog.Logger
-	clock  clock.Clock
 }
 
 func (rc *remoteCluster) Run(ctx context.Context, backend kvstore.BackendOperations, srccfg types.CiliumClusterConfig, ready chan<- error) {
@@ -198,7 +196,7 @@ func (rc *remoteCluster) Remove(ctx context.Context) {
 
 		rc.logger.Warn("Failed to remove cached data from kvstore, retrying", logfields.Error, err)
 		select {
-		case <-rc.clock.After(backoff):
+		case <-time.After(backoff):
 			retry++
 			backoff *= 2
 		case <-ctx.Done():
@@ -220,7 +218,7 @@ func (rc *remoteCluster) drain(ctx context.Context, withGracePeriod bool) (err e
 		path.Join(kvstore.StateToCachePrefix(nodeStore.NodeStorePrefix), rc.name),
 		path.Join(kvstore.StateToCachePrefix(serviceStore.ServiceStorePrefix), rc.name),
 		path.Join(kvstore.StateToCachePrefix(mcsapitypes.ServiceExportStorePrefix), rc.name),
-		path.Join(kvstore.StateToCachePrefix(identityCache.IdentitiesPath), rc.name),
+		path.Join(kvstore.StateToCachePrefix(identityCache.IdentitiesPath), rc.name, "id"),
 		path.Join(kvstore.StateToCachePrefix(ipcache.IPIdentitiesPath), rc.name),
 	}
 
@@ -245,7 +243,7 @@ func (rc *remoteCluster) drain(ctx context.Context, withGracePeriod bool) (err e
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-rc.clock.After(drainGracePeriod):
+		case <-time.After(drainGracePeriod):
 			rc.logger.Info("Finished waiting before removing cached data from kvstore")
 		}
 	}

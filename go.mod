@@ -35,8 +35,8 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/docker/libnetwork v0.8.0-dev.2.0.20210525090646-64b7a4574d14
-	github.com/envoyproxy/go-control-plane/contrib v1.32.5-0.20250809052208-d8ab4c219945
-	github.com/envoyproxy/go-control-plane/envoy v1.35.0
+	github.com/envoyproxy/go-control-plane/contrib v1.36.0
+	github.com/envoyproxy/go-control-plane/envoy v1.36.0
 	github.com/evanphx/json-patch v5.9.11+incompatible
 	github.com/fatih/color v1.18.0
 	github.com/fsnotify/fsnotify v1.9.0
@@ -93,7 +93,7 @@ require (
 	github.com/spf13/pflag v1.0.10
 	github.com/spf13/viper v1.21.0
 	github.com/spiffe/go-spiffe/v2 v2.6.0
-	github.com/spiffe/spire-api-sdk v1.13.3
+	github.com/spiffe/spire-api-sdk v1.14.0
 	github.com/stretchr/testify v1.11.1
 	github.com/tidwall/gjson v1.18.0
 	github.com/tidwall/sjson v1.2.5
@@ -108,21 +108,21 @@ require (
 	go.uber.org/zap v1.27.1
 	go.yaml.in/yaml/v3 v3.0.4
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba
-	golang.org/x/crypto v0.45.0
-	golang.org/x/exp v0.0.0-20251125195548-87e1e737ad39
-	golang.org/x/mod v0.30.0
-	golang.org/x/net v0.47.0
-	golang.org/x/oauth2 v0.33.0
-	golang.org/x/sync v0.18.0
-	golang.org/x/sys v0.38.0
-	golang.org/x/term v0.37.0
-	golang.org/x/text v0.31.0
+	golang.org/x/crypto v0.46.0
+	golang.org/x/exp v0.0.0-20251209150349-8475f28825e9
+	golang.org/x/mod v0.31.0
+	golang.org/x/net v0.48.0
+	golang.org/x/oauth2 v0.34.0
+	golang.org/x/sync v0.19.0
+	golang.org/x/sys v0.39.0
+	golang.org/x/term v0.38.0
+	golang.org/x/text v0.32.0
 	golang.org/x/time v0.14.0
-	golang.org/x/tools v0.39.0
+	golang.org/x/tools v0.40.0
 	golang.zx2c4.com/wireguard/wgctrl v0.0.0-20241231184526-a9ab2273dd10
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20251213004720-97cd9d5aeac2
 	google.golang.org/grpc v1.77.0
-	google.golang.org/protobuf v1.36.10
+	google.golang.org/protobuf v1.36.11
 	helm.sh/helm/v3 v3.19.0
 	k8s.io/api v0.35.0-rc.1
 	k8s.io/apiextensions-apiserver v0.35.0-rc.1
@@ -138,14 +138,13 @@ require (
 	sigs.k8s.io/controller-runtime v0.22.4
 	sigs.k8s.io/gateway-api v1.4.0-rc.2
 	sigs.k8s.io/mcs-api v0.3.1-0.20251209180531-e481ae73a51f
-	sigs.k8s.io/mcs-api/controllers v0.0.0-20251016174042-a93ef0180a10
+	sigs.k8s.io/mcs-api/controllers v0.0.0-20251209180531-e481ae73a51f
 	sigs.k8s.io/yaml v1.6.0
 )
 
 require (
 	cel.dev/expr v0.24.0 // indirect
 	dario.cat/mergo v1.0.1 // indirect
-	github.com/AdamKorcz/go-118-fuzz-build v0.0.0-20250520111509-a70c2aa677fa // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.11.2 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.6.0 // indirect
@@ -305,7 +304,7 @@ require (
 	go.uber.org/dig v1.17.1 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
-	golang.org/x/telemetry v0.0.0-20251111182119-bc8e575c7b54 // indirect
+	golang.org/x/telemetry v0.0.0-20251203150158-8fff8a5912fc // indirect
 	golang.zx2c4.com/wireguard v0.0.0-20231211153847-12269c276173 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20251022142026-3a174f9686a8 // indirect
@@ -338,15 +337,11 @@ replace sigs.k8s.io/controller-tools => github.com/cilium/controller-tools v0.16
 replace github.com/osrg/gobgp/v3 => github.com/cilium/gobgp/v3 v3.0.0-20251113221723-3540251c0674
 
 tool (
-	github.com/AdamKorcz/go-118-fuzz-build/testing
 	github.com/cilium/deepequal-gen
 	github.com/cilium/ebpf/cmd/bpf2go
 	github.com/cilium/linters
-	github.com/gogo/protobuf/gogoproto
 	golang.org/x/tools/cmd/goimports
-	golang.org/x/tools/go/analysis/analysistest
-	golang.org/x/tools/go/analysis/singlechecker
-	k8s.io/code-generator
+	k8s.io/code-generator // Not used as a go tool but for its kube_codegen.sh script
 	k8s.io/code-generator/cmd/client-gen
 	k8s.io/code-generator/cmd/go-to-protobuf
 	k8s.io/code-generator/cmd/go-to-protobuf/protoc-gen-gogo

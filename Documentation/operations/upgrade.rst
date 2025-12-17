@@ -374,6 +374,13 @@ Deprecated Options
 * The ``--enable-ipsec-encrypted-overlay`` flag has no effect and will be removed in Cilium 1.20. Starting from
   Cilium 1.18 the IPsec encryption is always applied after overlay encapsulation, and therefore this special opt-in
   flag is no longer needed.
+* The ``--aws-pagination-enabled`` flag for cilium-operator is now deprecated in favor of the more flexible
+  ``--aws-max-results-per-call`` flag. The new flag defaults to ``0`` (unpaginated, letting AWS determine optimal
+  page size), which provides better performance in most environments. If AWS returns an ``OperationNotPermitted``
+  error indicating too many results, the operator will automatically switch to paginated requests
+  (``MaxResults=1000``) for all future API calls. Users with very large AWS accounts can set
+  ``--aws-max-results-per-call=1000`` upfront to force pagination from the start. The deprecated flag still works
+  during the deprecation period (``true`` maps to ``1000``, ``false`` maps to ``0``) and will be removed in Cilium 1.20.
 
 Helm Options
 ~~~~~~~~~~~~
@@ -388,6 +395,26 @@ Helm Options
 Agent Options
 ~~~~~~~~~~~~~
 
+
+Operator Options
+~~~~~~~~~~~~~~~~
+
+* The ``--unmanaged-pod-watcher-interval`` flag type has been changed from ``int`` (seconds)
+  to ``time.Duration`` for improved usability and consistency with other Cilium configuration
+  options. If you have this flag explicitly configured, update your configuration to use
+  duration format (e.g., ``15s``, ``1m``, ``90s``). The default value remains 15 seconds.
+
+  .. code-block:: bash
+
+      # Before (deprecated):
+      --unmanaged-pod-watcher-interval=15
+
+      # After:
+      --unmanaged-pod-watcher-interval=15s
+
+  Note: When using Helm, the ``operator.unmanagedPodWatcher.intervalSeconds`` value now
+  accepts both integers (for backward compatibility) and duration strings. Numeric values
+  will be automatically converted to duration strings (e.g., ``15`` becomes ``"15s"``).
 
 Cluster Mesh API Server Options
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -454,6 +481,7 @@ The following metrics no longer reports a ``source_cluster`` and a ``source_node
 Deprecated Metrics
 ~~~~~~~~~~~~~~~~~~
 
+* ``cilium_agent_bootstrap_seconds`` is now deprecated. Please use ``cilium_hive_jobs_oneshot_last_run_duration_seconds`` of respective job instead.
 
 Advanced
 ========

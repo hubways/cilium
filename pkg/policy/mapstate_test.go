@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cilium/cilium/pkg/container/versioned"
 	"github.com/cilium/cilium/pkg/identity"
 	"github.com/cilium/cilium/pkg/labels"
 	"github.com/cilium/cilium/pkg/policy/api"
@@ -890,7 +889,7 @@ func TestMapState_AccumulateMapChangesDeny(t *testing.T) {
 	identityCache := identity.IdentityMap{
 		identity.NumericIdentity(identityFoo): labelsFoo,
 	}
-	selectorCache := testNewSelectorCache(hivetest.Logger(t), identityCache)
+	selectorCache := testNewSelectorCache(t, hivetest.Logger(t), identityCache)
 
 	type args struct {
 		cs       *testCachedSelector
@@ -1209,11 +1208,8 @@ func TestMapState_AccumulateMapChangesDeny(t *testing.T) {
 			value := newMapStateEntry(0, NilRuleOrigin, proxyPort, priority, x.deny, NoAuthRequirement)
 			policyMaps.AccumulateMapChanges(adds, deletes, []Key{key}, value)
 		}
-		policyMaps.SyncMapChanges(versioned.LatestTx)
-		handle, changes := policyMaps.consumeMapChanges(epPolicy, denyRules)
-		if handle != nil {
-			handle.Close()
-		}
+		policyMaps.SyncMapChanges(types.MockSelectorSnapshot())
+		_, changes := policyMaps.consumeMapChanges(epPolicy, denyRules)
 		policyMapState.validatePortProto(t)
 		require.True(t, policyMapState.Equal(&tt.state), "%s (MapState):\n%s", tt.name, policyMapState.diff(&tt.state))
 		require.Equal(t, tt.adds, changes.Adds, tt.name+" (adds)")
@@ -1229,7 +1225,7 @@ func TestMapState_AccumulateMapChanges(t *testing.T) {
 	identityCache := identity.IdentityMap{
 		identity.NumericIdentity(identityFoo): labelsFoo,
 	}
-	selectorCache := testNewSelectorCache(hivetest.Logger(t), identityCache)
+	selectorCache := testNewSelectorCache(t, hivetest.Logger(t), identityCache)
 
 	type args struct {
 		cs       *testCachedSelector
@@ -1750,11 +1746,8 @@ func TestMapState_AccumulateMapChanges(t *testing.T) {
 			value := newMapStateEntry(x.level, NilRuleOrigin, proxyPort, priority, x.deny, x.authReq)
 			policyMaps.AccumulateMapChanges(adds, deletes, []Key{key}, value)
 		}
-		policyMaps.SyncMapChanges(versioned.LatestTx)
-		handle, changes := policyMaps.consumeMapChanges(epPolicy, authRules|denyRules|redirectRules)
-		if handle != nil {
-			handle.Close()
-		}
+		policyMaps.SyncMapChanges(types.MockSelectorSnapshot())
+		_, changes := policyMaps.consumeMapChanges(epPolicy, authRules|denyRules|redirectRules)
 		policyMapState.validatePortProto(t)
 		require.True(t, policyMapState.Equal(&tt.state), "%s (MapState):\n%s", tt.name, policyMapState.diff(&tt.state))
 		require.Equal(t, tt.adds, changes.Adds, tt.name+" (adds)")
@@ -1792,15 +1785,12 @@ func TestMapState_AccumulateMapChanges(t *testing.T) {
 			value := newMapStateEntry(x.level, NilRuleOrigin, proxyPort, priority, x.deny, x.authReq)
 			policyMaps.AccumulateMapChanges(adds, deletes, []Key{key}, value)
 		}
-		policyMaps.SyncMapChanges(versioned.LatestTx)
+		policyMaps.SyncMapChanges(types.MockSelectorSnapshot())
 		features := denyRules | redirectRules
 		if authFeatureUsed {
 			features |= authRules
 		}
-		handle, changes := policyMaps.consumeMapChanges(epPolicy, features)
-		if handle != nil {
-			handle.Close()
-		}
+		_, changes := policyMaps.consumeMapChanges(epPolicy, features)
 		policyMapState.validatePortProto(t)
 		require.True(t, policyMapState.Equal(&tt.state), "%s (MapState):\n%s", tt.name, policyMapState.diff(&tt.state))
 		require.Equal(t, tt.adds, changes.Adds, tt.name+" (adds)")
@@ -2291,7 +2281,7 @@ func TestMapState_Get_stacktrace(t *testing.T) {
 // TestDenyPreferredInsertLogic is now less valuable since we do not have the mapstate
 // validator any more, but may still catch bugs.
 func TestDenyPreferredInsertLogic(t *testing.T) {
-	td := newTestData(hivetest.Logger(t))
+	td := newTestData(t, hivetest.Logger(t))
 	td.bootstrapRepo(GenerateCIDRDenyRules, 1000, t)
 	p, _ := td.repo.resolvePolicyLocked(fooIdentity)
 
