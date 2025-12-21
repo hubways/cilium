@@ -30,17 +30,6 @@ const (
 	AutoCIDR = "auto"
 )
 
-func initNodeLocalRoutingRule(params daemonParams) error {
-	if !params.DaemonConfig.DryMode {
-		if params.DaemonConfig.EnableL7Proxy {
-			if err := linuxdatapath.NodeEnsureLocalRoutingRule(); err != nil {
-				return fmt.Errorf("ensuring local routing rule: %w", err)
-			}
-		}
-	}
-	return nil
-}
-
 func initAndValidateDaemonConfig(params daemonConfigParams) error {
 	// WireGuard and IPSec are mutually exclusive.
 	if params.IPSecConfig.Enabled() && params.WireguardConfig.Enabled() {
@@ -218,13 +207,6 @@ func configureDaemon(ctx context.Context, params daemonParams) error {
 	params.K8sWatcher.InitK8sSubsystem(ctx)
 	bootstrapStats.k8sInit.End(true)
 
-	bootstrapStats.cleanup.Start()
-	err = clearCiliumVeths(params.Logger)
-	bootstrapStats.cleanup.EndError(err)
-	if err != nil {
-		params.Logger.Warn("Unable to clean stale endpoint interfaces", logfields.Error, err)
-	}
-
 	// Fetch the router (`cilium_host`) IPs in case they were set a priori from
 	// the Kubernetes or CiliumNode resource in the K8s subsystem from call
 	// k8s.WaitForNodeInformation(). These will be used later after starting
@@ -293,12 +275,7 @@ func configureDaemon(ctx context.Context, params daemonParams) error {
 
 	// Trigger refresh and update custom resource in the apiserver with all restored endpoints.
 	// Trigger after nodeDiscovery.StartDiscovery to avoid custom resource update conflict.
-	if params.DaemonConfig.EnableIPv6 {
-		params.IPAM.IPv6Allocator.RestoreFinished()
-	}
-	if params.DaemonConfig.EnableIPv4 {
-		params.IPAM.IPv4Allocator.RestoreFinished()
-	}
+	params.IPAM.RestoreFinished()
 
 	// This needs to be done after the node addressing has been configured
 	// as the node address is required as suffix.
@@ -312,15 +289,6 @@ func configureDaemon(ctx context.Context, params daemonParams) error {
 		// allocator is initialized up until here.
 		realIdentityAllocator := params.IdentityAllocator
 		realIdentityAllocator.InitIdentityAllocator(params.Clientset, params.KVStoreClient)
-	}
-
-	// Must be done at least after initializing BPF LB-related maps
-	// (lbmap.Init()).
-	bootstrapStats.bpfBase.Start()
-	err = initNodeLocalRoutingRule(params)
-	bootstrapStats.bpfBase.EndError(err)
-	if err != nil {
-		return fmt.Errorf("error while initializing daemon: %w", err)
 	}
 
 	// Start the host IP synchronization. Blocks until the initial synchronization

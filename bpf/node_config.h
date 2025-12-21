@@ -63,8 +63,6 @@
 # define CT_REPORT_FLAGS		0xff
 #endif
 
-#define KERNEL_HZ 250   /* warp: 0 jiffies */
-
 #define ENABLE_IDENTITY_MARK 1
 
 #define HASH_INIT4_SEED 0xcafe
@@ -222,11 +220,6 @@ return false;
 # define NAT_46X64_PREFIX_1 0
 # define NAT_46X64_PREFIX_2 0
 # define NAT_46X64_PREFIX_3 0
-#endif
-
-#ifndef __CLUSTERMESH_IDENTITY__
-#define __CLUSTERMESH_IDENTITY__
-#define CLUSTER_ID_MAX 255
 #endif
 
 #ifndef __CLUSTERMESH_HELPERS__

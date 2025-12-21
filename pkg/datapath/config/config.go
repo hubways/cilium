@@ -11,6 +11,7 @@ import (
 
 func NodeConfig(lnc *datapath.LocalNodeConfiguration) Node {
 	node := *NewNode()
+	node.ClusterIDMax = option.Config.MaxConnectedClusters
 
 	if lnc.ServiceLoopbackIPv4 != nil {
 		node.ServiceLoopbackIPv4 = [4]byte(lnc.ServiceLoopbackIPv4.To4())
@@ -28,10 +29,10 @@ func NodeConfig(lnc *datapath.LocalNodeConfiguration) Node {
 	node.TracePayloadLenOverlay = uint32(option.Config.TracePayloadlenOverlay)
 
 	if lnc.DirectRoutingDevice != nil {
-		node.DirectRoutingDevIfindex = uint32(lnc.DirectRoutingDevice.Index)
+		node.DirectRoutingDevIfIndex = uint32(lnc.DirectRoutingDevice.Index)
 	}
 
-	node.SupportsFibLookupSkipNeigh = probes.HaveFibLookupSkipNeigh() == nil
+	node.SupportsFIBLookupSkipNeigh = probes.HaveFibLookupSkipNeigh() == nil
 
 	node.TracingIPOptionType = uint8(option.Config.IPTracingOptionType)
 
@@ -40,6 +41,9 @@ func NodeConfig(lnc *datapath.LocalNodeConfiguration) Node {
 	} else {
 		node.PolicyDenyResponseEnabled = false
 	}
+
+	node.EnableJiffies = option.Config.ClockSource == option.ClockSourceJiffies
+	node.KernelHz = uint32(option.Config.KernelHz)
 
 	return node
 }

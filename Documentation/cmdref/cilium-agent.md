@@ -16,6 +16,10 @@ cilium-agent [flags]
       --agent-labels strings                                      Additional labels to identify this agent in monitor events
       --agent-liveness-update-interval duration                   Interval at which the agent updates liveness time for the datapath (default 1s)
       --agent-not-ready-taint-key string                          Key of the taint indicating that Cilium is not ready on the node (default "node.cilium.io/agent-not-ready")
+      --alibabacloud-security-group-tags stringToString           List of tags to use when evaluating what security groups to use for the ENI at the node level (default [])
+      --alibabacloud-security-groups strings                      List of security groups to attach to any ENI that is created and attached to the instance at the node level
+      --alibabacloud-vswitch-tags stringToString                  List of tags to use when evaluating what VSwitches to use for ENI and IP allocation at the node level (default [])
+      --alibabacloud-vswitches strings                            List of VSwitches to use for ENI and IP allocation at the node level
       --allocator-list-timeout duration                           Timeout for listing allocator state before exiting (default 3m0s)
       --allow-icmp-frag-needed                                    Allow ICMP Fragmentation Needed type packets for purposes like TCP Path MTU. (default true)
       --allow-localhost string                                    Policy when to allow local stack to reach local endpoints { auto | always | policy } (default "auto")
@@ -23,6 +27,7 @@ cilium-agent [flags]
       --api-rate-limit string                                     API rate limiting configuration (example: --api-rate-limit endpoint-create=rate-limit:10/m,rate-burst:2)
       --auto-create-cilium-node-resource                          Automatically create CiliumNode resource for own node on startup (default true)
       --auto-direct-node-routes                                   Enable automatic L2 routing between nodes
+      --azure-interface-name string                               InterfaceName the cilium-operator will use to allocate all the IPs on at the node level
       --bgp-router-id-allocation-ip-pool string                   IP pool to allocate the BGP router-id from when the mode is 'ip-pool'
       --bgp-router-id-allocation-mode string                      BGP router-id allocation mode. Currently supported values: 'default' or 'ip-pool' (default "default")
       --bpf-auth-map-max int                                      Maximum number of entries in auth map (default 524288)
@@ -194,7 +199,7 @@ cilium-agent [flags]
       --endpoint-regen-interval duration                          Periodically recalculate and re-apply endpoint configuration. Set to 0 to disable (default 2m0s)
       --eni-delete-on-termination                                 Whether the ENI should be deleted when the associated instance is terminated at the node level (default true)
       --eni-disable-prefix-delegation                             Whether ENI prefix delegation should be disabled on this node at the node level
-      --eni-exclude-interface-tags stringToString                 List of tags to use when excluding ENIs for Cilium IP allocation (default [])
+      --eni-exclude-interface-tags stringToString                 List of tags to use when excluding ENIs for Cilium IP allocation at the node level (default [])
       --eni-first-interface-index int                             Index of the first ENI to use for IP allocation at the node level
       --eni-security-group-tags stringToString                    List of tags to use when evaluating what AWS security groups to use for the ENI at the node level (default [])
       --eni-security-groups strings                               List of security groups to attach to any ENI that is created and attached to the instance at the node level
@@ -229,7 +234,7 @@ cilium-agent [flags]
       --http-request-timeout uint                                 Time after which a forwarded HTTP request is considered failed unless completed (in seconds); Use 0 for unlimited (default 3600)
       --http-retry-count uint                                     Number of retries performed after a forwarded request attempt fails (default 3)
       --http-retry-timeout uint                                   Time after which a forwarded but uncompleted request is retried (connection failures are retried immediately); defaults to 0 (never)
-      --http-stream-idle-timeout uint                             Set Envoy the amount of time that the connection manager will allow a stream to exist with no upstream or downstream activity. Default 300s (default 300)
+      --http-stream-idle-timeout uint                             Set Envoy the amount of time in seconds that the connection manager will allow a stream to exist with no upstream or downstream activity. (default 300)
       --hubble-disable-tls                                        Allow Hubble server to run on the given listen address without TLS. (default true)
       --hubble-drop-events                                        Emit packet drop Events related to pods (alpha)
       --hubble-drop-events-extended                               Include L4 network policies in drop event message
@@ -286,9 +291,11 @@ cilium-agent [flags]
       --ipam string                                               Backend to use for IPAM (default "cluster-pool")
       --ipam-cilium-node-update-rate duration                     Maximum rate at which the CiliumNode custom resource is updated (default 15s)
       --ipam-default-ip-pool string                               Name of the default IP Pool when using multi-pool (default "default")
+      --ipam-max-allocate int                                     Maximum number of IPs that can be allocated at the node level
       --ipam-min-allocate int                                     Minimum number of IPs that must be allocated when the node is first bootstrapped at the node level
       --ipam-multi-pool-pre-allocation map                        Defines the minimum number of IPs a node should pre-allocate from each pool (default default=8)
       --ipam-pre-allocate int                                     Number of IP addresses that must be available for allocation in the IPAMspec at the node level
+      --ipam-static-ip-tags stringToString                        List of tags to determine the pool of IPs from which to attribute a static IP to the node at the node level, this currently works with AWS and Azure (default [])
       --ipsec-key-file string                                     Path to IPsec key file
       --ipsec-key-rotation-duration duration                      Maximum duration of the IPsec key rotation. The previous key will be removed after that delay. (default 5m0s)
       --iptables-lock-timeout duration                            Time to pass to each iptables invocation to wait for xtables lock acquisition (default 5s)
@@ -363,6 +370,7 @@ cilium-agent [flags]
       --node-port-bind-protection                                 Reject application bind(2) requests to service ports in the NodePort range (default true)
       --node-port-range strings                                   Set the min/max NodePort port range (default [30000,32767])
       --nodeport-addresses strings                                A whitelist of CIDRs to limit which IPs are used for NodePort. If not set, primary IPv4 and/or IPv6 address of each native device is used.
+      --only-masquerade-default-pool                              When using multi-pool IPAM, only masquerade flows from the default IP pool. This will preserve source IPs for pods from non-default IP pools. Useful when combining multi-pool IPAM with BGP control plane. This option must be combined with enable-bpf-masquerade.
       --policy-accounting                                         Enable policy accounting (default true)
       --policy-audit-mode                                         Enable policy audit (non-drop) mode
       --policy-cidr-match-mode strings                            The entities that can be selected by CIDR policy. Supported values: 'nodes'
@@ -385,7 +393,7 @@ cilium-agent [flags]
       --proxy-cluster-max-requests uint32                         Maximum number of requests on Envoy clusters (default 1024)
       --proxy-connect-timeout uint                                Time after which a TCP connect attempt is considered failed unless completed (in seconds) (default 2)
       --proxy-gid uint                                            Group ID for proxy control plane sockets. (default 1337)
-      --proxy-idle-timeout-seconds int                            Set Envoy upstream HTTP idle connection timeout seconds. Does not apply to connections with pending requests. Default 60s (default 60)
+      --proxy-idle-timeout-seconds int                            Set Envoy upstream HTTP idle connection timeout in seconds. Does not apply to connections with pending requests. (default 60)
       --proxy-initial-fetch-timeout uint                          Time after which an xDS stream is considered timed out (in seconds) (default 30)
       --proxy-max-concurrent-retries uint32                       Maximum number of concurrent retries on Envoy clusters (default 128)
       --proxy-max-connection-duration-seconds int                 Set Envoy HTTP option max_connection_duration seconds. Default 0 (disable)

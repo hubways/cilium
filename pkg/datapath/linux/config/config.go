@@ -133,8 +133,6 @@ func (h *HeaderfileWriter) WriteNodeConfig(w io.Writer, cfg *datapath.LocalNodeC
 	fw.WriteString(dumpRaw(defaults.RestoreV4Addr, cfg.CiliumInternalIPv4))
 	fmt.Fprintf(fw, " */\n\n")
 
-	cDefinesMap["KERNEL_HZ"] = fmt.Sprintf("%d", option.Config.KernelHz)
-
 	if option.Config.EnableIPv6 && option.Config.EnableIPv6FragmentsTracking {
 		cDefinesMap["ENABLE_IPV6_FRAGMENTS"] = "1"
 	}
@@ -532,10 +530,6 @@ func (h *HeaderfileWriter) WriteNodeConfig(w io.Writer, cfg *datapath.LocalNodeC
 	fmt.Fprintf(fw, "#define CT_MAP_SIZE_TCP %d\n", cmp.Or(option.Config.CTMapEntriesGlobalTCP, option.CTMapEntriesGlobalTCPDefault))
 	fmt.Fprintf(fw, "#define CT_MAP_SIZE_ANY %d\n", cmp.Or(option.Config.CTMapEntriesGlobalAny, option.CTMapEntriesGlobalAnyDefault))
 
-	if option.Config.ClockSource == option.ClockSourceJiffies {
-		cDefinesMap["ENABLE_JIFFIES"] = "1"
-	}
-
 	if option.Config.EnableIdentityMark {
 		cDefinesMap["ENABLE_IDENTITY_MARK"] = "1"
 	}
@@ -620,9 +614,7 @@ func (h *HeaderfileWriter) WriteNodeConfig(w io.Writer, cfg *datapath.LocalNodeC
 		cDefinesMap["ENCAP6_IFINDEX"] = "0"
 	}
 
-	// Write Identity and ClusterID related macros.
-	cDefinesMap["CLUSTER_ID_MAX"] = fmt.Sprintf("%d", option.Config.MaxConnectedClusters)
-
+	// Write Identity related macros.
 	fmt.Fprint(fw, declareConfig("identity_length", identity.GetClusterIDShift(), "Identity length in bits"))
 	fmt.Fprint(fw, assignConfig("identity_length", identity.GetClusterIDShift()))
 
@@ -820,12 +812,6 @@ func (h *HeaderfileWriter) writeTemplateConfig(fw *bufio.Writer, devices []strin
 
 	if e.RequireRouting() {
 		fmt.Fprintf(fw, "#define ENABLE_ROUTING 1\n")
-	}
-
-	if !option.Config.EnableHostLegacyRouting && drd != nil && len(devices) == 1 {
-		if e.IsHost() || !option.Config.EnforceLXCFibLookup() {
-			fmt.Fprintf(fw, "#define ENABLE_SKIP_FIB 1\n")
-		}
 	}
 
 	if e.IsHost() {
