@@ -191,6 +191,8 @@ cilium-agent hive dot-graph [flags]
       --ipsec-key-rotation-duration duration                      Maximum duration of the IPsec key rotation. The previous key will be removed after that delay. (default 5m0s)
       --iptables-lock-timeout duration                            Time to pass to each iptables invocation to wait for xtables lock acquisition (default 5s)
       --iptables-random-fully                                     Set iptables flag random-fully on masquerading rules
+      --ipv4-service-loopback-address string                      IPv4 source address to use for SNAT when a Pod talks to itself over a Service. (default "169.254.42.1")
+      --ipv6-service-loopback-address string                      IPv6 source address to use for SNAT when a Pod talks to itself over a Service. (default "fe80::1")
       --k8s-api-server-urls strings                               Kubernetes API server URLs
       --k8s-client-burst int                                      Burst value allowed for the K8s client (default 20)
       --k8s-client-connection-keep-alive duration                 Configures the keep alive duration of K8s client connections. K8 client is disabled if the value is set to 0 (default 30s)
@@ -260,7 +262,7 @@ cilium-agent hive dot-graph [flags]
       --read-cni-conf string                                      CNI configuration file to use as a source for --write-cni-conf-when-ready. If not supplied, a suitable one will be generated.
       --restored-proxy-ports-age-limit uint                       Time after which a restored proxy ports file is considered stale (in minutes) (default 15)
       --shell-sock-path string                                    Path to the shell UNIX socket (default "/var/run/cilium/shell.sock")
-      --standalone-dns-proxy-server-port int                      Global port on which the gRPC server for standalone DNS proxy should listen (default 40045)
+      --standalone-dns-proxy-server-port int                      Global port on which the gRPC server for standalone DNS proxy should listen (default 10095)
       --static-cnp-path string                                    Directory path to watch and load static cilium network policy yaml files.
       --status-collector-failure-threshold duration               The duration after which a probe is considered failed (default 1m0s)
       --status-collector-interval duration                        The interval between probe invocations (default 5s)

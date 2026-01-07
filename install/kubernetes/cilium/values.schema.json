@@ -1671,6 +1671,17 @@
         },
         "resources": {
           "properties": {
+            "limits": {
+              "properties": {
+                "cpu": {
+                  "type": "integer"
+                },
+                "memory": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
             "requests": {
               "properties": {
                 "cpu": {
@@ -5654,6 +5665,9 @@
     "secretsNamespaceAnnotations": {
       "type": "object"
     },
+    "secretsNamespaceLabels": {
+      "type": "object"
+    },
     "securityContext": {
       "properties": {
         "allowPrivilegeEscalation": {
@@ -5980,6 +5994,86 @@
       "properties": {
         "enabled": {
           "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "standaloneDnsProxy": {
+      "properties": {
+        "annotations": {
+          "type": "object"
+        },
+        "automountServiceAccountToken": {
+          "type": "boolean"
+        },
+        "debug": {
+          "type": "boolean"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "image": {
+          "properties": {
+            "digest": {
+              "type": "string"
+            },
+            "override": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "pullPolicy": {
+              "type": "string"
+            },
+            "repository": {
+              "type": "string"
+            },
+            "tag": {
+              "type": "string"
+            },
+            "useDigest": {
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
+        "nodeSelector": {
+          "properties": {
+            "kubernetes.io/os": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "rollOutPods": {
+          "type": "boolean"
+        },
+        "serverPort": {
+          "type": "integer"
+        },
+        "tolerations": {
+          "items": {},
+          "type": "array"
+        },
+        "updateStrategy": {
+          "properties": {
+            "rollingUpdate": {
+              "properties": {
+                "maxSurge": {
+                  "type": "integer"
+                },
+                "maxUnavailable": {
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            },
+            "type": {
+              "type": "string"
+            }
+          },
+          "type": "object"
         }
       },
       "type": "object"

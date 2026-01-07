@@ -17,7 +17,6 @@ import (
 	"net/netip"
 	"slices"
 	"strconv"
-	"strings"
 	"text/template"
 
 	"github.com/vishvananda/netlink"
@@ -571,12 +570,6 @@ func (h *HeaderfileWriter) WriteNodeConfig(w io.Writer, cfg *datapath.LocalNodeC
 	cDefinesMap["CILIUM_HOST_MAC"] = fmt.Sprintf("{.addr=%s}", mac.CArrayString(ciliumHostLink.Attrs().HardwareAddr))
 	cDefinesMap["CILIUM_HOST_IFINDEX"] = fmt.Sprintf("%d", ciliumHostLink.Attrs().Index)
 
-	ephemeralMin, err := getEphemeralPortRangeMin(h.sysctl)
-	if err != nil {
-		return fmt.Errorf("getting ephemeral port range minimun: %w", err)
-	}
-	cDefinesMap["EPHEMERAL_MIN"] = fmt.Sprintf("%d", ephemeralMin)
-
 	// --- WARNING: THIS CONFIGURATION METHOD IS DEPRECATED, SEE FUNCTION DOC ---
 
 	if err := cDefinesMap.Merge(h.nodeExtraDefines); err != nil {
@@ -646,24 +639,6 @@ func (h *HeaderfileWriter) WriteNodeConfig(w io.Writer, cfg *datapath.LocalNodeC
 	}
 
 	return fw.Flush()
-}
-
-func getEphemeralPortRangeMin(sysctl sysctl.Sysctl) (int, error) {
-	ephemeralPortRangeStr, err := sysctl.Read([]string{"net", "ipv4", "ip_local_port_range"})
-	if err != nil {
-		return 0, fmt.Errorf("unable to read net.ipv4.ip_local_port_range: %w", err)
-	}
-	ephemeralPortRange := strings.Split(ephemeralPortRangeStr, "\t")
-	if len(ephemeralPortRange) != 2 {
-		return 0, fmt.Errorf("invalid ephemeral port range: %s", ephemeralPortRangeStr)
-	}
-	ephemeralPortMin, err := strconv.Atoi(ephemeralPortRange[0])
-	if err != nil {
-		return 0, fmt.Errorf("unable to parse min port value %s for ephemeral range: %w",
-			ephemeralPortRange[0], err)
-	}
-
-	return ephemeralPortMin, nil
 }
 
 // vlanFilterMacros generates VLAN_FILTER macros which

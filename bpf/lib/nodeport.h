@@ -2335,7 +2335,7 @@ nodeport_rev_dnat_ipv4(struct __ctx_buff *ctx, struct trace_ctx *trace,
 	__u32 src_sec_identity __maybe_unused = SECLABEL;
 	bool allow_neigh_map = true;
 	fraginfo_t fraginfo;
-	__u32 *vrf_id __maybe_unused = NULL;
+	const __u32 *vrf_id __maybe_unused = NULL;
 	__u32 monitor = 0;
 
 	if (!revalidate_data(ctx, &data, &data_end, &ip4))
@@ -2416,7 +2416,7 @@ skip_revdnat:
 redirect:
 #if defined(ENABLE_SRV6) && defined(IS_BPF_LXC)
 	if (vrf_id) {
-		union v6addr *sid;
+		const union v6addr *sid;
 		/* Do policy lookup if it belongs to a VRF */
 		sid = srv6_lookup_policy4(*vrf_id, ip4->daddr);
 		if (sid) {
@@ -2802,9 +2802,15 @@ static __always_inline int nodeport_svc_lb4(struct __ctx_buff *ctx,
 	}
 #endif
 	if (lb4_to_lb6_service(svc)) {
+		if (!is_defined(ENABLE_IPV6) || !is_defined(NODEPORT_USE_NAT_46x64))
+			return DROP_NO_SERVICE;
+
 		ret = lb4_to_lb6(ctx, ip4, l3_off);
-		if (!ret)
-			return NAT_46X64_RECIRC;
+		if (!ret) {
+			ctx_store_meta(ctx, CB_SRC_LABEL, src_sec_identity);
+			return tail_call_internal(ctx, CILIUM_CALL_IPV6_FROM_NETDEV,
+						  ext_err);
+		}
 	} else {
 		ret = lb4_local(get_ct_map4(tuple), ctx, fraginfo, l4_off,
 				key, tuple, svc, &ct_state_svc, &backend,

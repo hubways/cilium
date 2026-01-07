@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cilium/cilium/daemon/infraendpoints"
 	agentK8s "github.com/cilium/cilium/daemon/k8s"
 	linuxdatapath "github.com/cilium/cilium/pkg/datapath/linux"
 	"github.com/cilium/cilium/pkg/datapath/linux/ipsec"
@@ -129,21 +128,6 @@ func initAndValidateDaemonConfig(params daemonConfigParams) error {
 }
 
 func configureDaemon(ctx context.Context, params daemonParams) error {
-	var err error
-
-	bootstrapStats.restore.Start()
-	// fetch old endpoints before k8s is configured.
-	if err := params.EndpointRestorer.FetchOldEndpoints(ctx, params.DaemonConfig.StateDir); err != nil {
-		params.Logger.Error("Unable to read existing endpoints", logfields.Error, err)
-	}
-	bootstrapStats.restore.End(true)
-
-	// Load cached information from restored endpoints in to FQDN NameManager and DNS proxies
-	bootstrapStats.fqdn.Start()
-	params.DNSNameManager.RestoreCache(params.EndpointRestorer.GetState().possible)
-	params.DNSProxy.BootstrapFQDN(params.EndpointRestorer.GetState().possible)
-	bootstrapStats.fqdn.End(true)
-
 	if params.Clientset.IsEnabled() {
 		bootstrapStats.k8sInit.Start()
 		// Errors are handled inside WaitForCRDsToRegister. It will fatal on a
@@ -207,15 +191,6 @@ func configureDaemon(ctx context.Context, params daemonParams) error {
 	params.K8sWatcher.InitK8sSubsystem(ctx)
 	bootstrapStats.k8sInit.End(true)
 
-	// Fetch the router (`cilium_host`) IPs in case they were set a priori from
-	// the Kubernetes or CiliumNode resource in the K8s subsystem from call
-	// k8s.WaitForNodeInformation(). These will be used later after starting
-	// IPAM initialization to finish off the `cilium_host` IP restoration.
-	var restoredRouterIPs infraendpoints.RestoredIPs
-	restoredRouterIPs.IPv4FromK8s, restoredRouterIPs.IPv6FromK8s = node.GetInternalIPv4Router(params.Logger), node.GetIPv6Router(params.Logger)
-	// Fetch the router IPs from the filesystem in case they were set a priori
-	restoredRouterIPs.IPv4FromFS, restoredRouterIPs.IPv6FromFS = node.ExtractCiliumHostIPFromFS(params.Logger)
-
 	// Configure and start IPAM without using the configuration yet.
 	configureAndStartIPAM(ctx, params)
 
@@ -223,7 +198,7 @@ func configureDaemon(ctx context.Context, params daemonParams) error {
 	// restore endpoints before any IPs are allocated to avoid eventual IP
 	// conflicts later on, otherwise any IP conflict will result in the
 	// endpoint not being able to be restored.
-	err = params.EndpointRestorer.RestoreOldEndpoints()
+	err := params.EndpointRestorer.RestoreOldEndpoints()
 	bootstrapStats.restore.EndError(err)
 	if err != nil {
 		return err
@@ -231,7 +206,7 @@ func configureDaemon(ctx context.Context, params daemonParams) error {
 
 	// We must do this after IPAM because we must wait until the
 	// K8s resources have been synced.
-	if err := params.InfraIPAllocator.AllocateIPs(ctx, restoredRouterIPs); err != nil { // will log errors/fatal internally
+	if err := params.InfraIPAllocator.AllocateIPs(ctx); err != nil {
 		return err
 	}
 

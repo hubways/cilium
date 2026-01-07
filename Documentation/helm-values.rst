@@ -1089,7 +1089,7 @@
      - bool
      - ``true``
    * - :spelling:ignore:`clustermesh.useAPIServer`
-     - Deploy clustermesh-apiserver for clustermesh. This option is typically used with ``clustermesh.config.enabled=true``. Refer to the  ``clustermesh.config.enabled=true``\ documentation for more information.
+     - Deploy clustermesh-apiserver for clustermesh. This option is typically used with ``clustermesh.config.enabled=true``. Refer to the ``clustermesh.config.enabled=true``\ documentation for more information.
      - bool
      - ``false``
    * - :spelling:ignore:`cni.binPath`
@@ -1151,7 +1151,7 @@
    * - :spelling:ignore:`cni.resources`
      - Specifies the resources for the cni initContainer
      - object
-     - ``{"requests":{"cpu":"100m","memory":"10Mi"}}``
+     - ``{"limits":{"cpu":1,"memory":"1Gi"},"requests":{"cpu":"100m","memory":"10Mi"}}``
    * - :spelling:ignore:`cni.uninstall`
      - Remove the CNI configuration and binary files on agent shutdown. Enable this if you're removing Cilium from the cluster. Disable this to prevent the CNI configuration file from being removed during agent upgrade, which can cause nodes to go unmanageable.
      - bool
@@ -1567,7 +1567,7 @@
    * - :spelling:ignore:`envoy.image`
      - Envoy container image.
      - object
-     - ``{"digest":"sha256:51625735217b0c691c1f8ea4d1798699fc9bbbe64a5af4e18373de138a216a4f","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.35.3-1765281138-98b3234dbc846e52e43793cc8d458f67cee324a4","useDigest":true}``
+     - ``{"digest":"sha256:ba7726fb1f25b70bf1350e4c18f578b5a266603c5cf49b42df21b109db087945","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.35.9-1767266827-16c1066defb6f3be5c2090fb17e878573ea6039f","useDigest":true}``
    * - :spelling:ignore:`envoy.initContainers`
      - Init containers added to the cilium Envoy DaemonSet.
      - list
@@ -3443,7 +3443,7 @@
    * - :spelling:ignore:`preflight.envoy.image`
      - Envoy pre-flight image.
      - object
-     - ``{"digest":"sha256:51625735217b0c691c1f8ea4d1798699fc9bbbe64a5af4e18373de138a216a4f","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.35.3-1765281138-98b3234dbc846e52e43793cc8d458f67cee324a4","useDigest":true}``
+     - ``{"digest":"sha256:ba7726fb1f25b70bf1350e4c18f578b5a266603c5cf49b42df21b109db087945","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.35.9-1767266827-16c1066defb6f3be5c2090fb17e878573ea6039f","useDigest":true}``
    * - :spelling:ignore:`preflight.extraEnv`
      - Additional preflight environment variables.
      - list
@@ -3632,6 +3632,10 @@
      - Annotations to be added to all cilium-secret namespaces (resources under templates/cilium-secrets-namespace)
      - object
      - ``{}``
+   * - :spelling:ignore:`secretsNamespaceLabels`
+     - Labels to be added to all cilium-secret namespaces (resources under templates/cilium-secrets-namespace)
+     - object
+     - ``{}``
    * - :spelling:ignore:`securityContext.allowPrivilegeEscalation`
      - disable privilege escalation
      - bool
@@ -3696,6 +3700,50 @@
      - Enable socket LB
      - bool
      - ``false``
+   * - :spelling:ignore:`standaloneDnsProxy`
+     - Standalone DNS Proxy Configuration Note: The standalone DNS proxy uses the agent's dnsProxy.* configuration for DNS settings (proxyPort, enableDnsCompression) to ensure consistency.
+     - object
+     - ``{"annotations":{},"automountServiceAccountToken":false,"debug":false,"enabled":false,"image":{"digest":"","override":null,"pullPolicy":"Always","repository":"","tag":"","useDigest":false},"nodeSelector":{"kubernetes.io/os":"linux"},"rollOutPods":false,"serverPort":10095,"tolerations":[],"updateStrategy":{"rollingUpdate":{"maxSurge":2,"maxUnavailable":0},"type":"RollingUpdate"}}``
+   * - :spelling:ignore:`standaloneDnsProxy.annotations`
+     - Standalone DNS proxy annotations
+     - object
+     - ``{}``
+   * - :spelling:ignore:`standaloneDnsProxy.automountServiceAccountToken`
+     - Standalone DNS proxy auto mount service account token
+     - bool
+     - ``false``
+   * - :spelling:ignore:`standaloneDnsProxy.debug`
+     - Standalone DNS proxy debug mode
+     - bool
+     - ``false``
+   * - :spelling:ignore:`standaloneDnsProxy.enabled`
+     - Enable standalone DNS proxy (alpha feature)
+     - bool
+     - ``false``
+   * - :spelling:ignore:`standaloneDnsProxy.image`
+     - Standalone DNS proxy image
+     - object
+     - ``{"digest":"","override":null,"pullPolicy":"Always","repository":"","tag":"","useDigest":false}``
+   * - :spelling:ignore:`standaloneDnsProxy.nodeSelector`
+     - Standalone DNS proxy Node Selector
+     - object
+     - ``{"kubernetes.io/os":"linux"}``
+   * - :spelling:ignore:`standaloneDnsProxy.rollOutPods`
+     - Roll out Standalone DNS proxy automatically when configmap is updated.
+     - bool
+     - ``false``
+   * - :spelling:ignore:`standaloneDnsProxy.serverPort`
+     - Standalone DNS proxy server port
+     - int
+     - ``10095``
+   * - :spelling:ignore:`standaloneDnsProxy.tolerations`
+     - Standalone DNS proxy tolerations
+     - list
+     - ``[]``
+   * - :spelling:ignore:`standaloneDnsProxy.updateStrategy`
+     - Standalone DNS proxy update strategy
+     - object
+     - ``{"rollingUpdate":{"maxSurge":2,"maxUnavailable":0},"type":"RollingUpdate"}``
    * - :spelling:ignore:`startupProbe.failureThreshold`
      - failure threshold of startup probe. Allow Cilium to take up to 600s to start up (300 attempts with 2s between attempts).
      - int

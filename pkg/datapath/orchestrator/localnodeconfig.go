@@ -7,11 +7,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/cilium/statedb"
 
 	"github.com/cilium/cilium/pkg/cidr"
 	"github.com/cilium/cilium/pkg/common"
+	"github.com/cilium/cilium/pkg/datapath/linux/sysctl"
 	"github.com/cilium/cilium/pkg/datapath/tables"
 	datapath "github.com/cilium/cilium/pkg/datapath/types"
 	"github.com/cilium/cilium/pkg/datapath/xdp"
@@ -43,6 +46,7 @@ func newLocalNodeConfig(
 	ctx context.Context,
 	config *option.DaemonConfig,
 	localNode node.LocalNode,
+	sysctlOps sysctl.Sysctl,
 	txn statedb.ReadTxn,
 	directRoutingDevTbl tables.DirectRoutingDevice,
 	devices statedb.Table[*tables.Device],
@@ -102,6 +106,11 @@ func newLocalNodeConfig(
 		}
 	}
 
+	ephemeralMin, err := getEphemeralPortRangeMin(sysctlOps)
+	if err != nil {
+		return datapath.LocalNodeConfiguration{}, nil, fmt.Errorf("getting ephemeral port range minimun: %w", err)
+	}
+
 	return datapath.LocalNodeConfiguration{
 		NodeIPv4:                     localNode.GetNodeIP(false),
 		NodeIPv6:                     localNode.GetNodeIP(true),
@@ -126,6 +135,7 @@ func newLocalNodeConfig(
 		EnableIPv6:                   config.EnableIPv6,
 		EnableEncapsulation:          config.TunnelingEnabled(),
 		EnableAutoDirectRouting:      config.EnableAutoDirectRouting,
+		EphemeralMin:                 uint16(ephemeralMin),
 		DirectRoutingSkipUnreachable: config.DirectRoutingSkipUnreachable,
 		EnableLocalNodeRoute:         config.EnableLocalNodeRoute && config.IPAM != ipamOption.IPAMENI && config.IPAM != ipamOption.IPAMAzure && config.IPAM != ipamOption.IPAMAlibabaCloud,
 		EnableWireguard:              wgAgent.Enabled(),
@@ -140,4 +150,24 @@ func newLocalNodeConfig(
 		SvcRouteConfig:               svcCfg,
 		MaglevConfig:                 maglevConfig,
 	}, common.MergeChannels(watchChans...), nil
+}
+
+// getEphemeralPortRangeMin returns the minimum ephemeral port from
+// net.ipv4.ip_local_port_range.
+func getEphemeralPortRangeMin(sysctl sysctl.Sysctl) (int, error) {
+	ephemeralPortRangeStr, err := sysctl.Read([]string{"net", "ipv4", "ip_local_port_range"})
+	if err != nil {
+		return 0, fmt.Errorf("unable to read net.ipv4.ip_local_port_range: %w", err)
+	}
+	ephemeralPortRange := strings.Split(ephemeralPortRangeStr, "\t")
+	if len(ephemeralPortRange) != 2 {
+		return 0, fmt.Errorf("invalid ephemeral port range: %s", ephemeralPortRangeStr)
+	}
+	ephemeralPortMin, err := strconv.Atoi(ephemeralPortRange[0])
+	if err != nil {
+		return 0, fmt.Errorf("unable to parse min port value %s for ephemeral range: %w",
+			ephemeralPortRange[0], err)
+	}
+
+	return ephemeralPortMin, nil
 }

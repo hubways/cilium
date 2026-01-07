@@ -36,8 +36,6 @@ import (
 	"github.com/cilium/cilium/pkg/endpointmanager"
 	"github.com/cilium/cilium/pkg/envoy"
 	"github.com/cilium/cilium/pkg/flowdebug"
-	"github.com/cilium/cilium/pkg/fqdn/bootstrap"
-	"github.com/cilium/cilium/pkg/fqdn/namemanager"
 	"github.com/cilium/cilium/pkg/hive"
 	"github.com/cilium/cilium/pkg/identity"
 	identitycell "github.com/cilium/cilium/pkg/identity/cache/cell"
@@ -478,14 +476,6 @@ func InitGlobalFlags(logger *slog.Logger, cmd *cobra.Command, vp *viper.Viper) {
 
 	flags.Bool(option.LogSystemLoadConfigName, false, "Enable periodic logging of system load")
 	option.BindEnv(vp, option.LogSystemLoadConfigName)
-
-	flags.String(option.ServiceLoopbackIPv4, defaults.ServiceLoopbackIPv4, "IPv4 source address to use for SNAT "+
-		"when a Pod talks to itself over a Service.")
-	option.BindEnv(vp, option.ServiceLoopbackIPv4)
-
-	flags.String(option.ServiceLoopbackIPv6, defaults.ServiceLoopbackIPv6, "IPv6 source address to use for SNAT "+
-		"when a Pod talks to itself over a Service.")
-	option.BindEnv(vp, option.ServiceLoopbackIPv6)
 
 	flags.Bool(option.EnableIPv4Masquerade, true, "Masquerade IPv4 traffic from endpoints leaving the host")
 	option.BindEnv(vp, option.EnableIPv4Masquerade)
@@ -1244,8 +1234,6 @@ type daemonParams struct {
 	NodeDiscovery       *nodediscovery.NodeDiscovery
 	IPAM                *ipam.IPAM
 	CRDSyncPromise      promise.Promise[k8sSynced.CRDSync]
-	DNSProxy            bootstrap.FQDNProxyBootstrapper
-	DNSNameManager      namemanager.NameManager
 	KPRConfig           kpr.KPRConfig
 	KPRInitializer      kprinitializer.KPRInitializer
 	InfraIPAllocator    infraendpoints.InfraIPAllocator

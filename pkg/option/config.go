@@ -734,12 +734,6 @@ const (
 	// EndpointRegenInterval is the interval of the periodic endpoint regeneration loop.
 	EndpointRegenInterval = "endpoint-regen-interval"
 
-	// ServiceLoopbackIPv4 is the address to use for service loopback SNAT
-	ServiceLoopbackIPv4 = "ipv4-service-loopback-address"
-
-	// ServiceLoopbackIPv6 is the address to use for service loopback SNAT
-	ServiceLoopbackIPv6 = "ipv6-service-loopback-address"
-
 	// LocalRouterIPv4 is the link-local IPv4 address to use for Cilium router device
 	LocalRouterIPv4 = "local-router-ipv4"
 
@@ -1522,12 +1516,6 @@ type DaemonConfig struct {
 	// events, specifically those which cause many regenerations.
 	EndpointQueueSize int
 
-	// ServiceLoopbackIPv4 is the address to use for service loopback SNAT
-	ServiceLoopbackIPv4 string
-
-	// ServiceLoopbackIPv6 is the address to use for service loopback SNAT
-	ServiceLoopbackIPv6 string
-
 	// LocalRouterIPv4 is the link-local IPv4 address used for Cilium's router device
 	LocalRouterIPv4 string
 
@@ -1855,8 +1843,6 @@ var (
 		IdentityRestoreGracePeriod:      defaults.IdentityRestoreGracePeriodK8s,
 		FixedIdentityMapping:            make(map[string]string),
 		LogOpt:                          make(map[string]string),
-		ServiceLoopbackIPv4:             defaults.ServiceLoopbackIPv4,
-		ServiceLoopbackIPv6:             defaults.ServiceLoopbackIPv6,
 		EnableEndpointRoutes:            defaults.EnableEndpointRoutes,
 		AnnotateK8sNode:                 defaults.AnnotateK8sNode,
 		AutoCreateCiliumNodeResource:    defaults.AutoCreateCiliumNodeResource,
@@ -2458,8 +2444,6 @@ func (c *DaemonConfig) Populate(logger *slog.Logger, vp *viper.Viper) {
 	c.Labels = vp.GetStringSlice(Labels)
 	c.LibDir = vp.GetString(LibDir)
 	c.LogSystemLoadConfig = vp.GetBool(LogSystemLoadConfigName)
-	c.ServiceLoopbackIPv4 = vp.GetString(ServiceLoopbackIPv4)
-	c.ServiceLoopbackIPv6 = vp.GetString(ServiceLoopbackIPv6)
 	c.LocalRouterIPv4 = vp.GetString(LocalRouterIPv4)
 	c.LocalRouterIPv6 = vp.GetString(LocalRouterIPv6)
 	c.EnableBPFClockProbe = vp.GetBool(EnableBPFClockProbe)
@@ -3046,6 +3030,9 @@ func (c *DaemonConfig) calculateBPFMapSizes(logger *slog.Logger, vp *viper.Viper
 	} else if dynamicSizeRatio > 1.0 {
 		return fmt.Errorf("specified dynamic map size ratio %f must be ≤ 1.0", dynamicSizeRatio)
 	}
+
+	c.normalizeLRUBackedMapSizes(logger)
+
 	return nil
 }
 
@@ -3112,11 +3099,7 @@ func (c *DaemonConfig) getDynamicSizeCalculator(logger *slog.Logger, dynamicSize
 	// Thus, if we would not round up from agent side, then Cilium would constantly
 	// try to replace maps due to property mismatch!
 	if c.BPFDistributedLRU {
-		cpus, err := ebpf.PossibleCPU()
-		if err != nil {
-			logging.Fatal(logger, "Failed to get number of possible CPUs needed for the distributed LRU")
-		}
-		possibleCPUs = cpus
+		possibleCPUs = getPossibleCPUs(logger)
 	}
 	return func(entriesDefault, min, max int) int {
 		entries := (entriesDefault * memoryAvailableForMaps) / totalMapMemoryDefault
@@ -3177,6 +3160,60 @@ func (c *DaemonConfig) calculateDynamicBPFMapSizes(logger *slog.Logger, vp *vipe
 	} else {
 		logger.Debug(fmt.Sprintf("option %s set by user to %v", NeighMapEntriesGlobalName, c.NeighMapEntriesGlobal))
 	}
+}
+
+func (c *DaemonConfig) normalizeLRUBackedMapSizes(logger *slog.Logger) {
+	if !c.BPFDistributedLRU {
+		return
+	}
+
+	c.CTMapEntriesGlobalTCP = c.AlignMapSizeForLRU(logger, CTMapEntriesGlobalTCPName, c.CTMapEntriesGlobalTCP)
+	c.CTMapEntriesGlobalAny = c.AlignMapSizeForLRU(logger, CTMapEntriesGlobalAnyName, c.CTMapEntriesGlobalAny)
+	c.NeighMapEntriesGlobal = c.AlignMapSizeForLRU(logger, NeighMapEntriesGlobalName, c.NeighMapEntriesGlobal)
+	c.NATMapEntriesGlobal = c.AlignMapSizeForLRU(logger, NATMapEntriesGlobalName, c.NATMapEntriesGlobal)
+}
+
+// AlignMapSizeForLRU adjusts a map size so that it matches the kernel-side rounding
+// that happens when creating LRU-backed maps with distributed LRU enabled. This
+// ensures that explicit configuration stays in sync with the kernel's actual map
+// size, preventing infinite map recreation loops.
+//
+// The kernel rounds max_entries in htab_map_alloc() when BPF_F_NO_COMMON_LRU is set:
+//
+//	if (percpu_lru)
+//	    htab->map.max_entries = roundup(attr->max_entries, num_possible_cpus());
+func (c *DaemonConfig) AlignMapSizeForLRU(logger *slog.Logger, optionName string, value int) int {
+	if value <= 0 || !c.BPFDistributedLRU {
+		return value
+	}
+
+	possibleCPUs := getPossibleCPUs(logger)
+	aligned := alignDistributedLRUSize(value, possibleCPUs)
+	if aligned != value {
+		logger.Debug(fmt.Sprintf("Aligning distributed LRU map %s: %d -> %d (CPUs: %d)", optionName, value, aligned, possibleCPUs))
+	}
+	return aligned
+}
+
+// alignDistributedLRUSize rounds a map size to match kernel expectations for distributed LRU.
+// The value is rounded up to a multiple of possibleCPUs, and capped at LimitTableMax (rounded down).
+func alignDistributedLRUSize(value, possibleCPUs int) int {
+	if value <= 0 {
+		return value
+	}
+	aligned := util.RoundUp(value, possibleCPUs)
+	if aligned > LimitTableMax {
+		aligned = util.RoundDown(LimitTableMax, possibleCPUs)
+	}
+	return aligned
+}
+
+func getPossibleCPUs(logger *slog.Logger) int {
+	cpus, err := ebpf.PossibleCPU()
+	if err != nil {
+		logging.Fatal(logger, "Failed to get number of possible CPUs")
+	}
+	return cpus
 }
 
 // Validate VTEP integration configuration
