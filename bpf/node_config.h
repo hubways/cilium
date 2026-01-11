@@ -14,8 +14,6 @@
  */
 #include <lib/static_data.h>
 
-#define CLUSTER_ID 0
-
 #define CILIUM_NET_IFINDEX 1
 #define CILIUM_HOST_IFINDEX 1
 #define NATIVE_DEV_MAC_BY_IFINDEX(_) { .addr = { 0xce, 0x72, 0xa7, 0x03, 0x88, 0x56 } }
@@ -183,7 +181,7 @@
 # define LB_SELECTION		LB_SELECTION_RANDOM
 #endif
 
-#ifdef ENCRYPTION_STRICT_MODE
+#ifdef ENCRYPTION_STRICT_MODE_EGRESS
 #  ifndef STRICT_IPV4_NET
 #   define STRICT_IPV4_NET	0
 #  endif

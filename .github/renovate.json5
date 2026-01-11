@@ -46,6 +46,7 @@
     ".github/actions/ipsec/configs.yaml",
     ".github/workflows/**",
     ".github/ISSUE_TEMPLATE/bug_report.yaml",
+    "Documentation/requirements-min/requirements.txt",
     "cilium-cli/**",
     "images/**",
     "examples/hubble/*",
@@ -109,6 +110,7 @@
     "^make -C install/kubernetes$",
     "^make -C Documentation update-helm-values$",
     "^make -C Documentation update-cmdref$",
+    "^make -C Documentation update-requirements$",
     "^make generate-k8s-api$",
     "^make manifests$",
     "^make GO='contrib/scripts/builder.sh go' generate-apis$"
@@ -351,8 +353,9 @@
         "!main",
       ],
       "matchDepNames": [
-        // Explicitly allow certgen updates.
+        // Explicitly allow certgen and cilium-envoy updates.
         "!quay.io/cilium/certgen",
+        "!quay.io/cilium/cilium-envoy"
       ]
     },
     {
@@ -615,6 +618,30 @@
       }
     },
     {
+      "matchFileNames": [
+        "Documentation/requirements-min/requirements.txt"
+      ],
+      "postUpgradeTasks": {
+        "commands": [
+          "make -C Documentation update-requirements"
+        ],
+        "fileFilters": [
+          "Documentation/requirements.txt"
+        ],
+        "executionMode": "update"
+      }
+    },
+    {
+      // Only allow minor and patch updates for Documentation dependencies, no major updates
+      "enabled": false,
+      "matchFileNames": [
+        "Documentation/requirements-min/requirements.txt"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ]
+    },
+    {
       // k8s dependencies will be updated manually along with tests
       "enabled": false,
       "matchUpdateTypes": [
@@ -737,7 +764,6 @@
       "versioning": "regex:v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-(?<build>\\d+).*$",
       "allowedVersions": "/^v1\\.34\\.([0-9]+)-([0-9]+)-.*$/",
       "matchBaseBranches": [
-        "v1.18",
         "v1.17",
         "v1.16"
       ]
@@ -756,7 +782,8 @@
       "versioning": "regex:v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-(?<build>\\d+).*$",
       "allowedVersions": "/^v1\\.35\\.([0-9]+)-([0-9]+)-.*$/",
       "matchBaseBranches": [
-        "main"
+        "main",
+        "v1.18"
       ]
     },
     {

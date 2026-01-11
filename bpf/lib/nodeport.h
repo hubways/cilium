@@ -1432,8 +1432,12 @@ static __always_inline int nodeport_svc_lb6(struct __ctx_buff *ctx,
 		return ret;
 	}
 
-	if (lb6_svc_is_l7_punt_proxy(svc) &&
-	    __lookup_ip6_endpoint(&backend->address)) {
+	backend_local = __lookup_ip6_endpoint(&backend->address);
+
+	if (!backend_local && lb6_svc_is_hostport(svc))
+		return DROP_INVALID;
+
+	if (lb6_svc_is_l7_punt_proxy(svc) && backend_local) {
 		ctx_skip_nodeport_set(ctx);
 		*punt_to_stack = true;
 		return CTX_ACT_OK;
@@ -1446,9 +1450,6 @@ static __always_inline int nodeport_svc_lb6(struct __ctx_buff *ctx,
 			return ret;
 	}
 
-	backend_local = __lookup_ip6_endpoint(&backend->address);
-	if (!backend_local && lb6_svc_is_hostport(svc))
-		return DROP_INVALID;
 	if (backend_local || !nodeport_uses_dsr6(svc)) {
 		struct ct_state ct_state = {};
 
@@ -2651,7 +2652,7 @@ int tail_nodeport_nat_egress_ipv4(struct __ctx_buff *ctx)
 
 		target.addr = IPV4_GATEWAY;
 #if defined(ENABLE_CLUSTER_AWARE_ADDRESSING) && defined(ENABLE_INTER_CLUSTER_SNAT)
-		if (cluster_id && cluster_id != CLUSTER_ID)
+		if (cluster_id && cluster_id != CONFIG(cluster_id))
 			target.addr = IPV4_INTER_CLUSTER_SNAT;
 #endif
 	}
@@ -2832,8 +2833,12 @@ static __always_inline int nodeport_svc_lb4(struct __ctx_buff *ctx,
 			return ret;
 		}
 
-		if (lb4_svc_is_l7_punt_proxy(svc) &&
-		    __lookup_ip4_endpoint(backend->address)) {
+		backend_local = __lookup_ip4_endpoint(backend->address);
+
+		if (!backend_local && lb4_svc_is_hostport(svc))
+			return DROP_INVALID;
+
+		if (lb4_svc_is_l7_punt_proxy(svc) && backend_local) {
 			ctx_skip_nodeport_set(ctx);
 			*punt_to_stack = true;
 			return CTX_ACT_OK;
@@ -2851,9 +2856,6 @@ static __always_inline int nodeport_svc_lb4(struct __ctx_buff *ctx,
 	if (IS_ERR(ret))
 		return ret;
 
-	backend_local = __lookup_ip4_endpoint(backend->address);
-	if (!backend_local && lb4_svc_is_hostport(svc))
-		return DROP_INVALID;
 	/* Reply from DSR packet is never seen on this node again
 	 * hence no need to track in here.
 	 */
