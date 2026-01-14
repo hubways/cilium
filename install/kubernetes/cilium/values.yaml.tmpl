@@ -374,6 +374,8 @@ securityContext:
       - SETGID
       # Allow to execute program that changes UID (e.g. required for package installation)
       - SETUID
+      # Allow to read dmesg and get kernel pointers when kptr_restrict=1
+      - SYSLOG
     # -- Capabilities for the `mount-cgroup` init container
     mountCgroup:
       # Only used for 'mount' cgroup
@@ -2183,11 +2185,11 @@ ipam:
     ipamMaxAllocate: ~
     # -- IPAM static IP tags (currently only works with AWS and Azure)
     ipamStaticIPTags: []
-# -- defaultLBServiceIPAM indicates the default LoadBalancer Service IPAM when
-# no LoadBalancer class is set. Applicable values: lbipam, nodeipam, none
 # @schema
 # type: [string]
 # @schema
+# -- defaultLBServiceIPAM indicates the default LoadBalancer Service IPAM when
+# no LoadBalancer class is set. Applicable values: lbipam, nodeipam, none
 defaultLBServiceIPAM: lbipam
 nodeIPAM:
   # -- Configure Node IPAM
@@ -2314,6 +2316,8 @@ enableMasqueradeRouteSource: false
 enableIPv4BIGTCP: false
 # -- Enables IPv6 BIG TCP support which increases maximum IPv6 GSO/GRO limits for nodes and pods
 enableIPv6BIGTCP: false
+# -- Enable BIG TCP in tunneling mode and increase maximum GRO/GSO limits for VXLAN/GENEVE tunnels
+enableTunnelBIGTCP: false
 
 nat:
   # -- Number of the top-k SNAT map connections to track in Cilium statedb.
