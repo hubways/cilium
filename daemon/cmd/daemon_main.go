@@ -24,7 +24,7 @@ import (
 
 	"github.com/cilium/cilium/daemon/cmd/legacy"
 	"github.com/cilium/cilium/daemon/infraendpoints"
-	agentK8s "github.com/cilium/cilium/daemon/k8s"
+	"github.com/cilium/cilium/daemon/k8s"
 	"github.com/cilium/cilium/pkg/bpf"
 	"github.com/cilium/cilium/pkg/cgroups"
 	"github.com/cilium/cilium/pkg/common"
@@ -327,15 +327,15 @@ func InitGlobalFlags(logger *slog.Logger, cmd *cobra.Command, vp *viper.Viper) {
 	option.BindEnv(vp, option.L2AnnouncerRetryPeriod)
 
 	flags.Bool(option.EnableEncryptionStrictMode, false, "Enable encryption strict mode")
-	flags.MarkDeprecated(option.EnableEncryptionStrictMode, "Please use --enable-encryption-strict-mode-egress instead. This option will be removed in v1.19")
+	flags.MarkDeprecated(option.EnableEncryptionStrictMode, "Please use --enable-encryption-strict-mode-egress instead. This option will be removed in v1.20")
 	option.BindEnv(vp, option.EnableEncryptionStrictMode)
 
 	flags.String(option.EncryptionStrictModeCIDR, "", "In strict-mode encryption, all unencrypted traffic coming from this CIDR and going to this same CIDR will be dropped.")
-	flags.MarkDeprecated(option.EncryptionStrictModeCIDR, "Please use --encryption-strict-egress-cidr instead. This option will be removed in v1.19")
+	flags.MarkDeprecated(option.EncryptionStrictModeCIDR, "Please use --encryption-strict-egress-cidr instead. This option will be removed in v1.20")
 	option.BindEnv(vp, option.EncryptionStrictModeCIDR)
 
 	flags.Bool(option.EncryptionStrictModeAllowRemoteNodeIdentities, false, "Allows unencrypted traffic from pods to remote node identities within the strict mode CIDR. This is required when tunneling is used or direct routing is used and the node CIDR and pod CIDR overlap.")
-	flags.MarkDeprecated(option.EncryptionStrictModeAllowRemoteNodeIdentities, "Please use --encryption-strict-egress-allow-remote-node-identities instead. This option will be removed in v1.19")
+	flags.MarkDeprecated(option.EncryptionStrictModeAllowRemoteNodeIdentities, "Please use --encryption-strict-egress-allow-remote-node-identities instead. This option will be removed in v1.20")
 	option.BindEnv(vp, option.EncryptionStrictModeAllowRemoteNodeIdentities)
 
 	flags.Bool(option.EnableEncryptionStrictModeEgress, false, "Enable strict mode encryption enforcement for egress traffic")
@@ -995,8 +995,8 @@ func initEnv(logger *slog.Logger, vp *viper.Viper) {
 		)
 	}
 
-	option.Config.AllowLocalhost = strings.ToLower(option.Config.AllowLocalhost)
-	switch option.Config.AllowLocalhost {
+	option.Config.UnsafeDaemonConfigOption.AllowLocalhost = strings.ToLower(option.Config.UnsafeDaemonConfigOption.AllowLocalhost)
+	switch option.Config.UnsafeDaemonConfigOption.AllowLocalhost {
 	case option.AllowLocalhostAlways, option.AllowLocalhostAuto, option.AllowLocalhostPolicy:
 	default:
 		logging.Fatal(scopedLog, fmt.Sprintf("Invalid setting for --allow-localhost, must be { %s, %s, %s }",
@@ -1233,7 +1233,8 @@ type daemonParams struct {
 	KVStoreClient       kvstore.Client
 	WGAgent             wgTypes.WireguardAgent
 	LocalNodeStore      *node.LocalNodeStore
-	Resources           agentK8s.Resources
+	LocalNodeRes        k8s.LocalNodeResource
+	LocalCiliumNodeRes  k8s.LocalCiliumNodeResource
 	K8sWatcher          *watchers.K8sWatcher
 	NodeHandler         datapath.NodeHandler
 	EndpointManager     endpointmanager.EndpointManager

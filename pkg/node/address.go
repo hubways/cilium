@@ -19,8 +19,6 @@ import (
 	wgTypes "github.com/cilium/cilium/pkg/wireguard/types"
 )
 
-const preferPublicIP bool = true
-
 var (
 	addrs addresses
 
@@ -80,7 +78,7 @@ func setDefaultPrefix(logger *slog.Logger, cfg *option.DaemonConfig, device stri
 	if cfg.EnableIPv4 {
 		isIPv6 := false
 
-		ip, err := firstGlobalV4Addr(device, node.GetCiliumInternalIP(isIPv6), preferPublicIP)
+		ip, err := firstGlobalV4Addr(device, node.GetCiliumInternalIP(isIPv6))
 		if err != nil {
 			return
 		}
@@ -129,7 +127,7 @@ func setDefaultPrefix(logger *slog.Logger, cfg *option.DaemonConfig, device stri
 
 		if node.GetNodeIP(isIPv6) == nil {
 			// Find a IPv6 node address first
-			addr, _ := firstGlobalV6Addr(device, node.GetCiliumInternalIP(isIPv6), preferPublicIP)
+			addr, _ := firstGlobalV6Addr(device, node.GetCiliumInternalIP(isIPv6))
 			if addr == nil {
 				addr = makeIPv6HostIP(logger)
 			}
@@ -327,16 +325,16 @@ func GetIngressIPv6(logger *slog.Logger) net.IP {
 }
 
 // GetEndpointEncryptKeyIndex returns the encryption key value for an endpoint
-// owned by the local node.
+// owned by the given local node.
 // With IPSec encryption, this is the ID of the currently loaded key.
 // With WireGuard, this returns a non-zero static value.
 // Note that the key index returned by this function is only valid for _endpoints_
 // of the local node. If you want to obtain the key index of the local node itself,
 // access the `EncryptionKey` field via the LocalNodeStore.
-func GetEndpointEncryptKeyIndex(logger *slog.Logger, wgEnabled, ipsecEnabled bool) uint8 {
+func GetEndpointEncryptKeyIndex(localNode LocalNode, wgEnabled, ipsecEnabled bool) uint8 {
 	switch {
 	case ipsecEnabled:
-		return getLocalNode(logger).EncryptionKey
+		return localNode.EncryptionKey
 	case wgEnabled:
 		return wgTypes.StaticEncryptKey
 
@@ -366,13 +364,4 @@ func SetTestLocalNodeStore() {
 
 func UnsetTestLocalNodeStore() {
 	localNode = nil
-}
-
-// UpdateLocalNodeInTest provides access to modifying the local node
-// information from tests that are not yet using hive and the LocalNodeStoreCell.
-func UpdateLocalNodeInTest(mod func(n *LocalNode)) {
-	if localNode == nil {
-		panic("localNode not set, use node.LocalNodeStoreCell or WithTestLocalNodeStore()?")
-	}
-	localNode.Update(mod)
 }
