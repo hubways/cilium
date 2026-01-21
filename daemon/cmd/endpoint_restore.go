@@ -542,6 +542,7 @@ func (r *endpointRestorer) regenerateRestoredEndpoints(state *endpointRestoreSta
 	// account for the new identity during the grace period. For this
 	// purpose, all endpoints being restored must already be in the
 	// endpoint list.
+	startTimeRestore := time.Now()
 	for i := len(state.restored) - 1; i >= 0; i-- {
 		ep := state.restored[i]
 
@@ -557,34 +558,13 @@ func (r *endpointRestorer) regenerateRestoredEndpoints(state *endpointRestoreSta
 		}
 	}
 
-	endpointsToRegenerate := make([]*endpoint.Endpoint, 0, len(state.restored))
-	for _, ep := range state.restored {
-		if ep.IsHost() && r.ipSecAgent.Enabled() {
-			// To support v1.18 VinE upgrades, we need to restore the host
-			// endpoint before any other endpoint, to ensure a drop-less upgrade.
-			// This is because in v1.18 'bpf_lxc' programs stop issuing IPsec hooks
-			// which trigger encryption.
-			//
-			// Instead, 'bpf_host' is responsible for performing IPsec hooks.
-			// Therefore, we want 'bpf_host' to regenerate BEFORE 'bpf_lxc' so the
-			// IPsec hooks are always present while 'bpf_lxc' programs regen,
-			// ensuring no IPsec leaks occur.
-			//
-			// This can be removed in v1.19.
-			r.logger.Info("Successfully restored Host endpoint. Scheduling regeneration", logfields.EndpointID, ep.ID)
-			if err := ep.RegenerateAfterRestore(r.endpointRegenerator, r.endpointMetadata.FetchK8sMetadataForEndpoint); err != nil {
-				r.logger.Debug(
-					"Error regenerating Host endpoint during restore",
-					logfields.Error, err,
-					logfields.EndpointID, ep.ID,
-				)
-			}
-			continue
-		}
+	r.logger.Debug(
+		"Successfully restored endpoints into endpoint manager",
+		logfields.Endpoints, len(state.restored),
+		logfields.Duration, time.Since(startTimeRestore),
+	)
 
-		endpointsToRegenerate = append(endpointsToRegenerate, ep)
-	}
-
+	startTimeCleanup := time.Now()
 	var endpointCleanupCompleted sync.WaitGroup
 	for _, ep := range state.toClean {
 		endpointCleanupCompleted.Add(1)
@@ -603,8 +583,14 @@ func (r *endpointRestorer) regenerateRestoredEndpoints(state *endpointRestoreSta
 	}
 	endpointCleanupCompleted.Wait()
 
+	r.logger.Debug(
+		"Successfully cleaned up endpoints that weren't possible to restore",
+		logfields.Endpoints, len(state.toClean),
+		logfields.Duration, time.Since(startTimeCleanup),
+	)
+
 	// Trigger regeneration for relevant restored endpoints in a separate goroutine.
-	go r.handleRestoredEndpointsRegeneration(endpointsToRegenerate)
+	go r.handleRestoredEndpointsRegeneration(state.restored)
 
 	go func() {
 		startTime := time.Now()
