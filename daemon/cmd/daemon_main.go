@@ -59,7 +59,6 @@ import (
 	"github.com/cilium/cilium/pkg/metrics"
 	monitorAgent "github.com/cilium/cilium/pkg/monitor/agent"
 	monitorAPI "github.com/cilium/cilium/pkg/monitor/api"
-	"github.com/cilium/cilium/pkg/node"
 	"github.com/cilium/cilium/pkg/nodediscovery"
 	"github.com/cilium/cilium/pkg/option"
 	"github.com/cilium/cilium/pkg/pidfile"
@@ -192,8 +191,9 @@ func InitGlobalFlags(logger *slog.Logger, cmd *cobra.Command, vp *viper.Viper) {
 	option.BindEnv(vp, option.DebugVerbose)
 
 	flags.String(option.DatapathMode, defaults.DatapathMode,
-		fmt.Sprintf("Datapath mode name (%s, %s, %s)",
-			datapathOption.DatapathModeVeth, datapathOption.DatapathModeNetkit, datapathOption.DatapathModeNetkitL2))
+		fmt.Sprintf("Datapath mode name (%s, %s, %s, %s)",
+			datapathOption.DatapathModeAuto, datapathOption.DatapathModeVeth,
+			datapathOption.DatapathModeNetkit, datapathOption.DatapathModeNetkitL2))
 	option.BindEnv(vp, option.DatapathMode)
 
 	flags.Bool(option.EnableEndpointRoutes, defaults.EnableEndpointRoutes, "Use per endpoint routes instead of routing via cilium_host")
@@ -1061,21 +1061,6 @@ func initEnv(logger *slog.Logger, vp *viper.Viper) {
 		logging.Fatal(logger, "Unable to parse Label prefix configuration", logfields.Error, err)
 	}
 
-	switch option.Config.DatapathMode {
-	case datapathOption.DatapathModeVeth:
-	case datapathOption.DatapathModeNetkit, datapathOption.DatapathModeNetkitL2:
-		// For netkit we enable also tcx for all non-netkit devices.
-		// The underlying kernel does support it given tcx got merged
-		// before netkit and supporting legacy tc in this context does
-		// not make any sense whatsoever.
-		option.Config.EnableTCX = true
-		if err := probes.HaveNetkit(); err != nil {
-			logging.Fatal(logger, "netkit devices need kernel 6.7.0 or newer and CONFIG_NETKIT")
-		}
-	default:
-		logging.Fatal(logger, "Invalid datapath mode", logfields.DatapathMode, option.Config.DatapathMode)
-	}
-
 	if option.Config.EnableL7Proxy && !option.Config.InstallIptRules {
 		logging.Fatal(logger, "L7 proxy requires iptables rules (--install-iptables-rules=\"true\")")
 	}
@@ -1231,7 +1216,6 @@ type daemonParams struct {
 	Clientset           k8sClient.Clientset
 	KVStoreClient       kvstore.Client
 	WGAgent             wgTypes.WireguardAgent
-	LocalNodeStore      *node.LocalNodeStore
 	LocalNodeRes        k8s.LocalNodeResource
 	LocalCiliumNodeRes  k8s.LocalCiliumNodeResource
 	K8sWatcher          *watchers.K8sWatcher

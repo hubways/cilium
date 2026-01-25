@@ -1091,6 +1091,8 @@ const (
 
 	Link = "link"
 
+	LinkConfig = "linkConfig"
+
 	Hook = "hook"
 
 	DNSRedirect = "dnsRedirect"
@@ -1859,4 +1861,8 @@ const (
 	ReloadCAError = "reloadCAError"
 
 	ExtendedMessage = "extendedMessage"
+
+	BackendTLSPolicyName = "backendTLSPolicyName"
+
+	ConfigMapName = "configMapName"
 )
