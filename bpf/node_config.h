@@ -141,10 +141,6 @@
 #define MONITOR_AGGREGATION 5
 #endif
 #define MTU 1500
-#if defined(ENABLE_NODEPORT) || defined(ENABLE_HOST_FIREWALL) || defined(ENABLE_NAT_46X64)
-#define CONNTRACK_ACCOUNTING
-
-#endif /* ENABLE_NODEPORT || ENABLE_HOST_FIREWALL */
 
 #define CT_MAP_SIZE_TCP 4096
 #define CT_MAP_SIZE_ANY 4096
@@ -216,12 +212,6 @@ return false;
 # define NAT_46X64_PREFIX_1 0
 # define NAT_46X64_PREFIX_2 0
 # define NAT_46X64_PREFIX_3 0
-#endif
-
-#ifndef __CLUSTERMESH_HELPERS__
-#define __CLUSTERMESH_HELPERS__
-#define IDENTITY_LEN 16
-#define IDENTITY_MAX 65535
 #endif
 
 /*

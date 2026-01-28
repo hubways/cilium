@@ -11,10 +11,12 @@ package config
 type Node struct {
 	// Cluster ID.
 	ClusterID uint32 `config:"cluster_id"`
-	// Max number of clusters that can be connected in Clustermesh.
-	ClusterIDMax uint32 `config:"cluster_id_max"`
+	// Number of bits of the identity reserved for the Cluster ID.
+	ClusterIDBits uint32 `config:"cluster_id_bits"`
 	// Index of the interface used to connect nodes in the cluster.
 	DirectRoutingDevIfIndex uint32 `config:"direct_routing_dev_ifindex"`
+	// Enable per flow (conntrack) statistics.
+	EnableConntrackAccounting bool `config:"enable_conntrack_accounting"`
 	// Use jiffies (count of timer ticks since boot).
 	EnableJiffies bool `config:"enable_jiffies"`
 	// Number of timer ticks per second.
@@ -38,7 +40,7 @@ type Node struct {
 }
 
 func NewNode() *Node {
-	return &Node{0x0, 0xff, 0x0, false, 0x0, false,
+	return &Node{0x0, 0x8, 0x0, false, false, 0x0, false,
 		[16]byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
 		[4]byte{0x0, 0x0, 0x0, 0x0},
 		[16]byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},

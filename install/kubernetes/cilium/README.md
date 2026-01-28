@@ -921,7 +921,7 @@ contributors across the globe, there is almost always someone available to help.
 | operator.unmanagedPodWatcher.selector | string | `nil` | Selector for pods that should be restarted when not managed by Cilium. If not set, defaults to built-in selector "k8s-app=kube-dns". Set to empty string to select all pods. @schema type: [null, string] @schema |
 | operator.updateStrategy | object | `{"rollingUpdate":{"maxSurge":"25%","maxUnavailable":"50%"},"type":"RollingUpdate"}` | cilium-operator update strategy |
 | pmtuDiscovery.enabled | bool | `false` | Enable path MTU discovery to send ICMP fragmentation-needed replies to the client. |
-| pmtuDiscovery.packetizationLayerPMTUD | object | `{"enabled":true}` | Enable kernel probing path MTU discovery for Pods which uses different message sizes to search for correct MTU value. |
+| pmtuDiscovery.packetizationLayerPMTUDMode | string | `"blackhole"` | Enable kernel probing path MTU discovery for Pods which uses different message sizes to search for correct MTU value. Valid values are: always, blackhole, disabled and unset (or empty). If value is 'unset' or left empty then will not try to override setting. |
 | podAnnotations | object | `{}` | Annotations to be added to agent pods |
 | podLabels | object | `{}` | Labels to be added to agent pods |
 | podSecurityContext | object | `{"appArmorProfile":{"type":"Unconfined"},"seccompProfile":{"type":"Unconfined"}}` | Security Context for cilium-agent pods. |
@@ -1042,7 +1042,7 @@ contributors across the globe, there is almost always someone available to help.
 | tunnelPort | int | Port 8472 for VXLAN, Port 6081 for Geneve | Configure VXLAN and Geneve tunnel port. |
 | tunnelProtocol | string | `"vxlan"` | Tunneling protocol to use in tunneling mode and for ad-hoc tunnels. Possible values:   - ""   - vxlan   - geneve |
 | tunnelSourcePortRange | string | 0-0 to let the kernel driver decide the range | Configure VXLAN and Geneve tunnel source port range hint. |
-| underlayProtocol | string | `"ipv4"` | IP family for the underlay. |
+| underlayProtocol | string | `"ipv4"` | IP family for the underlay. Possible values:   - "ipv4"   - "ipv6" |
 | updateStrategy | object | `{"rollingUpdate":{"maxUnavailable":2},"type":"RollingUpdate"}` | Cilium agent update strategy |
 | upgradeCompatibility | string | `nil` | upgradeCompatibility helps users upgrading to ensure that the configMap for Cilium will not change critical values to ensure continued operation This flag is not required for new installations. For example: '1.7', '1.8', '1.9' |
 | vtep.cidr | string | `""` | A space separated list of VTEP device CIDRs, for example "1.1.1.0/24 1.1.2.0/24" |

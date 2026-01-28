@@ -455,6 +455,9 @@ General Notes
   ``-use-default-field-mask`` (now ``true`` by default).
 * Testing for RHEL8 compatibility now uses a RHEL8.10-compatible kernel
   (previously this was a RHEL8.6-compatible kernel).
+* The Cilium datapath will now drop TCP/UDP traffic towards a LoadBalancer or
+  ClusterIP allocated by LB-IPAM in the north-south direction if the destination
+  port does not match a provisioned service.
 
 Cluster Mesh
 ############
@@ -492,8 +495,8 @@ The following options have been introduced in this version of Cilium:
   WireGuard and tunneling to be enabled. When you enable this feature, there
   may be temporary disruption to packet delivery between nodes until the nodes
   are all running with the feature enabled.
-* The agent flag ``enable-endpoint-packet-layer-pmtud`` introduces packet layer
-  path MTU discovery by default for all Cilium-managed endpoints.
+* The agent flag ``packetization-layer-pmtud-mode`` introduces packet layer
+  path MTU discovery on blackhole detected by default for all Cilium-managed endpoints.
 
 Changed Options
 ###############
