@@ -1238,14 +1238,5 @@ func (e *Endpoint) GetPolicyCorrelationInfoForKey(key policyTypes.Key) (
 // setDNSRulesLocked is called when the Endpoint's DNS policy has been updated.
 // endpoint lock must be held.
 func (e *Endpoint) setDNSRulesLocked(rules restore.DNSRules) {
-	e.DNSRulesV2 = rules
-	// Keep V1 in tact in case of a downgrade.
-	e.DNSRules = make(restore.DNSRules)
-	for pp, rules := range rules {
-		proto := pp.Protocol()
-		// Filter out non-UDP/TCP protocol
-		if proto == uint8(u8proto.TCP) || proto == uint8(u8proto.UDP) {
-			e.DNSRules[pp.ToV1()] = rules
-		}
-	}
+	e.DNSRules = rules
 }

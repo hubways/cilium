@@ -1525,9 +1525,6 @@
         "enableEndpointSliceSynchronization": {
           "type": "boolean"
         },
-        "enableMCSAPISupport": {
-          "type": "boolean"
-        },
         "maxConnectedClusters": {
           "type": "integer"
         },
@@ -4562,6 +4559,14 @@
             "null",
             "integer"
           ]
+        }
+      },
+      "type": "object"
+    },
+    "k8sClusterNetworkPolicy": {
+      "properties": {
+        "enabled": {
+          "type": "boolean"
         }
       },
       "type": "object"

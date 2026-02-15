@@ -996,10 +996,6 @@
      - Enable the synchronization of Kubernetes EndpointSlices corresponding to the remote endpoints of appropriately-annotated global services through ClusterMesh
      - bool
      - ``false``
-   * - :spelling:ignore:`clustermesh.enableMCSAPISupport`
-     - Enable Multi-Cluster Services API support (deprecated; use clustermesh.mcsapi.enabled)
-     - bool
-     - ``false``
    * - :spelling:ignore:`clustermesh.maxConnectedClusters`
      - The maximum number of clusters to support in a ClusterMesh. This value cannot be changed on running clusters, and all clusters in a ClusterMesh must be configured with the same value. Values > 255 will decrease the maximum allocatable cluster-local identities. Supported values are 255 and 511.
      - int
@@ -2972,6 +2968,10 @@
      - The sustained request rate in requests per second.
      - int
      - 10
+   * - :spelling:ignore:`k8sClusterNetworkPolicy.enabled`
+     - Enable support for K8s Cluster Network Policy
+     - bool
+     - ``false``
    * - :spelling:ignore:`k8sNetworkPolicy.enabled`
      - Enable support for K8s NetworkPolicy
      - bool
