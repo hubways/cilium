@@ -82,6 +82,10 @@
 
 #define SNAT_COLLISION_RETRIES 32
 
+#ifndef EVENTS_MAP_RATE_LIMIT
+# define EVENTS_MAP_RATE_LIMIT 0
+#endif
+#define EVENTS_MAP_BURST_LIMIT 0
 #define POLICY_STATS_MAP_SIZE 200
 #define LB6_REVERSE_NAT_SK_MAP_SIZE 262144
 #define LB4_REVERSE_NAT_SK_MAP_SIZE 262144
@@ -176,9 +180,6 @@ return true; \
 break; \
 } \
 return false;
-
-#define CIDR_IDENTITY_RANGE_START ((1 << 24) + 1)
-#define CIDR_IDENTITY_RANGE_END   ((1 << 24) + (1<<16) - 1)
 
 /*
  *   **** WARNING, THIS FILE IS DEPRECATED, SEE COMMENT AT THE TOP ****
