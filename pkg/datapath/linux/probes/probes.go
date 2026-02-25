@@ -30,6 +30,7 @@ import (
 	"github.com/cilium/cilium/pkg/defaults"
 	"github.com/cilium/cilium/pkg/logging"
 	"github.com/cilium/cilium/pkg/logging/logfields"
+	"github.com/cilium/cilium/pkg/mac"
 	"github.com/cilium/cilium/pkg/netns"
 )
 
@@ -321,6 +322,66 @@ var HaveNetkit = sync.OnceValue(func() error {
 	})
 })
 
+// HaveNetkitTunableBufferMargins returns nil if the running kernel supports
+// configuring tuned buffer margins on netkit devices.
+var HaveNetkitTunableBufferMargins = sync.OnceValue(func() error {
+	ns, err := netns.New()
+	if err != nil {
+		return fmt.Errorf("create netns: %w", err)
+	}
+	defer ns.Close()
+
+	return ns.Do(func() error {
+		hostIfName := "tmpnktbm0"
+		peerIfName := "tmpnktbm1"
+		headroom := uint16(42)
+		tailroom := uint16(24)
+
+		var hostMac, peerMac mac.MAC
+		netkit := &netlink.Netkit{
+			LinkAttrs: netlink.LinkAttrs{
+				Name:         hostIfName,
+				TxQLen:       1000,
+				HardwareAddr: net.HardwareAddr(hostMac),
+			},
+			Mode:            netlink.NETKIT_MODE_L3,
+			Policy:          netlink.NETKIT_POLICY_FORWARD,
+			PeerPolicy:      netlink.NETKIT_POLICY_BLACKHOLE,
+			Scrub:           netlink.NETKIT_SCRUB_NONE,
+			PeerScrub:       netlink.NETKIT_SCRUB_DEFAULT,
+			DesiredHeadroom: headroom,
+			DesiredTailroom: tailroom,
+		}
+		netkit.SetPeerAttrs(&netlink.LinkAttrs{
+			Name:         peerIfName,
+			HardwareAddr: net.HardwareAddr(peerMac),
+		})
+
+		err = netlink.LinkAdd(netkit)
+		if err != nil {
+			return fmt.Errorf("create link: %w", err)
+		}
+		hostLink, err := safenetlink.LinkByName(hostIfName)
+		if err != nil {
+			return fmt.Errorf("query link: %w", err)
+		}
+		defer func() {
+			netlink.LinkDel(hostLink)
+		}()
+
+		hostNetkit, ok := hostLink.(*netlink.Netkit)
+		if !ok || hostNetkit == nil {
+			return fmt.Errorf("expected link of type *netlink.Netkit")
+		}
+
+		if hostNetkit.Headroom != headroom || hostNetkit.Tailroom != tailroom {
+			return fmt.Errorf("tunable buffer margins not supported")
+		}
+
+		return nil
+	})
+})
+
 // HaveSKBAdjustRoomL2RoomMACSupport tests whether the kernel supports the `bpf_skb_adjust_room` helper
 // with the `BPF_ADJ_ROOM_MAC` mode. To do so, we create a program that requests the passed in SKB
 // to be expanded by 20 bytes. The helper checks the `mode` argument and will return -ENOSUPP if
@@ -461,6 +522,42 @@ var HaveFibLookupSkipNeigh = sync.OnceValue(func() error {
 	defer objs.Close()
 
 	ret, err := objs.ProbeFibLookupSkipNeigh.Run(&ebpf.RunOptions{
+		// Newer kernels require that data is at least 14 bytes:
+		// https://github.com/torvalds/linux/commit/6b3d638ca897e099fa99bd6d02189d3176f80a47
+		Data:   make([]byte, 14),
+		Repeat: 1,
+	})
+	if err != nil {
+		return fmt.Errorf("running probe: %w", err)
+	}
+
+	if ret != 0 {
+		return ErrNotSupported
+	}
+
+	return nil
+})
+
+// HaveFibLookupTbid tests whether or not the kernel supports the
+// BPF_FIB_LOOKUP_TBID flag for bpf_fib_lookup.
+// https://lore.kernel.org/bpf/20230505-bpf-add-tbid-fib-lookup-v1-0-fd99f7162e76@gmail.com/T/#u
+var HaveFibLookupTbid = sync.OnceValue(func() error {
+	var objs bpfgen.ProbesObjects
+
+	err := bpfgen.LoadProbesObjects(&objs, &ebpf.CollectionOptions{})
+	var ve *ebpf.VerifierError
+	if errors.As(err, &ve) {
+		if _, err := fmt.Fprintf(os.Stderr, "Verifier error: %s\nVerifier log: %+v\n", err, ve); err != nil {
+			return fmt.Errorf("writing verifier log to stderr: %w", err)
+		}
+	}
+	if err != nil {
+		return fmt.Errorf("loading collection: %w", err)
+	}
+
+	defer objs.Close()
+
+	ret, err := objs.ProbeFibLookupTbid.Run(&ebpf.RunOptions{
 		// Newer kernels require that data is at least 14 bytes:
 		// https://github.com/torvalds/linux/commit/6b3d638ca897e099fa99bd6d02189d3176f80a47
 		Data:   make([]byte, 14),

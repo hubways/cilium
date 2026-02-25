@@ -1663,7 +1663,7 @@
    * - :spelling:ignore:`envoy.image`
      - Envoy container image.
      - object
-     - ``{"digest":"sha256:516becccd185e190893ff2e4bde656c7ce16d2d3901de056e852ce01c3ae271d","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.36.5-1770892622-f97ae52c05a1edbbdaa6393f8595431259cf2ca1","useDigest":true}``
+     - ``{"digest":"sha256:aad0f49e84436d1857894d109e84d9f04fa31e9cc0e56e439fa7572a017a0baf","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.36.5-1771332981-9e7e35f1d1f516c348c8b835dafde5c30fef9847","useDigest":true}``
    * - :spelling:ignore:`envoy.initContainers`
      - Init containers added to the cilium Envoy DaemonSet.
      - list
@@ -2744,6 +2744,14 @@
      - Configure whether the Envoy listeners should be exposed on the host network.
      - bool
      - ``false``
+   * - :spelling:ignore:`ingressController.hostNetwork.httpPort`
+     - Configure a specific port on the host network that gets used for the shared HTTP listener. If unset or 0, sharedListenerPort is used.
+     - int
+     - ``0``
+   * - :spelling:ignore:`ingressController.hostNetwork.httpsPort`
+     - Configure a specific port on the host network that gets used for the shared HTTPS listener. If unset or 0, sharedListenerPort is used.
+     - int
+     - ``0``
    * - :spelling:ignore:`ingressController.hostNetwork.nodes.matchLabels`
      - Specify the labels of the nodes where the Ingress listeners should be exposed  matchLabels:   kubernetes.io/os: linux   kubernetes.io/hostname: kind-worker
      - object
@@ -2752,6 +2760,10 @@
      - Configure a specific port on the host network that gets used for the shared listener.
      - int
      - ``8080``
+   * - :spelling:ignore:`ingressController.hostNetwork.tlsPassthroughPort`
+     - Configure a specific port on the host network that gets used for the shared TLS passthrough listener. If unset or 0, sharedListenerPort is used.
+     - int
+     - ``0``
    * - :spelling:ignore:`ingressController.ingressLBAnnotationPrefixes`
      - IngressLBAnnotations are the annotation and label prefixes, which are used to filter annotations and/or labels to propagate from Ingress to the Load Balancer service
      - list
@@ -3555,7 +3567,7 @@
    * - :spelling:ignore:`preflight.envoy.image`
      - Envoy pre-flight image.
      - object
-     - ``{"digest":"sha256:516becccd185e190893ff2e4bde656c7ce16d2d3901de056e852ce01c3ae271d","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.36.5-1770892622-f97ae52c05a1edbbdaa6393f8595431259cf2ca1","useDigest":true}``
+     - ``{"digest":"sha256:aad0f49e84436d1857894d109e84d9f04fa31e9cc0e56e439fa7572a017a0baf","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.36.5-1771332981-9e7e35f1d1f516c348c8b835dafde5c30fef9847","useDigest":true}``
    * - :spelling:ignore:`preflight.extraEnv`
      - Additional preflight environment variables.
      - list

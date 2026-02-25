@@ -106,6 +106,12 @@ func TestPrivilegedHaveNetkit(t *testing.T) {
 	assert.NoError(t, HaveNetkit())
 }
 
+func TestPrivilegedHaveNetkitTunableBufferMargins(t *testing.T) {
+	testutils.PrivilegedTest(t)
+	testutils.SkipOnOldKernel(t, "6.18", "netkit tbm")
+	assert.NoError(t, HaveNetkitTunableBufferMargins())
+}
+
 func TestPrivilegedHaveFibLookupSkipNeigh(t *testing.T) {
 	testutils.PrivilegedTest(t)
 	testutils.SkipOnOldKernel(t, "6.6", "BPF_FIB_LOOKUP_SKIP_NEIGH")
@@ -126,4 +132,10 @@ func TestPrivilegedBIGTCPTunnel(t *testing.T) {
 	testutils.PrivilegedTest(t)
 	testutils.SkipOnOldKernel(t, "6.20", "BIG TCP for UDP tunnels")
 	assert.NoError(t, HaveBIGTCPTunnel())
+}
+
+func TestPrivilegedHaveFibLookupTBID(t *testing.T) {
+	testutils.PrivilegedTest(t)
+	testutils.SkipOnOldKernel(t, "6.5", "BPF_FIB_LOOKUP_TBID")
+	assert.NoError(t, HaveFibLookupTbid())
 }

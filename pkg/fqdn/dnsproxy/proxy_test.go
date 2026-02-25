@@ -170,7 +170,7 @@ func (s *DNSProxyTestSuite) LookupRegisteredEndpoint(ip netip.Addr) (*endpoint.E
 		return nil, false, fmt.Errorf("No EPs available when restoring")
 	}
 	model := newTestEndpointModel(int(epID1), endpoint.StateReady)
-	ep, err := endpoint.NewEndpointFromChangeModel(context.Background(), endpoint.EndpointParams{
+	ep, err := endpoint.NewEndpointFromChangeModel(endpoint.EndpointParams{
 		EPBuildQueue:     &endpoint.MockEndpointBuildQueue{},
 		NamedPortsGetter: testipcache.NewMockIPCache(),
 		Allocator:        testidentity.NewMockIdentityAllocator(nil),
@@ -905,7 +905,7 @@ func TestPrivilegedFullPathDependence(t *testing.T) {
 
 	// Restore rules
 	model := newTestEndpointModel(int(epID1), endpoint.StateReady)
-	ep1, err := endpoint.NewEndpointFromChangeModel(context.Background(), endpoint.EndpointParams{
+	ep1, err := endpoint.NewEndpointFromChangeModel(endpoint.EndpointParams{
 		EPBuildQueue:     &endpoint.MockEndpointBuildQueue{},
 		NamedPortsGetter: testipcache.NewMockIPCache(),
 		Allocator:        testidentity.NewMockIdentityAllocator(nil),
@@ -967,7 +967,7 @@ func TestPrivilegedFullPathDependence(t *testing.T) {
 
 	// Restore rules for epID3
 	modelEP3 := newTestEndpointModel(int(epID3), endpoint.StateReady)
-	ep3, err := endpoint.NewEndpointFromChangeModel(context.Background(), endpoint.EndpointParams{
+	ep3, err := endpoint.NewEndpointFromChangeModel(endpoint.EndpointParams{
 		EPBuildQueue:     &endpoint.MockEndpointBuildQueue{},
 		NamedPortsGetter: testipcache.NewMockIPCache(),
 		Allocator:        testidentity.NewMockIdentityAllocator(nil),
@@ -1189,7 +1189,7 @@ func TestPrivilegedRestoredEndpoint(t *testing.T) {
 	// restore rules, set the mock to restoring state
 	s.restoring = true
 	model := newTestEndpointModel(int(epID1), endpoint.StateReady)
-	ep1, err := endpoint.NewEndpointFromChangeModel(context.Background(), endpoint.EndpointParams{
+	ep1, err := endpoint.NewEndpointFromChangeModel(endpoint.EndpointParams{
 		EPBuildQueue:     &endpoint.MockEndpointBuildQueue{},
 		NamedPortsGetter: testipcache.NewMockIPCache(),
 		Allocator:        testidentity.NewMockIdentityAllocator(nil),
@@ -1566,7 +1566,7 @@ func Benchmark_perEPAllow_setPortRulesForID(b *testing.B) {
 	// ensure we also count things like the strings "borrowed" from rulesPerEP
 	b.ReportMetric(float64(getMemStats().HeapInuse-initialHeap), "B(HeapInUse)/op")
 
-	for epID := uint64(0); epID < nEPs; epID++ {
+	for epID := range uint64(nEPs) {
 		pea.setPortRulesForID(c, epID, udpProtoPort8053, nil)
 	}
 	if len(pea) > 0 {
@@ -1574,7 +1574,7 @@ func Benchmark_perEPAllow_setPortRulesForID(b *testing.B) {
 	}
 	b.StopTimer()
 	// Remove all the inserted rules to ensure the cache goes down to zero entries
-	for epID := uint64(0); epID < 20; epID++ {
+	for epID := range uint64(20) {
 		pea.setPortRulesForID(c, epID, udpProtoPort8053, nil)
 	}
 	if len(pea) > 0 || len(c) > 0 {
@@ -1666,7 +1666,7 @@ func Benchmark_perEPAllow_setPortRulesForID_large(b *testing.B) {
 	b.ReportAllocs()
 
 	for b.Loop() {
-		for epID := uint64(0); epID < numEPs; epID++ {
+		for epID := range numEPs {
 			pea.setPortRulesForID(c, epID, udpProtoPort8053, rules)
 		}
 	}
@@ -1688,7 +1688,7 @@ func Benchmark_perEPAllow_setPortRulesForID_large(b *testing.B) {
 	fmt.Printf("\tSys = %v MiB", bToMb(m.Sys))
 	fmt.Printf("\tNumGC = %v\n", m.NumGC)
 	// Remove all the inserted rules to ensure both indexes go to zero entries
-	for epID := uint64(0); epID < numEPs; epID++ {
+	for epID := range numEPs {
 		pea.setPortRulesForID(c, epID, udpProtoPort8053, nil)
 	}
 	if len(pea) > 0 || len(c) > 0 {

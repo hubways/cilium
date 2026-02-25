@@ -84,9 +84,9 @@ lxc_redirect_to_host(struct __ctx_buff *ctx, __u32 src_sec_identity,
 		     __be16 proto, struct trace_ctx *trace)
 {
 	send_trace_notify(ctx, TRACE_TO_HOST, src_sec_identity, HOST_ID,
-			  TRACE_EP_ID_UNKNOWN, CILIUM_NET_IFINDEX,
+			  TRACE_EP_ID_UNKNOWN, CONFIG(cilium_net_ifindex),
 			  trace->reason, trace->monitor, proto);
-	return ctx_redirect(ctx, CILIUM_NET_IFINDEX, BPF_F_INGRESS);
+	return ctx_redirect(ctx, CONFIG(cilium_net_ifindex), BPF_F_INGRESS);
 }
 #endif
 
@@ -787,8 +787,9 @@ ipv6_forward_to_destination(struct __ctx_buff *ctx, struct ipv6hdr *ip6,
 #endif
 	if (is_defined(ENABLE_HOST_ROUTING)) {
 		int oif = 0;
+		__u32 tbid = CONFIG(fib_table_id);
 
-		ret = fib_redirect_v6(ctx, ETH_HLEN, ip6, false, false, ext_err, &oif);
+		ret = fib_redirect_v6(ctx, ETH_HLEN, ip6, false, false, ext_err, &oif, tbid);
 		switch (ret) {
 		case CTX_ACT_REDIRECT:
 			send_trace_notify(ctx, TRACE_TO_NETWORK, SECLABEL_IPV6,
@@ -1333,8 +1334,9 @@ skip_vtep:
 
 	if (is_defined(ENABLE_HOST_ROUTING)) {
 		int oif = 0;
+		__u32 tbid = CONFIG(fib_table_id);
 
-		ret = fib_redirect_v4(ctx, ETH_HLEN, ip4, false, false, ext_err, &oif);
+		ret = fib_redirect_v4(ctx, ETH_HLEN, ip4, false, false, ext_err, &oif, tbid);
 		switch (ret) {
 		case CTX_ACT_REDIRECT:
 			send_trace_notify(ctx, TRACE_TO_NETWORK, SECLABEL_IPV4,
