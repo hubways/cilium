@@ -21,6 +21,7 @@ import (
 	"github.com/cilium/cilium/pkg/defaults"
 	"github.com/cilium/cilium/pkg/endpointstate"
 	"github.com/cilium/cilium/pkg/maps/callsmap"
+	"github.com/cilium/cilium/pkg/maps/registry"
 	"github.com/cilium/cilium/pkg/node/manager"
 	"github.com/cilium/cilium/pkg/option"
 	"github.com/cilium/cilium/pkg/promise"
@@ -40,6 +41,8 @@ type loader struct {
 	// a call to Reinitialize.
 	templateCache *objectCache
 
+	registry *registry.MapRegistry
+
 	hostDpInitializedOnce sync.Once
 	hostDpInitialized     chan struct{}
 
@@ -57,6 +60,7 @@ type loader struct {
 type Params struct {
 	cell.In
 
+	MapRegistry        *registry.MapRegistry
 	JobGroup           job.Group
 	Logger             *slog.Logger
 	Sysctl             sysctl.Sysctl
@@ -70,9 +74,8 @@ type Params struct {
 	EPRestorer         promise.Promise[endpointstate.Restorer]
 	BIGTCPConfig       *bigtcp.Configuration
 
-	// Force map initialisation before loader. You should not use these otherwise.
-	// Some of the entries in this slice may be nil.
-	BpfMaps []bpf.BpfMap `group:"bpf-maps"`
+	// Force map initialisation before loader.
+	bpf.MapGroup
 }
 
 // newLoader returns a new loader.
@@ -81,6 +84,7 @@ func newLoader(p Params) *loader {
 	return &loader{
 		logger:             p.Logger,
 		templateCache:      newObjectCache(p.Logger, p.ConfigWriter, filepath.Join(option.Config.StateDir, defaults.TemplatesDir)),
+		registry:           p.MapRegistry,
 		sysctl:             p.Sysctl,
 		hostDpInitialized:  make(chan struct{}),
 		prefilter:          p.Prefilter,

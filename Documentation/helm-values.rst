@@ -1663,7 +1663,7 @@
    * - :spelling:ignore:`envoy.image`
      - Envoy container image.
      - object
-     - ``{"digest":"sha256:954fffe2d76ce9b31b88b5d6fd97196204fa91200e00941b73786b0f65d3960a","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.36.5-1772055364-64e847a66ad2391f4c7cda401541b6e06abe03c5","useDigest":true}``
+     - ``{"digest":"sha256:e276f5f47a8ed722bdaad25f468e420825581bdf1d74f7a5e658429ec45b2691","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.36.5-1772193645-b07509fe16cf8f27fc2eeffb641e19c040aaa4cf","useDigest":true}``
    * - :spelling:ignore:`envoy.initContainers`
      - Init containers added to the cilium Envoy DaemonSet.
      - list
@@ -3215,7 +3215,7 @@
    * - :spelling:ignore:`nodeinit.image`
      - node-init image.
      - object
-     - ``{"digest":"sha256:50b9cf9c280096b59b80d2fc8ee6638facef79ac18998a22f0cbc40d5d28c16f","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/startup-script","tag":"1763560095-8f36c34","useDigest":true}``
+     - ``{"digest":"sha256:a97e8766c62e0e36f47e366f7571d561bd9c603515e94b9f4cb8e6c131843d02","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/startup-script","tag":"1770904355-d9c9e58","useDigest":true}``
    * - :spelling:ignore:`nodeinit.nodeSelector`
      - Node labels for nodeinit pod assignment ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector
      - object
@@ -3563,7 +3563,7 @@
    * - :spelling:ignore:`preflight.envoy.image`
      - Envoy pre-flight image.
      - object
-     - ``{"digest":"sha256:954fffe2d76ce9b31b88b5d6fd97196204fa91200e00941b73786b0f65d3960a","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.36.5-1772055364-64e847a66ad2391f4c7cda401541b6e06abe03c5","useDigest":true}``
+     - ``{"digest":"sha256:e276f5f47a8ed722bdaad25f468e420825581bdf1d74f7a5e658429ec45b2691","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.36.5-1772193645-b07509fe16cf8f27fc2eeffb641e19c040aaa4cf","useDigest":true}``
    * - :spelling:ignore:`preflight.extraEnv`
      - Additional preflight environment variables.
      - list
