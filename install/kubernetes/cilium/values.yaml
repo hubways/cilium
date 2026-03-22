@@ -224,6 +224,22 @@ agent: true
 name: cilium
 # -- Roll out cilium agent pods automatically when configmap is updated.
 rollOutCiliumPods: false
+# -- Configuration for the ConfigMap drift detection feature.
+# When enabled, the agent continuously watches the cilium-config ConfigMap
+# and exposes a cilium_drift_checker_config_delta Prometheus metric reporting
+# the number of keys that differ between the ConfigMap and the agent's active
+# settings. A non-zero value indicates that the agent has not yet applied all
+# current ConfigMap changes and needs to be restarted.
+configDriftDetection:
+  # -- Enable watching of the cilium-config ConfigMap and reflecting its
+  # contents into the agent's internal DynamicConfig table.
+  enabled: true
+  # -- Enable the drift checker which compares the DynamicConfig table against
+  # the agent's active settings and publishes the
+  # cilium_drift_checker_config_delta metric.
+  driftChecker: true
+  # -- List of config-map keys to ignore when computing the drift delta.
+  ignoredKeys: []
 # -- Agent container image.
 image:
   # @schema
@@ -2722,9 +2738,9 @@ envoy:
     # @schema
     override: ~
     repository: "quay.io/cilium/cilium-envoy"
-    tag: "v1.36.5-1773220197-f7a54727954edc6855e6f8bc674aff8ca57a80da"
+    tag: "v1.36.5-1773729229-f15b6334115ed4d8027b2460a8eb1f6c611660f0"
     pullPolicy: "Always"
-    digest: "sha256:f3b4865104d4bc687e49ba401e9c6add7d36d316a90999afde74a6eaf7732960"
+    digest: "sha256:70cf6a84a5518bdc501b4fa96eafaf8a8d88517fa2cf42e65977680c3f6f1462"
     useDigest: true
   # -- Init containers added to the cilium Envoy DaemonSet.
   initContainers: []
@@ -3458,9 +3474,9 @@ preflight:
       # @schema
       override: ~
       repository: "quay.io/cilium/cilium-envoy"
-      tag: "v1.36.5-1773220197-f7a54727954edc6855e6f8bc674aff8ca57a80da"
+      tag: "v1.36.5-1773729229-f15b6334115ed4d8027b2460a8eb1f6c611660f0"
       pullPolicy: "Always"
-      digest: "sha256:f3b4865104d4bc687e49ba401e9c6add7d36d316a90999afde74a6eaf7732960"
+      digest: "sha256:70cf6a84a5518bdc501b4fa96eafaf8a8d88517fa2cf42e65977680c3f6f1462"
       useDigest: true
   # -- The priority class to use for the preflight pod.
   priorityClassName: ""

@@ -1160,6 +1160,22 @@
      - commonLabels allows users to add common labels for all Cilium resources.
      - object
      - ``{}``
+   * - :spelling:ignore:`configDriftDetection`
+     - Configuration for the ConfigMap drift detection feature. When enabled, the agent continuously watches the cilium-config ConfigMap and exposes a cilium_drift_checker_config_delta Prometheus metric reporting the number of keys that differ between the ConfigMap and the agent's active settings. A non-zero value indicates that the agent has not yet applied all current ConfigMap changes and needs to be restarted.
+     - object
+     - ``{"driftChecker":true,"enabled":true,"ignoredKeys":[]}``
+   * - :spelling:ignore:`configDriftDetection.driftChecker`
+     - Enable the drift checker which compares the DynamicConfig table against the agent's active settings and publishes the cilium_drift_checker_config_delta metric.
+     - bool
+     - ``true``
+   * - :spelling:ignore:`configDriftDetection.enabled`
+     - Enable watching of the cilium-config ConfigMap and reflecting its contents into the agent's internal DynamicConfig table.
+     - bool
+     - ``true``
+   * - :spelling:ignore:`configDriftDetection.ignoredKeys`
+     - List of config-map keys to ignore when computing the drift delta.
+     - list
+     - ``[]``
    * - :spelling:ignore:`connectivityProbeFrequencyRatio`
      - Ratio of the connectivity probe frequency vs resource usage, a float in [0, 1]. 0 will give more frequent probing, 1 will give less frequent probing. Probing frequency is dynamically adjusted based on the cluster size.
      - float64
@@ -1663,7 +1679,7 @@
    * - :spelling:ignore:`envoy.image`
      - Envoy container image.
      - object
-     - ``{"digest":"sha256:f3b4865104d4bc687e49ba401e9c6add7d36d316a90999afde74a6eaf7732960","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.36.5-1773220197-f7a54727954edc6855e6f8bc674aff8ca57a80da","useDigest":true}``
+     - ``{"digest":"sha256:70cf6a84a5518bdc501b4fa96eafaf8a8d88517fa2cf42e65977680c3f6f1462","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.36.5-1773729229-f15b6334115ed4d8027b2460a8eb1f6c611660f0","useDigest":true}``
    * - :spelling:ignore:`envoy.initContainers`
      - Init containers added to the cilium Envoy DaemonSet.
      - list
@@ -3567,7 +3583,7 @@
    * - :spelling:ignore:`preflight.envoy.image`
      - Envoy pre-flight image.
      - object
-     - ``{"digest":"sha256:f3b4865104d4bc687e49ba401e9c6add7d36d316a90999afde74a6eaf7732960","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.36.5-1773220197-f7a54727954edc6855e6f8bc674aff8ca57a80da","useDigest":true}``
+     - ``{"digest":"sha256:70cf6a84a5518bdc501b4fa96eafaf8a8d88517fa2cf42e65977680c3f6f1462","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.36.5-1773729229-f15b6334115ed4d8027b2460a8eb1f6c611660f0","useDigest":true}``
    * - :spelling:ignore:`preflight.extraEnv`
      - Additional preflight environment variables.
      - list

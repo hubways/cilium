@@ -167,11 +167,11 @@ do_decrypt(struct __ctx_buff *ctx, __be16 proto)
 		return CTX_ACT_OK;
 	}
 	ctx->mark = 0;
-#ifdef ENABLE_ENDPOINT_ROUTES
-	return CTX_ACT_OK;
-#else
+
+	if (CONFIG(enable_endpoint_routes))
+		return CTX_ACT_OK;
+
 	return ctx_redirect(ctx, CONFIG(cilium_host_ifindex), 0);
-#endif /* ENABLE_ENDPOINT_ROUTES */
 }
 
 /* checks whether a IPsec redirect should be performed for the source
@@ -221,7 +221,7 @@ ipsec_maybe_redirect_to_encrypt(struct __ctx_buff *ctx, __be16 proto,
 		 * set_ipsec_encrypt to obtain the correct node ID and spi.
 		 */
 		if (ctx_is_overlay(ctx)) {
-			fake_info.tunnel_endpoint.ip4 = ip4->daddr;
+			fake_info.tunnel_endpoint.ip4.be32 = ip4->daddr;
 			fake_info.flag_has_tunnel_ep = true;
 
 			dst = &fake_info;
