@@ -32,8 +32,12 @@ type Node struct {
 	EnableConntrackAccounting bool `config:"enable_conntrack_accounting"`
 	// Enable per endpoint routes.
 	EnableEndpointRoutes bool `config:"enable_endpoint_routes"`
+	// Enable setting identity mark for local traffic.
+	EnableIdentityMark bool `config:"enable_identity_mark"`
 	// Use jiffies (count of timer ticks since boot).
 	EnableJiffies bool `config:"enable_jiffies"`
+	// Enable dynamic source IP resolution for SNAT via linux's routing table.
+	EnableNodeportSourceLookup bool `config:"enable_nodeport_source_lookup"`
 	// Enable BPF-based proxy redirection.
 	EnableTproxy bool `config:"enable_tproxy"`
 	// Maximum number of messages that can be written to BPF events map in 1
@@ -63,6 +67,8 @@ type Node struct {
 	ServiceLoopbackIPv6 types.V6Addr `config:"service_loopback_ipv6"`
 	// Whether or not BPF_FIB_LOOKUP_SKIP_NEIGH is supported.
 	SupportsFIBLookupSkipNeigh bool `config:"supports_fib_lookup_skip_neigh"`
+	// Whether or not BPF_FIB_LOOKUP_SRC is supported.
+	SupportsFIBLookupSrc bool `config:"supports_fib_lookup_src"`
 	// Length of payload to capture when tracing native packets.
 	TracePayloadLen uint32 `config:"trace_payload_len"`
 	// Length of payload to capture when tracing overlay packets.
@@ -76,11 +82,11 @@ func NewNode() *Node {
 		cast[types.MACAddr]([]byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}),
 		0x0,
 		cast[types.MACAddr]([]byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}),
-		0x0, 0x8, false, 0x0, false, false, false, false, 0x0, 0x0,
-		0x0, 0x0, 0x0, cast[types.V4Addr]([]byte{0x0, 0x0, 0x0, 0x0}),
+		0x0, 0x8, false, 0x0, false, false, false, false, false, false,
+		0x0, 0x0, 0x0, 0x0, 0x0, cast[types.V4Addr]([]byte{0x0, 0x0, 0x0, 0x0}),
 		0x0, 0x0, false,
 		cast[types.V6Addr]([]byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}),
 		cast[types.V4Addr]([]byte{0x0, 0x0, 0x0, 0x0}),
 		cast[types.V6Addr]([]byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}),
-		false, 0x0, 0x0, 0x0}
+		false, false, 0x0, 0x0, 0x0}
 }

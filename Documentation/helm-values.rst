@@ -111,7 +111,7 @@
    * - :spelling:ignore:`authentication.mutual.spire.install.agent.image`
      - SPIRE agent image
      - object
-     - ``{"digest":"sha256:f8c40f435d42bd8b5420768b95f6b41acc695fb13cd9f9728d27c8e21e07d803","override":null,"pullPolicy":"Always","repository":"ghcr.io/spiffe/spire-agent","tag":"1.14.2","useDigest":true}``
+     - ``{"digest":"sha256:f93996a9396ec4042a48042085c2abf1a0f8f0f3b339571e06ebfebbf94bb830","override":null,"pullPolicy":"Always","repository":"ghcr.io/spiffe/spire-agent","tag":"1.14.4","useDigest":true}``
    * - :spelling:ignore:`authentication.mutual.spire.install.agent.labels`
      - SPIRE agent labels
      - object
@@ -199,7 +199,7 @@
    * - :spelling:ignore:`authentication.mutual.spire.install.server.image`
      - SPIRE server image
      - object
-     - ``{"digest":"sha256:12f30ce1b6e298cf0dc7bedd5a67b174f03a4c5130ab825fba0ec3dcf407d0b2","override":null,"pullPolicy":"Always","repository":"ghcr.io/spiffe/spire-server","tag":"1.14.2","useDigest":true}``
+     - ``{"digest":"sha256:27c7d356768b8641c569745e1121328affeb4aaabe0c974d33ff92dddecf30ef","override":null,"pullPolicy":"Always","repository":"ghcr.io/spiffe/spire-server","tag":"1.14.4","useDigest":true}``
    * - :spelling:ignore:`authentication.mutual.spire.install.server.initContainers`
      - SPIRE server init containers
      - list
@@ -3175,7 +3175,7 @@
    * - :spelling:ignore:`nodePort`
      - Configure N-S k8s service loadbalancing
      - object
-     - ``{"addresses":null,"autoProtectPortRange":true,"bindProtection":true,"enableHealthCheck":true,"enableHealthCheckLoadBalancerIP":false}``
+     - ``{"addresses":null,"autoProtectPortRange":true,"bindProtection":true,"enableDynamicSourceLookup":false,"enableHealthCheck":true,"enableHealthCheckLoadBalancerIP":false}``
    * - :spelling:ignore:`nodePort.addresses`
      - List of CIDRs for choosing which IP addresses assigned to native devices are used for NodePort load-balancing. By default this is empty and the first suitable, preferably private, IPv4 and IPv6 address assigned to each device is used.  Example:    addresses: ["192.168.1.0/24", "2001::/64"]
      - string
@@ -3188,6 +3188,10 @@
      - Set to true to prevent applications binding to service ports.
      - bool
      - ``true``
+   * - :spelling:ignore:`nodePort.enableDynamicSourceLookup`
+     - Enable dynamic source IP resolution for SNAT via linux's routing table. The kernel must support this feature.
+     - bool
+     - ``false``
    * - :spelling:ignore:`nodePort.enableHealthCheck`
      - Enable healthcheck nodePort server for NodePort services
      - bool
