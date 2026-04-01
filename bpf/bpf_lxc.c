@@ -791,6 +791,13 @@ ipv6_forward_to_destination(struct __ctx_buff *ctx, struct ipv6hdr *ip6,
 		__u32 tbid = CONFIG(fib_table_id);
 
 		ret = fib_redirect_v6(ctx, ETH_HLEN, ip6, false, false, ext_err, &oif, tbid);
+		/*
+		 * if the endpoint is configured with an explicit table id,
+		 * be strict and drop the traffic if we are not redirected.
+		 */
+		if (tbid && ret != CTX_ACT_REDIRECT)
+			return ret;
+
 		switch (ret) {
 		case CTX_ACT_REDIRECT:
 			send_trace_notify(ctx, TRACE_TO_NETWORK, SECLABEL_IPV6,
@@ -1350,6 +1357,13 @@ ipv4_forward_to_destination(struct __ctx_buff *ctx, struct iphdr *ip4,
 		__u32 tbid = CONFIG(fib_table_id);
 
 		ret = fib_redirect_v4(ctx, ETH_HLEN, ip4, false, false, ext_err, &oif, tbid);
+		/*
+		 * if the endpoint is configured with an explicit table id,
+		 * be strict and drop the traffic if we are not redirected.
+		 */
+		if (tbid && ret != CTX_ACT_REDIRECT)
+			return ret;
+
 		switch (ret) {
 		case CTX_ACT_REDIRECT:
 			send_trace_notify(ctx, TRACE_TO_NETWORK, SECLABEL_IPV4,
@@ -2676,7 +2690,7 @@ int tail_policy_denied_ipv4(struct __ctx_buff *ctx)
 
 	ret = generate_icmp4_reply(ctx, ICMP_DEST_UNREACH, ICMP_PKT_FILTERED);
 	if (!ret) {
-		cilium_dbg_capture(ctx, DBG_CAPTURE_DELIVERY, ctx_get_ifindex(ctx));
+		cilium_dbg(ctx, DBG_LOCAL_DELIVERY, LXC_ID, SECLABEL_IPV4);
 		ret = redirect_self(ctx);
 
 		if (!IS_ERR(ret)) {
@@ -2685,7 +2699,7 @@ int tail_policy_denied_ipv4(struct __ctx_buff *ctx)
 		}
 	}
 
-	return send_drop_notify_error(ctx, SECLABEL_IPV4, ret, METRIC_EGRESS);
+	return send_drop_notify_error(ctx, SECLABEL_IPV4, verdict, METRIC_EGRESS);
 }
 #endif /* ENABLE_IPV4 */
 
