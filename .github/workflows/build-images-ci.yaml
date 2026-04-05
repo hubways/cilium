@@ -53,6 +53,9 @@ jobs:
     outputs:
       sha: ${{ steps.tag.outputs.sha }}
     strategy:
+      # Only fail-fast on pull_request_target events. For push and merge_group events, we want to run all builds even
+      # if some of them fail, to make sure one of the image is not broken accidentally and the PR is still merged.
+      fail-fast: ${{ github.event_name != 'pull_request_target' }}
       matrix:
         include:
           - name: cilium
@@ -424,7 +427,9 @@ jobs:
     name: Post test comment for Renovate PRs after images built
     runs-on: ubuntu-24.04
     needs: pre-comment
-    environment: "Trigger CI from renovate PRs"
+    environment:
+      name: "Trigger CI from renovate PRs"
+      deployment: false
     if: ${{
          github.event_name == 'pull_request_target' &&
          github.event.pull_request.user.login == vars.RENOVATE_BOT_USERNAME

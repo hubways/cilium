@@ -370,10 +370,18 @@ Added Metrics
   proxy redirects that were missing during endpoint policy calculation.
 * ``cilium_endpoint_component_status`` was added and reports the number of endpoints
   tagged by the status (``OK``, ``Warning``, ``Failure``) of each component (``BPF``, ``Policy``).
+* ``cilium_kubernetes_resource_sync_duration`` was added and reports duration in seconds
+  of a specific Kubernetes resource sync.
 
 Changed Metrics
 ###############
 
+* The Cilium Operator REST API endpoint ``/v1/metrics`` (``DumpMetrics``) now
+  returns per-quantile values for histogram and summary metrics instead of a
+  raw sample sum. Histogram metrics now emit three entries with quantile labels
+  ``0.5``, ``0.9``, and ``0.99``. Summary metrics emit one entry per declared
+  quantile. This aligns the operator metrics API output with the behavior of
+  ``cilium-dbg metrics list``.
 * The ``cilium_feature_np_other_l7_policies_total`` metric no longer counts
   Kafka policies, as Kafka-aware network policy support has been removed.
 * The metric ``policy_change_total`` now reports additional ``source`` (directory, k8s, custom, generated)

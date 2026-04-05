@@ -21,24 +21,27 @@ import (
 	"github.com/vishvananda/netlink"
 
 	"github.com/cilium/cilium/pkg/cidr"
-	fakeTypes "github.com/cilium/cilium/pkg/datapath/fake/types"
+	"github.com/cilium/cilium/pkg/datapath/config"
 	dpdef "github.com/cilium/cilium/pkg/datapath/linux/config/defines"
+	fakeipsec "github.com/cilium/cilium/pkg/datapath/linux/ipsec/fake"
+	ipsec "github.com/cilium/cilium/pkg/datapath/linux/ipsec/types"
 	"github.com/cilium/cilium/pkg/datapath/linux/sysctl"
 	"github.com/cilium/cilium/pkg/datapath/tables"
-	datapath "github.com/cilium/cilium/pkg/datapath/types"
 	"github.com/cilium/cilium/pkg/hive"
 	"github.com/cilium/cilium/pkg/kpr"
 	"github.com/cilium/cilium/pkg/loadbalancer"
 	"github.com/cilium/cilium/pkg/maglev"
 	"github.com/cilium/cilium/pkg/maps/nodemap"
 	"github.com/cilium/cilium/pkg/maps/nodemap/fake"
+	"github.com/cilium/cilium/pkg/node"
+	fakenode "github.com/cilium/cilium/pkg/node/fake"
 	"github.com/cilium/cilium/pkg/option"
 	"github.com/cilium/cilium/pkg/testutils"
 	"github.com/cilium/cilium/pkg/testutils/netns"
 )
 
 var (
-	dummyNodeCfg = datapath.LocalNodeConfiguration{
+	dummyNodeCfg = config.Config{
 		NodeIPv4:            ipv4DummyAddr,
 		NodeIPv6:            ipv6DummyAddr,
 		CiliumInternalIPv4:  ipv4DummyAddr,
@@ -74,7 +77,7 @@ func (b *badWriter) Write(p []byte) (int, error) {
 	return 0, errors.New("bad write :(")
 }
 
-type writeFn func(io.Writer, datapath.ConfigWriter) error
+type writeFn func(io.Writer, Writer) error
 
 func writeConfig(t *testing.T, header string, write writeFn) {
 	tests := []struct {
@@ -94,7 +97,7 @@ func writeConfig(t *testing.T, header string, write writeFn) {
 		},
 	}
 	for _, test := range tests {
-		var writer datapath.ConfigWriter
+		var writer Writer
 		t.Logf("  Testing %s configuration: %s", header, test.description)
 		h := hive.New(
 			provideNodemap,
@@ -102,13 +105,13 @@ func writeConfig(t *testing.T, header string, write writeFn) {
 			maglev.Cell,
 			cell.Provide(func() loadbalancer.Config { return loadbalancer.DefaultConfig }),
 			cell.Provide(
-				fakeTypes.NewNodeAddressing,
+				fakenode.NewAddressing,
 				func() sysctl.Sysctl { return sysctl.NewDirectSysctl(afero.NewOsFs(), "/proc") },
 				NewHeaderfileWriter,
-				func() datapath.IPsecConfig { return fakeTypes.IPsecConfig{} },
+				func() ipsec.Config { return fakeipsec.Config{} },
 			),
 			kpr.Cell,
-			cell.Invoke(func(writer_ datapath.ConfigWriter) {
+			cell.Invoke(func(writer_ Writer) {
 				writer = writer_
 			}),
 		)
@@ -165,7 +168,7 @@ func TestPrivilegedWriteNodeConfig(t *testing.T) {
 	setupCiliumDummyDevices(t, ns)
 	err := ns.Do(func() error {
 		setupConfigSuite(t)
-		writeConfig(t, "node", func(w io.Writer, dp datapath.ConfigWriter) error {
+		writeConfig(t, "node", func(w io.Writer, dp Writer) error {
 			return dp.WriteNodeConfig(w, &dummyNodeCfg)
 		})
 		return nil
@@ -175,7 +178,7 @@ func TestPrivilegedWriteNodeConfig(t *testing.T) {
 
 func TestPrivilegedWriteNetdevConfig(t *testing.T) {
 	setupConfigSuite(t)
-	writeConfig(t, "netdev", func(w io.Writer, dp datapath.ConfigWriter) error {
+	writeConfig(t, "netdev", func(w io.Writer, dp Writer) error {
 		return dp.WriteNetdevConfig(w, dummyDevCfg.GetOptions())
 	})
 }
@@ -290,15 +293,15 @@ func TestPrivilegedWriteNodeConfigExtraDefines(t *testing.T) {
 		setupConfigSuite(t)
 
 		var (
-			na datapath.NodeAddressing
+			na node.Addressing
 		)
 		h := hive.New(
 			cell.Provide(
-				fakeTypes.NewNodeAddressing,
+				fakenode.NewAddressing,
 			),
 			maglev.Cell,
 			cell.Invoke(func(
-				nodeaddressing datapath.NodeAddressing,
+				nodeaddressing node.Addressing,
 			) {
 				na = nodeaddressing
 			}),
@@ -333,7 +336,7 @@ func TestPrivilegedWriteNodeConfigExtraDefines(t *testing.T) {
 
 		// Assert that an error is returned when one extra define function returns an error
 		cfg, err = NewHeaderfileWriter(WriterParams{
-			NodeAddressing:   fakeTypes.NewNodeAddressing(),
+			NodeAddressing:   fakenode.NewAddressing(),
 			NodeExtraDefines: nil,
 			NodeExtraDefineFns: []dpdef.Fn{
 				func() (dpdef.Map, error) { return nil, errors.New("failing on purpose") },
@@ -348,7 +351,7 @@ func TestPrivilegedWriteNodeConfigExtraDefines(t *testing.T) {
 
 		// Assert that an error is returned when one extra define would overwrite an already existing entry
 		cfg, err = NewHeaderfileWriter(WriterParams{
-			NodeAddressing:   fakeTypes.NewNodeAddressing(),
+			NodeAddressing:   fakenode.NewAddressing(),
 			NodeExtraDefines: nil,
 			NodeExtraDefineFns: []dpdef.Fn{
 				func() (dpdef.Map, error) { return dpdef.Map{"FOO": "0x1", "BAR": "0x2"}, nil },
@@ -446,7 +449,7 @@ func TestPrivilegedNewHeaderfileWriter(t *testing.T) {
 		var buffer bytes.Buffer
 
 		_, err := NewHeaderfileWriter(WriterParams{
-			NodeAddressing:     fakeTypes.NewNodeAddressing(),
+			NodeAddressing:     fakenode.NewAddressing(),
 			NodeExtraDefines:   []dpdef.Map{a, a},
 			NodeExtraDefineFns: nil,
 			Sysctl:             sysctl.NewDirectSysctl(afero.NewOsFs(), "/proc"),
@@ -456,7 +459,7 @@ func TestPrivilegedNewHeaderfileWriter(t *testing.T) {
 		require.Error(t, err, "duplicate keys should be rejected")
 
 		cfg, err := NewHeaderfileWriter(WriterParams{
-			NodeAddressing:     fakeTypes.NewNodeAddressing(),
+			NodeAddressing:     fakenode.NewAddressing(),
 			NodeExtraDefines:   []dpdef.Map{a},
 			NodeExtraDefineFns: nil,
 			Sysctl:             sysctl.NewDirectSysctl(afero.NewOsFs(), "/proc"),
@@ -477,10 +480,10 @@ var provideNodemap = cell.Provide(func() nodemap.MapV2 {
 // writeNodeConfigToBuffer creates a HeaderfileWriter and writes the node
 // configuration to a buffer. This helper is used by the datapath config
 // defines tests below.
-func writeNodeConfigToBuffer(t *testing.T, nodeCfg *datapath.LocalNodeConfiguration) string {
+func writeNodeConfigToBuffer(t *testing.T, nodeCfg *config.Config) string {
 	t.Helper()
 	cfg, err := NewHeaderfileWriter(WriterParams{
-		NodeAddressing:     fakeTypes.NewNodeAddressing(),
+		NodeAddressing:     fakenode.NewAddressing(),
 		NodeExtraDefines:   nil,
 		NodeExtraDefineFns: nil,
 		Sysctl:             sysctl.NewDirectSysctl(afero.NewOsFs(), "/proc"),

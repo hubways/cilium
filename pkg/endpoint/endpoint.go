@@ -27,12 +27,15 @@ import (
 	"github.com/cilium/cilium/pkg/annotation"
 	"github.com/cilium/cilium/pkg/completion"
 	"github.com/cilium/cilium/pkg/controller"
+	"github.com/cilium/cilium/pkg/datapath/iptables"
 	"github.com/cilium/cilium/pkg/datapath/linux/bandwidth"
+	ipsec "github.com/cilium/cilium/pkg/datapath/linux/ipsec/types"
 	linuxrouting "github.com/cilium/cilium/pkg/datapath/linux/routing"
 	"github.com/cilium/cilium/pkg/datapath/linux/safenetlink"
-	datapath "github.com/cilium/cilium/pkg/datapath/types"
+	loader "github.com/cilium/cilium/pkg/datapath/loader/types"
 	"github.com/cilium/cilium/pkg/defaults"
 	"github.com/cilium/cilium/pkg/endpoint/regeneration"
+	endpoint "github.com/cilium/cilium/pkg/endpoint/types"
 	"github.com/cilium/cilium/pkg/eventqueue"
 	"github.com/cilium/cilium/pkg/fqdn"
 	"github.com/cilium/cilium/pkg/fqdn/restore"
@@ -154,15 +157,15 @@ var _ notifications.RegenNotificationInfo = (*Endpoint)(nil)
 // purposes is the serializableEndpoint type in this package.
 type Endpoint struct {
 	dnsRulesAPI      DNSRulesAPI
-	loader           datapath.Loader
-	orchestrator     datapath.Orchestrator
-	compilationLock  datapath.CompilationLock
-	bandwidthManager datapath.BandwidthManager
-	ipTablesManager  datapath.IptablesManager
+	loader           loader.Loader
+	orchestrator     endpoint.Orchestrator
+	compilationLock  loader.CompilationLock
+	bandwidthManager bandwidth.Manager
+	ipTablesManager  iptables.Manager
 	identityManager  identitymanager.IDManager
 	monitorAgent     monitoragent.Agent
-	wgConfig         wgTypes.WireguardConfig
-	ipsecConfig      datapath.IPsecConfig
+	wgConfig         wgTypes.Config
+	ipsecConfig      ipsec.Config
 	lxcMap           lxcmap.Map
 	localNodeStore   node.NodeGetter
 

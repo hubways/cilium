@@ -1178,14 +1178,11 @@ encryption:
       # type: [null, string]
       # @schema
       override: ~
-      repository: "docker.io/istio/ztunnel"
-      tag: "1.28.0-distroless"
-      pullPolicy: "IfNotPresent"
-      # @schema
-      # type: [null, string]
-      # @schema
-      digest: ~
-      useDigest: false
+      repository: "quay.io/cilium/ztunnel"
+      tag: "v1.0.0"
+      pullPolicy: "Always"
+      digest: "sha256:884de5adde400e39f58e36c7a729f7690466ca4a8eb4c2a8daa9c1c025115b24"
+      useDigest: true
     # -- CA server address for certificate requests.
     caAddress: "https://localhost:15012"
     # -- TCP port for the health API.
@@ -2698,6 +2695,8 @@ envoy:
     # Tune this value up if you encounter "Envoy: Discarded truncated access log message" errors.
     # Large request/response header sizes (e.g. 16KiB) will require a larger buffer size.
     accessLogBufferSize: 4096
+    # -- Enable access log forwarding for integration with Hubble.
+    accessLogEnabled: true
   # -- Time in seconds after which a TCP connection attempt times out
   connectTimeoutSeconds: 2
   # -- Time in seconds after which the initial fetch on an xDS stream is considered timed out
@@ -2743,9 +2742,9 @@ envoy:
     # @schema
     override: ~
     repository: "quay.io/cilium/cilium-envoy"
-    tag: "v1.36.5-1774358537-d5f886d03852f66d9afa960ddca364ac5c31d055"
+    tag: "v1.36.5-1775137579-2b3493aca96923190423ccec7e4dbc5f074ccad4"
     pullPolicy: "Always"
-    digest: "sha256:c61f2c4e823d6d2f2b52a2012a29a7e7aedad43719e8f604108ff1764a884616"
+    digest: "sha256:df144744740f91dc55ca39367f61c9a214a989d543c6f91319ccd686ddd7477f"
     useDigest: true
   # -- Init containers added to the cilium Envoy DaemonSet.
   initContainers: []
@@ -3479,9 +3478,9 @@ preflight:
       # @schema
       override: ~
       repository: "quay.io/cilium/cilium-envoy"
-      tag: "v1.36.5-1774358537-d5f886d03852f66d9afa960ddca364ac5c31d055"
+      tag: "v1.36.5-1775137579-2b3493aca96923190423ccec7e4dbc5f074ccad4"
       pullPolicy: "Always"
-      digest: "sha256:c61f2c4e823d6d2f2b52a2012a29a7e7aedad43719e8f604108ff1764a884616"
+      digest: "sha256:df144744740f91dc55ca39367f61c9a214a989d543c6f91319ccd686ddd7477f"
       useDigest: true
   # -- The priority class to use for the preflight pod.
   priorityClassName: ""

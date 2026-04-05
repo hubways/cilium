@@ -17,7 +17,7 @@ import (
 
 	apiv1 "github.com/cilium/cilium/api/v1/models"
 	"github.com/cilium/cilium/pkg/completion"
-	fakeTypes "github.com/cilium/cilium/pkg/datapath/fake/types"
+	fakeipsec "github.com/cilium/cilium/pkg/datapath/linux/ipsec/fake"
 	"github.com/cilium/cilium/pkg/endpoint"
 	endpointid "github.com/cilium/cilium/pkg/endpoint/id"
 	"github.com/cilium/cilium/pkg/identity/identitymanager"
@@ -31,6 +31,7 @@ import (
 	testidentity "github.com/cilium/cilium/pkg/testutils/identity"
 	testipcache "github.com/cilium/cilium/pkg/testutils/ipcache"
 	testpolicy "github.com/cilium/cilium/pkg/testutils/policy"
+	fakewireguard "github.com/cilium/cilium/pkg/wireguard/fake"
 )
 
 func (mgr *endpointManager) waitEndpointRemoved(ep *endpoint.Endpoint, conf endpoint.DeleteConfig) []error {
@@ -416,8 +417,8 @@ func TestLookup(t *testing.T) {
 					NamedPortsGetter: testipcache.NewMockIPCache(),
 					Allocator:        testidentity.NewMockIdentityAllocator(nil),
 					CTMapGC:          ctmap.NewFakeGCRunner(),
-					WgConfig:         &fakeTypes.WireguardConfig{},
-					IPSecConfig:      fakeTypes.IPsecConfig{},
+					WgConfig:         &fakewireguard.Config{},
+					IPSecConfig:      fakeipsec.Config{},
 					Logger:           logger,
 					IdentityManager:  identitymanager.NewIDManager(logger),
 					PolicyRepo:       s.repo,
@@ -452,8 +453,8 @@ func TestLookupCiliumID(t *testing.T) {
 		PolicyRepo:       s.repo,
 		NamedPortsGetter: testipcache.NewMockIPCache(),
 		CTMapGC:          ctmap.NewFakeGCRunner(),
-		WgConfig:         &fakeTypes.WireguardConfig{},
-		IPSecConfig:      fakeTypes.IPsecConfig{},
+		WgConfig:         &fakewireguard.Config{},
+		IPSecConfig:      fakeipsec.Config{},
 		Logger:           logger,
 		IdentityManager:  identitymanager.NewIDManager(logger),
 	}, nil, &endpoint.FakeEndpointProxy{}, model, nil)
@@ -536,8 +537,8 @@ func TestLookupCNIAttachmentID(t *testing.T) {
 		NamedPortsGetter: testipcache.NewMockIPCache(),
 		Allocator:        testidentity.NewMockIdentityAllocator(nil),
 		CTMapGC:          ctmap.NewFakeGCRunner(),
-		WgConfig:         &fakeTypes.WireguardConfig{},
-		IPSecConfig:      fakeTypes.IPsecConfig{},
+		WgConfig:         &fakewireguard.Config{},
+		IPSecConfig:      fakeipsec.Config{},
 		Logger:           logger,
 		IdentityManager:  identitymanager.NewIDManager(logger),
 		PolicyRepo:       s.repo,
@@ -569,8 +570,8 @@ func TestLookupIPv4(t *testing.T) {
 		NamedPortsGetter: testipcache.NewMockIPCache(),
 		Allocator:        testidentity.NewMockIdentityAllocator(nil),
 		CTMapGC:          ctmap.NewFakeGCRunner(),
-		WgConfig:         &fakeTypes.WireguardConfig{},
-		IPSecConfig:      fakeTypes.IPsecConfig{},
+		WgConfig:         &fakewireguard.Config{},
+		IPSecConfig:      fakeipsec.Config{},
 		Logger:           logger,
 		IdentityManager:  identitymanager.NewIDManager(logger),
 		PolicyRepo:       s.repo,
@@ -732,8 +733,8 @@ func TestLookupCEPName(t *testing.T) {
 			NamedPortsGetter: testipcache.NewMockIPCache(),
 			Allocator:        testidentity.NewMockIdentityAllocator(nil),
 			CTMapGC:          ctmap.NewFakeGCRunner(),
-			WgConfig:         &fakeTypes.WireguardConfig{},
-			IPSecConfig:      fakeTypes.IPsecConfig{},
+			WgConfig:         &fakewireguard.Config{},
+			IPSecConfig:      fakeipsec.Config{},
 			Logger:           logger,
 			IdentityManager:  identitymanager.NewIDManager(logger),
 			PolicyRepo:       s.repo,
@@ -786,8 +787,8 @@ func TestUpdateReferences(t *testing.T) {
 			NamedPortsGetter: testipcache.NewMockIPCache(),
 			Allocator:        testidentity.NewMockIdentityAllocator(nil),
 			CTMapGC:          ctmap.NewFakeGCRunner(),
-			WgConfig:         &fakeTypes.WireguardConfig{},
-			IPSecConfig:      fakeTypes.IPsecConfig{},
+			WgConfig:         &fakewireguard.Config{},
+			IPSecConfig:      fakeipsec.Config{},
 			Logger:           logger,
 			IdentityManager:  identitymanager.NewIDManager(logger),
 			PolicyRepo:       s.repo,
@@ -832,8 +833,8 @@ func TestRemove(t *testing.T) {
 		NamedPortsGetter: testipcache.NewMockIPCache(),
 		Allocator:        testidentity.NewMockIdentityAllocator(nil),
 		CTMapGC:          ctmap.NewFakeGCRunner(),
-		WgConfig:         &fakeTypes.WireguardConfig{},
-		IPSecConfig:      fakeTypes.IPsecConfig{},
+		WgConfig:         &fakewireguard.Config{},
+		IPSecConfig:      fakeipsec.Config{},
 		Logger:           logger,
 		IdentityManager:  identitymanager.NewIDManager(logger),
 		PolicyRepo:       s.repo,
@@ -902,8 +903,8 @@ func TestMissingNodeLabelsUpdate(t *testing.T) {
 		NamedPortsGetter:    testipcache.NewMockIPCache(),
 		Allocator:           testidentity.NewMockIdentityAllocator(nil),
 		CTMapGC:             ctmap.NewFakeGCRunner(),
-		WgConfig:            &fakeTypes.WireguardConfig{},
-		IPSecConfig:         fakeTypes.IPsecConfig{},
+		WgConfig:            &fakewireguard.Config{},
+		IPSecConfig:         fakeipsec.Config{},
 		Logger:              logger,
 		IdentityManager:     identitymanager.NewIDManager(logger),
 		PolicyRepo:          s.repo,
@@ -965,8 +966,8 @@ func TestUpdateHostEndpointLabels(t *testing.T) {
 					NamedPortsGetter:    testipcache.NewMockIPCache(),
 					Allocator:           testidentity.NewMockIdentityAllocator(nil),
 					CTMapGC:             ctmap.NewFakeGCRunner(),
-					WgConfig:            &fakeTypes.WireguardConfig{},
-					IPSecConfig:         fakeTypes.IPsecConfig{},
+					WgConfig:            &fakewireguard.Config{},
+					IPSecConfig:         fakeipsec.Config{},
 					Logger:              logger,
 					IdentityManager:     identitymanager.NewIDManager(logger),
 					PolicyRepo:          s.repo,
@@ -1007,8 +1008,8 @@ func TestUpdateHostEndpointLabels(t *testing.T) {
 					NamedPortsGetter:    testipcache.NewMockIPCache(),
 					Allocator:           testidentity.NewMockIdentityAllocator(nil),
 					CTMapGC:             ctmap.NewFakeGCRunner(),
-					WgConfig:            &fakeTypes.WireguardConfig{},
-					IPSecConfig:         fakeTypes.IPsecConfig{},
+					WgConfig:            &fakewireguard.Config{},
+					IPSecConfig:         fakeipsec.Config{},
 					Logger:              logger,
 					IdentityManager:     identitymanager.NewIDManager(logger),
 					PolicyRepo:          s.repo,
@@ -1052,8 +1053,8 @@ func TestUpdateHostEndpointLabels(t *testing.T) {
 					NamedPortsGetter:    testipcache.NewMockIPCache(),
 					Allocator:           testidentity.NewMockIdentityAllocator(nil),
 					CTMapGC:             ctmap.NewFakeGCRunner(),
-					WgConfig:            &fakeTypes.WireguardConfig{},
-					IPSecConfig:         fakeTypes.IPsecConfig{},
+					WgConfig:            &fakewireguard.Config{},
+					IPSecConfig:         fakeipsec.Config{},
 					Logger:              logger,
 					IdentityManager:     identitymanager.NewIDManager(logger),
 					PolicyRepo:          s.repo,

@@ -61,9 +61,18 @@ runs:
           --location ${{ inputs.location }} \
           $VERSION \
           --network-plugin none \
-          --node-count ${{ inputs.node_count }} \
+          --node-count "$(( ${{ inputs.node_count }} + 2 ))" \
           --ip-families ipv4,ipv6 \
           ${{ inputs.taints }} \
           --generate-ssh-keys \
           --api-server-authorized-ip-ranges ${{ steps.get-runner-ip.outputs.cidr }}
 
+    - name: Get cluster credentials
+      shell: bash
+      run: |
+        az aks get-credentials \
+          --resource-group ${{ inputs.cluster_name }} \
+          --name ${{ inputs.cluster_name }}
+
+    - name: Patch nodes without Cilium
+      uses: ./.github/actions/nodes-without-cilium
