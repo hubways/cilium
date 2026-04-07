@@ -114,7 +114,7 @@ env:
   test_concurrency: ${{ inputs.test-concurrency || 3 }}
   clusterNamePrefix: ${{ github.repository_owner }}-${{ github.event.repository.name }}-${{ github.run_id }}-${{ inputs.UID }}-${{ github.run_attempt }}
   # renovate: datasource=github-releases depName=eksctl-io/eksctl
-  eksctl_version: v0.224.0
+  eksctl_version: v0.225.0
   # renovate: datasource=github-releases depName=kubernetes/kubernetes
   kubectl_version: v1.35.3
 
@@ -265,7 +265,7 @@ jobs:
           sha: ${{ inputs.SHA || github.sha }}
 
       - name: Collect Workflow Telemetry
-        uses: catchpoint/workflow-telemetry-action@94c3c3d9567a0205de6da68a76c428ce4e769af1 # v2.0.0
+        uses: cilium/workflow-telemetry-action@b1a318f80a08acede58027afe1455d037379966f # v2.2.0
         with:
           comment_on_pr: false
 
