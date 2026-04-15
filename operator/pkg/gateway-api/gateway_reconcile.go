@@ -5,7 +5,6 @@ package gateway_api
 
 import (
 	"context"
-	"encoding/pem"
 	"fmt"
 	"log/slog"
 	"net"
@@ -566,6 +565,7 @@ func (r *gatewayReconciler) setListenerStatus(ctx context.Context, gw *gatewayv1
 	for _, l := range gw.Spec.Listeners {
 		isValid := true
 		var invalidMessages []string
+		invalidReason := gatewayv1.ListenerReasonInvalid
 
 		var conds []metav1.Condition
 
@@ -646,12 +646,25 @@ func (r *gatewayReconciler) setListenerStatus(ctx context.Context, gw *gatewayv1
 					break
 				}
 			}
+			// Handle terminated TLSRoute until we support it
+			if l.Protocol == gatewayv1.TLSProtocolType && *l.TLS.Mode == gatewayv1.TLSModeTerminate {
+				// Until we support this, we need to mark this as invalid.
+				isValid = false
+				invalidMessages = append(invalidMessages, "Using TLSRoute with TLS.mode Terminate is unsupported.")
+				invalidReason = gatewayv1.ListenerReasonUnsupportedValue
+				// The specific conformance test for this expects supportedKinds to be empty.
+				// This is probably an upstream bug, but work around it for now.
+				supportedKinds = []gatewayv1.RouteGroupKind{}
+			}
+
 		}
 
 		if !isValid {
 			conds = merge(conds,
-				gatewayListenerAcceptedCondition(gw, false, "Listener not valid. "+strings.Join(invalidMessages, " ")),
+				gatewayListenerAcceptedCondition(gw, false, invalidReason, "Listener not valid. "+strings.Join(invalidMessages, " ")),
 				gatewayListenerProgrammedCondition(gw, false, "Address not ready yet"))
+			// If the Listener is not valid, then no kinds are supported
+			// supportedKinds = []gatewayv1.RouteGroupKind{}
 		} else {
 			// There's at least one Accepted listener, so the Gateway can also be Accepted.
 			oneValidListener = true
@@ -667,7 +680,7 @@ func (r *gatewayReconciler) setListenerStatus(ctx context.Context, gw *gatewayv1
 				})
 			}
 			conds = merge(conds,
-				gatewayListenerAcceptedCondition(gw, true, "Listener Accepted"),
+				gatewayListenerAcceptedCondition(gw, true, gatewayv1.ListenerReasonAccepted, "Listener Accepted"),
 				gatewayListenerProgrammedCondition(gw, false, "Address not ready yet"))
 		}
 		var attachedRoutes int32
@@ -718,37 +731,14 @@ func validateTLSSecret(ctx context.Context, c client.Client, namespace, name str
 		return err
 	}
 
-	if !isValidPemFormat(secret.Data[corev1.TLSCertKey]) {
+	if !helpers.IsValidPemFormat(secret.Data[corev1.TLSCertKey]) {
 		return fmt.Errorf("PEM format error in TLS Certificate")
 	}
 
-	if !isValidPemFormat(secret.Data[corev1.TLSPrivateKeyKey]) {
+	if !helpers.IsValidPemFormat(secret.Data[corev1.TLSPrivateKeyKey]) {
 		return fmt.Errorf("PEM format error in TLS Key")
 	}
 	return nil
-}
-
-// isValidPemFormat checks if the given byte array contains at least one valid PEM
-// formatted object, either certificate or key.
-// This function is not intended to be used for validating the actual
-// content of the PEM block.
-func isValidPemFormat(b []byte) bool {
-	if len(b) == 0 {
-		return false
-	}
-
-	p, rest := pem.Decode(b)
-	if p == nil {
-		return false
-	}
-	if len(rest) == 0 {
-		return true
-	}
-
-	// We don't check the value of `rest` because
-	// Envoy will be able to parse the file as long as there
-	// is at least one valid certificate.
-	return true
 }
 
 func (r *gatewayReconciler) handleReconcileErrorWithStatus(ctx context.Context, reconcileErr error, original *gatewayv1.Gateway, modified *gatewayv1.Gateway) (ctrl.Result, error) {
