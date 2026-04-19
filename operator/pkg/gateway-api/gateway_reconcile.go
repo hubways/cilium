@@ -82,6 +82,15 @@ func (r *gatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// Step 2: Gather all required information for the ingestion model
 	gwc := &gatewayv1.GatewayClass{}
 	if err := r.Client.Get(ctx, client.ObjectKey{Name: string(gw.Spec.GatewayClassName)}, gwc); err != nil {
+		if k8serrors.IsNotFound(err) {
+			scopedLog.InfoContext(ctx, "GatewayClass no longer exists, cleaning up previously managed resources",
+				gatewayClass, gw.Spec.GatewayClassName)
+			if err := r.cleanupOwnedResources(ctx, gw); err != nil {
+				scopedLog.ErrorContext(ctx, "Unable to cleanup managed Gateway resources", logfields.Error, err)
+				return controllerruntime.Fail(err)
+			}
+			return controllerruntime.Success()
+		}
 		scopedLog.ErrorContext(ctx, "Unable to get GatewayClass",
 			gatewayClass, gw.Spec.GatewayClassName,
 			logfields.Error, err)
@@ -90,7 +99,13 @@ func (r *gatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	if string(gwc.Spec.ControllerName) != controllerName {
-		scopedLog.DebugContext(ctx, "GatewayClass does not have matching controller name, doing nothing")
+		scopedLog.InfoContext(ctx, "GatewayClass does not have matching controller name, cleaning up previously managed resources",
+			gatewayClass, gw.Spec.GatewayClassName,
+			logfields.Controller, gwc.Spec.ControllerName)
+		if err := r.cleanupOwnedResources(ctx, gw); err != nil {
+			scopedLog.ErrorContext(ctx, "Unable to cleanup managed Gateway resources", logfields.Error, err)
+			return controllerruntime.Fail(err)
+		}
 		return controllerruntime.Success()
 	}
 
@@ -310,6 +325,50 @@ func (r *gatewayReconciler) ensureEnvoyConfig(ctx context.Context, desired *cili
 	return err
 }
 
+func (r *gatewayReconciler) cleanupOwnedResources(ctx context.Context, gw *gatewayv1.Gateway) error {
+	if err := r.ensureOwnedServiceDeleted(ctx, gw); err != nil {
+		return err
+	}
+	if err := r.ensureOwnedEnvoyConfigDeleted(ctx, gw); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *gatewayReconciler) ensureOwnedServiceDeleted(ctx context.Context, gw *gatewayv1.Gateway) error {
+	svc := &corev1.Service{}
+	key := types.NamespacedName{
+		Namespace: gw.Namespace,
+		Name:      shortener.ShortenK8sResourceName(gwModel.CiliumGatewayPrefix + gw.Name),
+	}
+
+	if err := r.Client.Get(ctx, key, svc); err != nil {
+		return client.IgnoreNotFound(err)
+	}
+	if !metav1.IsControlledBy(svc, gw) {
+		return nil
+	}
+
+	return client.IgnoreNotFound(r.Client.Delete(ctx, svc))
+}
+
+func (r *gatewayReconciler) ensureOwnedEnvoyConfigDeleted(ctx context.Context, gw *gatewayv1.Gateway) error {
+	cec := &ciliumv2.CiliumEnvoyConfig{}
+	key := types.NamespacedName{
+		Namespace: gw.Namespace,
+		Name:      shortener.ShortenK8sResourceName(gwModel.CiliumGatewayPrefix + gw.Name),
+	}
+
+	if err := r.Client.Get(ctx, key, cec); err != nil {
+		return client.IgnoreNotFound(err)
+	}
+	if !metav1.IsControlledBy(cec, gw) {
+		return nil
+	}
+
+	return client.IgnoreNotFound(r.Client.Delete(ctx, cec))
+}
+
 func (r *gatewayReconciler) updateStatus(ctx context.Context, original *gatewayv1.Gateway, new *gatewayv1.Gateway) error {
 	oldStatus := original.Status.DeepCopy()
 	newStatus := new.Status.DeepCopy()
@@ -324,7 +383,7 @@ func (r *gatewayReconciler) filterHTTPRoutesByGateway(ctx context.Context, gw *g
 	var filtered []gatewayv1.HTTPRoute
 	allListenerHostNames := routechecks.GetAllListenerHostNames(gw.Spec.Listeners)
 	for _, route := range routes {
-		if isAttachable(ctx, gw, &route, route.Status.Parents) && isAllowed(ctx, r.Client, gw, &route, r.logger) && len(computeHosts(gw, route.Spec.Hostnames, allListenerHostNames)) > 0 {
+		if helpers.IsParentAttachable(ctx, gw, &route, route.Status.Parents) && isAllowed(ctx, r.Client, gw, &route, r.logger) && len(computeHosts(gw, route.Spec.Hostnames, allListenerHostNames)) > 0 {
 			filtered = append(filtered, route)
 		}
 	}
@@ -336,7 +395,7 @@ func (r *gatewayReconciler) filterGRPCRoutesByGateway(ctx context.Context, gw *g
 	allListenerHostNames := routechecks.GetAllListenerHostNames(gw.Spec.Listeners)
 
 	for _, route := range routes {
-		if isAttachable(ctx, gw, &route, route.Status.Parents) && isAllowed(ctx, r.Client, gw, &route, r.logger) && len(computeHosts(gw, route.Spec.Hostnames, allListenerHostNames)) > 0 {
+		if helpers.IsParentAttachable(ctx, gw, &route, route.Status.Parents) && isAllowed(ctx, r.Client, gw, &route, r.logger) && len(computeHosts(gw, route.Spec.Hostnames, allListenerHostNames)) > 0 {
 			filtered = append(filtered, route)
 		}
 	}
@@ -346,7 +405,7 @@ func (r *gatewayReconciler) filterGRPCRoutesByGateway(ctx context.Context, gw *g
 func (r *gatewayReconciler) filterHTTPRoutesByListener(ctx context.Context, gw *gatewayv1.Gateway, listener *gatewayv1.Listener, routes []gatewayv1.HTTPRoute) []gatewayv1.HTTPRoute {
 	var filtered []gatewayv1.HTTPRoute
 	for _, route := range routes {
-		if isAttachable(ctx, gw, &route, route.Status.Parents) &&
+		if helpers.IsParentAttachable(ctx, gw, &route, route.Status.Parents) &&
 			listenerisAllowed(ctx, r.Client, gw, listener, &route, r.logger) &&
 			len(computeHostsForListener(listener, route.Spec.Hostnames, nil)) > 0 &&
 			parentRefMatched(gw, listener, route.GetNamespace(), route.Spec.ParentRefs) {
@@ -359,7 +418,7 @@ func (r *gatewayReconciler) filterHTTPRoutesByListener(ctx context.Context, gw *
 func (r *gatewayReconciler) filterGRPCRoutesByListener(ctx context.Context, gw *gatewayv1.Gateway, listener *gatewayv1.Listener, routes []gatewayv1.GRPCRoute) []gatewayv1.GRPCRoute {
 	var filtered []gatewayv1.GRPCRoute
 	for _, route := range routes {
-		if isAttachable(ctx, gw, &route, route.Status.Parents) &&
+		if helpers.IsParentAttachable(ctx, gw, &route, route.Status.Parents) &&
 			listenerisAllowed(ctx, r.Client, gw, listener, &route, r.logger) &&
 			len(computeHostsForListener(listener, route.Spec.Hostnames, nil)) > 0 &&
 			parentRefMatched(gw, listener, route.GetNamespace(), route.Spec.ParentRefs) {
@@ -412,7 +471,7 @@ func parentRefMatched(gw *gatewayv1.Gateway, listener *gatewayv1.Listener, route
 func (r *gatewayReconciler) filterTLSRoutesByGateway(ctx context.Context, gw *gatewayv1.Gateway, routes []gatewayv1alpha2.TLSRoute) []gatewayv1alpha2.TLSRoute {
 	var filtered []gatewayv1alpha2.TLSRoute
 	for _, route := range routes {
-		if isAttachable(ctx, gw, &route, route.Status.Parents) && isAllowed(ctx, r.Client, gw, &route, r.logger) &&
+		if helpers.IsParentAttachable(ctx, gw, &route, route.Status.Parents) && isAllowed(ctx, r.Client, gw, &route, r.logger) &&
 			len(computeHosts(gw, route.Spec.Hostnames, nil)) > 0 {
 			filtered = append(filtered, route)
 		}
@@ -423,7 +482,7 @@ func (r *gatewayReconciler) filterTLSRoutesByGateway(ctx context.Context, gw *ga
 func (r *gatewayReconciler) filterTLSRoutesByListener(ctx context.Context, gw *gatewayv1.Gateway, listener *gatewayv1.Listener, routes []gatewayv1alpha2.TLSRoute) []gatewayv1alpha2.TLSRoute {
 	var filtered []gatewayv1alpha2.TLSRoute
 	for _, route := range routes {
-		if isAttachable(ctx, gw, &route, route.Status.Parents) &&
+		if helpers.IsParentAttachable(ctx, gw, &route, route.Status.Parents) &&
 			listenerisAllowed(ctx, r.Client, gw, listener, &route, r.logger) &&
 			len(computeHostsForListener(listener, route.Spec.Hostnames, nil)) > 0 &&
 			parentRefMatched(gw, listener, route.GetNamespace(), route.Spec.ParentRefs) {
@@ -431,26 +490,6 @@ func (r *gatewayReconciler) filterTLSRoutesByListener(ctx context.Context, gw *g
 		}
 	}
 	return filtered
-}
-
-func isAttachable(_ context.Context, gw *gatewayv1.Gateway, route metav1.Object, parents []gatewayv1.RouteParentStatus) bool {
-	for _, rps := range parents {
-		if helpers.NamespaceDerefOr(rps.ParentRef.Namespace, route.GetNamespace()) != gw.GetNamespace() ||
-			string(rps.ParentRef.Name) != gw.GetName() {
-			continue
-		}
-
-		for _, cond := range rps.Conditions {
-			if cond.Type == string(gatewayv1.RouteConditionAccepted) && cond.Status == metav1.ConditionTrue {
-				return true
-			}
-
-			if cond.Type == string(gatewayv1.RouteConditionResolvedRefs) && cond.Status == metav1.ConditionFalse {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func (r *gatewayReconciler) setAddressStatus(ctx context.Context, gw *gatewayv1.Gateway) error {
