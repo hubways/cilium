@@ -20,9 +20,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrlRuntime "sigs.k8s.io/controller-runtime"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
-	mcsapiv1alpha1 "sigs.k8s.io/mcs-api/pkg/apis/v1alpha1"
+	mcsapiv1beta1 "sigs.k8s.io/mcs-api/pkg/apis/v1beta1"
 
 	operatorOption "github.com/cilium/cilium/operator/option"
 	"github.com/cilium/cilium/operator/pkg/gateway-api/helpers"
@@ -69,12 +68,12 @@ var requiredGVKs = []schema.GroupVersionKind{
 	gatewayv1.SchemeGroupVersion.WithKind(helpers.GatewayKind),
 	gatewayv1.SchemeGroupVersion.WithKind(helpers.HTTPRouteKind),
 	gatewayv1.SchemeGroupVersion.WithKind(helpers.GRPCRouteKind),
-	gatewayv1beta1.SchemeGroupVersion.WithKind(helpers.ReferenceGrantKind),
+	gatewayv1.SchemeGroupVersion.WithKind(helpers.ReferenceGrantKind),
 }
 
 var optionalGVKs = []schema.GroupVersionKind{
-	gatewayv1alpha2.SchemeGroupVersion.WithKind(helpers.TLSRouteKind),
-	mcsapiv1alpha1.SchemeGroupVersion.WithKind(helpers.ServiceImportKind),
+	gatewayv1.SchemeGroupVersion.WithKind(helpers.TLSRouteKind),
+	mcsapiv1beta1.SchemeGroupVersion.WithKind(helpers.ServiceImportKind),
 }
 
 // gatewayAPIPreconditions holds the result of Gateway API precondition checks.
@@ -215,9 +214,9 @@ func initGatewayAPIController(params gatewayAPIParams) error {
 	installedKinds := params.Preconditions.InstalledKinds
 
 	// Handle MCS API CRDs
-	if params.MCSAPIConfig.ShouldInstallMCSAPICrds() && !slices.Contains(installedKinds, mcsapiv1alpha1.SchemeGroupVersion.WithKind(helpers.ServiceImportKind)) {
+	if params.MCSAPIConfig.ShouldInstallMCSAPICrds() && !slices.Contains(installedKinds, mcsapiv1beta1.SchemeGroupVersion.WithKind(helpers.ServiceImportKind)) {
 		// We can just assume ServiceImport are installed if we are going to install it
-		installedKinds = append(installedKinds, mcsapiv1alpha1.SchemeGroupVersion.WithKind(helpers.ServiceImportKind))
+		installedKinds = append(installedKinds, mcsapiv1beta1.SchemeGroupVersion.WithKind(helpers.ServiceImportKind))
 	}
 
 	if err := registerGatewayAPITypesToScheme(params.Scheme, installedKinds); err != nil {

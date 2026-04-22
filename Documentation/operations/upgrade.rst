@@ -300,6 +300,11 @@ Informational Notes
   warning log. Existing empty policies already present in the cluster are not
   affected, but any create or update that results in an empty policy will be
   rejected.
+* Cilium MCS-API implementation now uses the ``v1beta1`` version of the
+  MCS-API CRDs. Note that ``v1alpha1`` remains fully supported, and this
+  upgrade should be fully transparent. You are still encouraged to update
+  your ``ServiceExport`` resources to ``v1beta1`` to benefit from future
+  improvements and prepare for the eventual deprecation of ``v1alpha1``.
 
 Changes to Features
 ~~~~~~~~~~~~~~~~~~~
@@ -372,6 +377,8 @@ from Cilium.
   ``hubble-redact-kafka-apikey`` agent flag have been removed as part of
   dropping Kafka support.
 
+* The previously deprecated and ignored ``--ces-slice-mode`` operator flag has been removed.
+
 Changes to Metrics
 ~~~~~~~~~~~~~~~~~~
 
@@ -384,6 +391,10 @@ Added Metrics
   tagged by the status (``OK``, ``Warning``, ``Failure``) of each component (``BPF``, ``Policy``).
 * ``cilium_kubernetes_resource_sync_duration`` was added and reports duration in seconds
   of a specific Kubernetes resource sync.
+* ``cilium_hive_start_duration`` was added and reports the hive.Start method duration.
+* ``cilium_hive_stop_duration`` was added and reports the hive.Stop method duration.
+  Not reported when metrics are handled by a hive (common in cilium-agent and cilium-operator). Disabled by default.
+* ``cilium_hive_populate_duration`` was added and reports the hive.Populate method duration.
 
 Changed Metrics
 ###############
