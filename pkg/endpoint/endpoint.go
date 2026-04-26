@@ -464,7 +464,7 @@ type Endpoint struct {
 	isHost    bool
 
 	noTrackPort uint16
-	fibTableID  uint32
+	rtInfo      uint32
 
 	// mutable! must hold the endpoint lock to read
 	ciliumEndpointUID k8sTypes.UID
@@ -1929,10 +1929,10 @@ func (e *Endpoint) metadataResolver(ctx context.Context,
 	)
 	if tid, ok := pod.Annotations[annotation.FIBTableID]; option.Config.EnableFibTableIDAnnotation && ok {
 		if tidInt, err := strconv.ParseUint(tid, 10, 32); err == nil {
-			e.SetFibTableID(uint32(tidInt))
+			e.SetRTInfo(uint32(tidInt))
 		}
 	} else {
-		e.SetFibTableID(0)
+		e.SetRTInfo(0)
 	}
 
 	// Handle DisableSourceIPVerification annotation.
@@ -2512,9 +2512,11 @@ func (e *Endpoint) setPolicyRevision(rev uint64) {
 
 	now := time.Now()
 	e.policyRevision = rev
-	e.UpdateLogger(map[string]any{
-		logfields.DatapathPolicyRevision: e.policyRevision,
-	})
+	if e.Options != nil && e.Options.IsEnabled(option.Debug) {
+		e.UpdateLogger(map[string]any{
+			logfields.DatapathPolicyRevision: e.policyRevision,
+		})
+	}
 	for ps := range e.policyRevisionSignals {
 		select {
 		case <-ps.ctx.Done():
@@ -2831,16 +2833,16 @@ func (e *Endpoint) GetCreatedAt() time.Time {
 	return e.createdAt
 }
 
-func (e *Endpoint) GetFibTableID() uint32 {
-	e.mutex.RWMutex.RLock()
-	defer e.mutex.RWMutex.RUnlock()
-	return e.fibTableID
-}
-
-func (e *Endpoint) SetFibTableID(id uint32) {
+func (e *Endpoint) SetRTInfo(info uint32) {
 	e.mutex.RWMutex.Lock()
 	defer e.mutex.RWMutex.Unlock()
-	e.fibTableID = id
+	e.rtInfo = info
+}
+
+func (e *Endpoint) GetRTInfo() uint32 {
+	e.mutex.RWMutex.RLock()
+	defer e.mutex.RWMutex.RUnlock()
+	return e.rtInfo
 }
 
 // GetPropertyValue returns the endpoint property value for this key.
