@@ -351,7 +351,10 @@ The following options have been deprecated in this version of Cilium. A future
 version of Cilium will remove these options, so if you use these options then
 you may need to take action to migrate to an alternative.
 
-* TODO
+* The ``hubble.preferIpv6`` Helm value and ``--hubble-prefer-ipv6`` agent flag
+  have been deprecated and will be removed in Cilium 1.20. Use the top-level
+  ``preferIpv6`` Helm value and ``--prefer-ipv6`` agent flag instead, which
+  apply to both health probes and Hubble peer communication.
 
 Removed Options
 ###############
@@ -400,6 +403,9 @@ from Cilium.
   agent flag (Helm ``encryption.strictMode.allowRemoteNodeIdentities``) has been
   removed in favor of ``--encryption-strict-egress-allow-remote-node-identities``
   (Helm ``encryption.strictMode.egress.allowRemoteNodeIdentities``).
+
+* The previously deprecated ``--k8s-api-server`` agent flag has been removed in
+  favor of ``--k8s-api-server-urls`` (Helm ``k8s.apiServerURLs`` value).
 
 Changes to Metrics
 ~~~~~~~~~~~~~~~~~~
