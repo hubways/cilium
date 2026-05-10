@@ -553,6 +553,9 @@ func (ipam *LBIPAM) stripInvalidAllocations(sv *ServiceView) error {
 			ipam.logger.Debug(fmt.Sprintf("removing allocation '%s' from '%s'", alloc.IP, sv.Key))
 			if empty := cluster.Remove(sv); empty {
 				alloc.Origin.alloc.Free(alloc.IP)
+				if sv.SharingKey != "" {
+					ipam.sharingIndex.Remove(sv.SharingKey, cluster)
+				}
 			}
 			sv.AllocatedIPs = slices.Delete(sv.AllocatedIPs, allocIdx, allocIdx+1)
 		}
@@ -931,7 +934,10 @@ func (ipam *LBIPAM) satisfySpecificIPRequests(sv *ServiceView) (statusModified b
 			cluster.Services = append(cluster.Services, sv)
 		} else {
 			ipam.logger.Debug(fmt.Sprintf("Allocate '%s' for '%s'", reqIP, sv.Key))
-			sharingCluster := &sharingCluster{Services: []*ServiceView{sv}}
+			sharingCluster := &sharingCluster{
+				SVIP:     ServiceViewIP{IP: reqIP, Origin: lbRange},
+				Services: []*ServiceView{sv},
+			}
 			err = lbRange.alloc.Alloc(reqIP, sharingCluster)
 			if err != nil {
 				if errors.Is(err, ipalloc.ErrInUse) {
@@ -942,7 +948,9 @@ func (ipam *LBIPAM) satisfySpecificIPRequests(sv *ServiceView) (statusModified b
 				continue
 			}
 
-			ipam.sharingIndex.Add(sv.SharingKey, sharingCluster)
+			if sv.SharingKey != "" {
+				ipam.sharingIndex.Add(sv.SharingKey, sharingCluster)
+			}
 		}
 
 		sv.AllocatedIPs = append(sv.AllocatedIPs, ServiceViewIP{
@@ -1674,7 +1682,10 @@ func (ipam *LBIPAM) handlePoolDeleted(ctx context.Context, k8sPool *cilium_api_v
 	ipam.metrics.AvailableIPs.DeleteLabelValues(k8sPool.GetName())
 	ipam.metrics.UsedIPs.DeleteLabelValues(k8sPool.GetName())
 
-	pool := ipam.pools[k8sPool.GetName()]
+	pool, found := ipam.pools[k8sPool.GetName()]
+	if !found {
+		return nil
+	}
 
 	var svsModified []*ServiceView
 	for _, poolRange := range pool.ranges {

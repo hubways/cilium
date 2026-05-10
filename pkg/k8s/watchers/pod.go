@@ -23,7 +23,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 
-	agentK8s "github.com/cilium/cilium/daemon/k8s"
 	"github.com/cilium/cilium/pkg/annotation"
 	cgroup "github.com/cilium/cilium/pkg/cgroups/manager"
 	"github.com/cilium/cilium/pkg/controller"
@@ -33,6 +32,7 @@ import (
 	datapathTables "github.com/cilium/cilium/pkg/datapath/tables"
 	"github.com/cilium/cilium/pkg/endpoint"
 	"github.com/cilium/cilium/pkg/endpoint/regeneration"
+	endpointtypes "github.com/cilium/cilium/pkg/endpoint/types"
 	"github.com/cilium/cilium/pkg/endpointmanager"
 	"github.com/cilium/cilium/pkg/identity"
 	"github.com/cilium/cilium/pkg/ipcache"
@@ -40,6 +40,7 @@ import (
 	k8sClient "github.com/cilium/cilium/pkg/k8s/client"
 	slim_corev1 "github.com/cilium/cilium/pkg/k8s/slim/k8s/api/core/v1"
 	k8sSynced "github.com/cilium/cilium/pkg/k8s/synced"
+	k8sTables "github.com/cilium/cilium/pkg/k8s/tables"
 	k8sTypes "github.com/cilium/cilium/pkg/k8s/types"
 	k8sUtils "github.com/cilium/cilium/pkg/k8s/utils"
 	"github.com/cilium/cilium/pkg/k8s/watchers/resources"
@@ -76,8 +77,8 @@ type k8sPodWatcherParams struct {
 	PolicyUpdater      *policy.Updater
 	IPCache            *ipcache.IPCache
 	DB                 *statedb.DB
-	Pods               statedb.Table[agentK8s.LocalPod]
-	Namespaces         statedb.Table[agentK8s.Namespace]
+	Pods               statedb.Table[k8sTables.LocalPod]
+	Namespaces         statedb.Table[k8sTables.Namespace]
 	NodeAddrs          statedb.Table[datapathTables.NodeAddress]
 	CGroupManager      cgroup.CGroupManager
 	LBConfig           loadbalancer.Config
@@ -130,8 +131,8 @@ type K8sPodWatcher struct {
 	ipcache            ipcacheManager
 	cgroupManager      cgroupManager
 	db                 *statedb.DB
-	pods               statedb.Table[agentK8s.LocalPod]
-	namespaces         statedb.Table[agentK8s.Namespace]
+	pods               statedb.Table[k8sTables.LocalPod]
+	namespaces         statedb.Table[k8sTables.Namespace]
 	nodeAddrs          statedb.Table[datapathTables.NodeAddress]
 	lbConfig           loadbalancer.Config
 	wgConfig           wgTypes.Config
@@ -416,15 +417,15 @@ func (k *K8sPodWatcher) updateK8sPodV1(ctx context.Context, oldK8sPod, newK8sPod
 			if annoChangedFIBTableID {
 				if tid, ok := newK8sPod.Annotations[annotation.FIBTableID]; ok {
 					if tidInt, err := strconv.ParseUint(tid, 10, 32); err == nil {
-						podEP.SetRTInfo(uint32(tidInt))
+						podEP.SetRTInfo(uint32(tidInt), endpointtypes.RTInfoFIB)
 					} else {
 						scopedLog.Warn("Unable to parse fib-table-id annotation as uint32, pod will use default routing table.",
 							logfields.Annotation, annotation.FIBTableID,
 							logfields.Error, err,
 						)
 					}
-				} else {
-					podEP.SetRTInfo(0)
+				} else if _, enc := podEP.GetRTInfo(); enc == endpointtypes.RTInfoFIB {
+					podEP.ClearRTInfo()
 				}
 				regenMetadata := &regeneration.ExternalRegenerationMetadata{
 					Reason:            "fib-table-id annotation updated",
@@ -484,7 +485,7 @@ func (k *K8sPodWatcher) getNamespaceAnnotations(namespace string) map[string]str
 	if k.namespaces == nil {
 		return nil
 	}
-	ns, _, found := k.namespaces.Get(k.db.ReadTxn(), agentK8s.NamespaceByName(namespace))
+	ns, _, found := k.namespaces.Get(k.db.ReadTxn(), k8sTables.NamespaceByName(namespace))
 	if !found {
 		return nil
 	}
@@ -767,7 +768,7 @@ func (k *K8sPodWatcher) GetCachedPod(namespace, name string) (*slim_corev1.Pod, 
 	<-k.controllersStarted
 	k.k8sResourceSynced.WaitForCacheSync(resources.K8sAPIGroupPodV1Core)
 
-	pod, _, found := k.pods.Get(k.db.ReadTxn(), agentK8s.PodByName(namespace, name))
+	pod, _, found := k.pods.Get(k.db.ReadTxn(), k8sTables.PodByName(namespace, name))
 	if !found {
 		return nil, k8sErrors.NewNotFound(schema.GroupResource{
 			Group:    "core",
