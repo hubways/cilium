@@ -12,16 +12,20 @@ import (
 	"time"
 
 	"github.com/cilium/ebpf/rlimit"
+	"github.com/cilium/hive/cell"
 	"github.com/cilium/hive/hivetest"
+	"github.com/cilium/statedb"
 	"github.com/google/uuid"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
 	"github.com/vishvananda/netlink"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/cilium/cilium/pkg/bpf"
 	"github.com/cilium/cilium/pkg/datapath/linux/safenetlink"
 	"github.com/cilium/cilium/pkg/datapath/linux/sysctl"
+	"github.com/cilium/cilium/pkg/datapath/tables"
 	"github.com/cilium/cilium/pkg/hive"
 	"github.com/cilium/cilium/pkg/identity"
 	cilium_api_v2 "github.com/cilium/cilium/pkg/k8s/apis/cilium.io/v2"
@@ -163,6 +167,30 @@ func setupEgressGatewayTestSuite(t *testing.T) *EgressGatewayTestSuite {
 	policyMap4 := egressmap.CreatePrivatePolicyMap4(lc, nil, egressmap.DefaultPolicyConfig)
 	policyMap6 := egressmap.CreatePrivatePolicyMap6(lc, nil, egressmap.DefaultPolicyConfig)
 
+	var (
+		db          *statedb.DB
+		deviceTable statedb.Table[*tables.Device]
+	)
+
+	// create a hive to provide statedb
+	h := hive.New(
+		cell.Provide(
+			tables.NewDeviceTable,
+		),
+
+		cell.Invoke(func(db_ *statedb.DB,
+			dT statedb.RWTable[*tables.Device]) {
+			db = db_
+			deviceTable = dT
+		}),
+	)
+
+	require.NoError(t, h.Start(logger, context.TODO()))
+
+	t.Cleanup(func() {
+		require.NoError(t, h.Stop(logger, context.TODO()))
+	})
+
 	k.manager, err = newEgressGatewayManager(Params{
 		Logger:            logger,
 		Lifecycle:         lc,
@@ -175,6 +203,8 @@ func setupEgressGatewayTestSuite(t *testing.T) *EgressGatewayTestSuite {
 		Nodes:             k.nodes,
 		Endpoints:         k.endpoints,
 		Sysctl:            k.sysctl,
+		DB:                db,
+		DeviceTable:       deviceTable,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, k.manager)
@@ -866,7 +896,7 @@ func TestPrivilegedMultigatewayPolicy(t *testing.T) {
 		name   string
 		ip     string
 		labels map[string]string
-		node   *nodeTypes.Node
+		node   *cilium_api_v2.CiliumNode
 	}
 	// List of nodes is already organized by the node IP.
 	nodes := []testNodes{
@@ -1095,14 +1125,15 @@ func ensureRPFilterIsEnabled(tb testing.TB, sysctl sysctl.Sysctl, iface string) 
 	tb.Fatal("failed to enable rp_filter")
 }
 
-func newCiliumNode(name, nodeIP string, nodeLabels map[string]string) nodeTypes.Node {
-	return nodeTypes.Node{
-		Name:   name,
-		Labels: nodeLabels,
-		IPAddresses: []nodeTypes.Address{
-			{
-				Type: addressing.NodeInternalIP,
-				IP:   netip.MustParseAddr(nodeIP).AsSlice(),
+func newCiliumNode(name, nodeIP string, nodeLabels map[string]string) cilium_api_v2.CiliumNode {
+	return cilium_api_v2.CiliumNode{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Labels: nodeLabels},
+		Spec: cilium_api_v2.NodeSpec{
+			Addresses: []cilium_api_v2.NodeAddress{
+				{
+					Type: addressing.NodeInternalIP,
+					IP:   nodeIP,
+				},
 			},
 		},
 	}
