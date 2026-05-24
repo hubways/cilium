@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/netip"
 
 	"github.com/cilium/cilium/operator/pkg/ipam/nodemanager"
 	"github.com/cilium/cilium/operator/pkg/ipam/stats"
@@ -101,11 +102,9 @@ func (n *Node) PrepareIPAllocation(scopedLog *slog.Logger) (a *nodemanager.Alloc
 				logfields.AvailableAddresses, availableOnInterface,
 			)
 
-			preferredPoolIDs := []ipamTypes.PoolID{}
-			for _, address := range iface.Addresses {
-				if address.Subnet != "" {
-					preferredPoolIDs = append(preferredPoolIDs, ipamTypes.PoolID(address.Subnet))
-				}
+			var preferredPoolIDs []ipamTypes.PoolID
+			if iface.Subnet.ID != "" {
+				preferredPoolIDs = []ipamTypes.PoolID{ipamTypes.PoolID(iface.Subnet.ID)}
 			}
 
 			poolID, available := n.manager.subnets.FirstSubnetWithAvailableAddresses(preferredPoolIDs)
@@ -170,7 +169,7 @@ func (n *Node) ResyncInterfacesAndIPs(ctx context.Context, scopedLog *slog.Logge
 	n.manager.mutex.RLock()
 	defer n.manager.mutex.RUnlock()
 	usePrimary := n.manager.usePrimary
-	err = n.manager.instances.ForeachAddress(n.node.InstanceID(), func(instanceID, interfaceID, ip, poolID string, addressObj ipamTypes.Address) error {
+	err = n.manager.instances.ForeachAddress(n.node.InstanceID(), func(instanceID, interfaceID, ip string, addressObj ipamTypes.Address) error {
 		address, ok := addressObj.(types.AzureAddress)
 		if !ok {
 			scopedLog.Warn(
@@ -246,6 +245,24 @@ func (n *Node) GetMinimumAllocatableIPv4() int {
 
 func (n *Node) IsPrefixDelegated() bool {
 	return false
+}
+
+// GetAttachedCIDRs is a no-op since Azure does not use multi-pool but uses
+// the CRD allocator.
+func (n *Node) GetAttachedCIDRs() []netip.Prefix {
+	return nil
+}
+
+// PrepareCIDRRelease is a no-op since Azure does not use multi-pool but uses
+// the CRD allocator, that's backed by PrepareIPRelease
+func (n *Node) PrepareCIDRRelease(_ []netip.Prefix) []*nodemanager.ReleaseAction {
+	return nil
+}
+
+// ReleaseCIDRs is a no-op since Azure does not use multi-pool but uses the
+// CRD allocator, that's backed by ReleaseIPs/ReleaseIPPrefixes
+func (n *Node) ReleaseCIDRs(_ context.Context, _ *nodemanager.ReleaseAction) ([]netip.Prefix, error) {
+	return nil, nil
 }
 
 // isAvailableInterface returns whether interface is available and the number of available IPs to allocate in interface

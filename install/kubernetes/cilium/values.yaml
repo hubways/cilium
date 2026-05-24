@@ -509,10 +509,8 @@ l2announcements:
 l2podAnnouncements:
   # -- Enable L2 pod announcements
   enabled: false
-  # -- Interface used for sending Gratuitous ARP pod announcements
-  interface: "eth0"
   # -- A regular expression matching interfaces used for sending Gratuitous ARP pod announcements
-  # interfacePattern: ""
+  interfacePattern: ""
 # -- This feature set enables virtual BGP routers to be created via BGP CRDs.
 bgpControlPlane:
   # -- Enables the BGP control plane.
@@ -1181,6 +1179,15 @@ encryption:
   # ztunnel is Istio's purpose-built, per-node proxy for handling L4 traffic in ambient mesh mode.
   # These settings only apply when encryption.type is set to "ztunnel".
   ztunnel:
+    # -- CA backend used by ztunnel to issue workload identities.
+    ca:
+      # @schema
+      # enum: [spire, internal]
+      # @schema
+      # -- Type of CA. "spire" uses an external SPIRE server (the operator
+      # then manages SPIRE entries for enrolled namespaces). "internal" uses
+      # Cilium's built-in CA and skips the SPIRE enrollment reconciler.
+      type: internal
     # -- ztunnel container image.
     image:
       # @schema
@@ -2535,6 +2542,14 @@ loadBalancer:
   # -- serviceTopology enables K8s Topology Aware Hints -based service
   # endpoints filtering
   serviceTopology: false
+  # -- reflectorWaitTime is the maximum amount of time the K8s reflector waits
+  # to fill its events buffer. A higher wait time will reduce processing of
+  # transient states and increases throughput as it gives bigger batches
+  # downstream for processing. Batching also helps to combine related objects,
+  # e.g. a Service may have multiple associated EndpointSlices and preferably
+  # these would be processed together.
+  # reflectorWaitTime: "500ms"
+
   # -- L7 LoadBalancer
   l7:
     # -- Enable L7 service load balancing via envoy proxy.

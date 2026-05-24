@@ -6,8 +6,6 @@
 package ipam
 
 import (
-	"context"
-	"fmt"
 	"log/slog"
 
 	"github.com/cilium/hive/cell"
@@ -88,21 +86,17 @@ type awsParams struct {
 	Lifecycle          cell.Lifecycle
 	JobGroup           job.Group
 	Clientset          k8sClient.Clientset
-	EC2Metrics         *aws.Metrics
+	AWSMetrics         *aws.Metrics
 	IPAMMetrics        *ipamMetrics.Metrics
 	DaemonCfg          *option.DaemonConfig
-	NodeWatcherFactory nodeWatcherJobFactory
+	NodeWatcherFactory allocatorTypes.NodeWatcherJobFactory
 
 	Cfg    Config
 	AwsCfg AWSConfig
 }
 
 func startAWSAllocator(p awsParams) {
-	if p.DaemonCfg.IPAM != ipamOption.IPAMENI {
-		return
-	}
-
-	allocator := &aws.AllocatorAWS{
+	alloc := &aws.AllocatorAWS{
 		AWSReleaseExcessIPs:          p.AwsCfg.AWSReleaseExcessIPs,
 		ExcessIPReleaseDelay:         p.AwsCfg.ExcessIPReleaseDelay,
 		AWSEnablePrefixDelegation:    p.AwsCfg.AWSEnablePrefixDelegation,
@@ -117,27 +111,16 @@ func startAWSAllocator(p awsParams) {
 		ParallelAllocWorkers:         p.Cfg.ParallelAllocWorkers,
 		LimitIPAMAPIBurst:            p.Cfg.LimitIPAMAPIBurst,
 		LimitIPAMAPIQPS:              p.Cfg.LimitIPAMAPIQPS,
+		AWSMetrics:                   p.AWSMetrics,
 	}
 
-	p.Lifecycle.Append(
-		cell.Hook{
-			OnStart: func(ctx cell.HookContext) error {
-				if err := allocator.Init(ctx, p.Logger, p.EC2Metrics); err != nil {
-					return fmt.Errorf("unable to init AWS allocator: %w", err)
-				}
-
-				p.JobGroup.Add(p.NodeWatcherFactory(
-					func(ctx context.Context) (allocatorTypes.NodeEventHandler, error) {
-						nm, err := allocator.Start(ctx, &ciliumNodeUpdateImplementation{p.Clientset}, p.IPAMMetrics)
-						if err != nil {
-							return nil, fmt.Errorf("unable to start AWS allocator: %w", err)
-						}
-						return nm, nil
-					},
-				))
-
-				return nil
-			},
-		},
-	)
+	startCloudAllocator(cloudAllocatorBootstrap{
+		Logger:             p.Logger,
+		Lifecycle:          p.Lifecycle,
+		JobGroup:           p.JobGroup,
+		Clientset:          p.Clientset,
+		IPAMMetrics:        p.IPAMMetrics,
+		DaemonCfg:          p.DaemonCfg,
+		NodeWatcherFactory: p.NodeWatcherFactory,
+	}, "AWS", ipamOption.IPAMENI, alloc)
 }
