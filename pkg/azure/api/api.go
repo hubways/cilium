@@ -16,7 +16,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
-	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute/v7"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute/v8"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork/v9"
 	"k8s.io/apimachinery/pkg/util/rand"
 
@@ -38,7 +38,6 @@ const (
 	virtualMachineScaleSetsList     = "VirtualMachineScaleSets.List"
 	virtualMachineScaleSetVMsGet    = "VirtualMachineScaleSetVMs.Get"
 	virtualMachineScaleSetVMsUpdate = "VirtualMachineScaleSetVMs.Update"
-	virtualNetworksListAll          = "VirtualNetworks.ListAll"
 	subnetsGet                      = "Subnets.Get"
 
 	interfacesListVirtualMachineScaleSetNetworkInterfaces   = "Interfaces.ListVirtualMachineScaleSetNetworkInterfaces"
@@ -52,7 +51,6 @@ type Client struct {
 	resourceGroup             string
 	interfaces                *armnetwork.InterfacesClient
 	publicIPPrefixes          *armnetwork.PublicIPPrefixesClient
-	virtualNetworks           *armnetwork.VirtualNetworksClient
 	virtualMachines           *armcompute.VirtualMachinesClient
 	subnets                   *armnetwork.SubnetsClient
 	virtualMachineScaleSetVMs *armcompute.VirtualMachineScaleSetVMsClient
@@ -132,11 +130,6 @@ func NewClient(logger *slog.Logger, cloudName, subscriptionID, resourceGroup, us
 		return nil, err
 	}
 
-	virtualNetworksClient, err := armnetwork.NewVirtualNetworksClient(subscriptionID, credential, armClientOptions)
-	if err != nil {
-		return nil, err
-	}
-
 	virtualMachinesClient, err := armcompute.NewVirtualMachinesClient(subscriptionID, credential, armClientOptions)
 	if err != nil {
 		return nil, err
@@ -168,7 +161,6 @@ func NewClient(logger *slog.Logger, cloudName, subscriptionID, resourceGroup, us
 		resourceGroup:             resourceGroup,
 		interfaces:                interfacesClient,
 		publicIPPrefixes:          publicIPPrefixesClient,
-		virtualNetworks:           virtualNetworksClient,
 		virtualMachines:           virtualMachinesClient,
 		subnets:                   subnetsClient,
 		virtualMachineScaleSetVMs: virtualMachineScaleSetVMsClient,
@@ -386,17 +378,6 @@ func deriveGatewayIP(subnetIP netip.Addr) iputil.Addr {
 	return iputil.AddrFrom(subnetIP.Next())
 }
 
-// GetInstances returns the list of all instances including all attached
-// interfaces as instanceMap
-func (c *Client) GetInstances(ctx context.Context, subnets ipamTypes.SubnetMap) (*ipamTypes.InstanceMap, error) {
-	networkInterfaces, err := c.ListAllNetworkInterfaces(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	return c.ParseInterfacesIntoInstanceMap(networkInterfaces, subnets), nil
-}
-
 // ListAllNetworkInterfaces returns all network interfaces in the resource group
 // This is exposed to allow callers to fetch network interfaces once and parse them multiple times
 func (c *Client) ListAllNetworkInterfaces(ctx context.Context) ([]*armnetwork.Interface, error) {
@@ -428,24 +409,6 @@ func (c *Client) ParseInterfacesIntoInstanceMap(networkInterfaces []*armnetwork.
 	return instances
 }
 
-// GetInstance returns the interfaces of a given instance
-func (c *Client) GetInstance(ctx context.Context, subnets ipamTypes.SubnetMap, instanceID string) (*ipamTypes.Instance, error) {
-	resourceID, err := arm.ParseResourceID(instanceID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse instance ID %q", instanceID)
-	}
-	if strings.ToLower(resourceID.ResourceType.Type) != "virtualmachinescalesets/virtualmachines" {
-		return nil, fmt.Errorf("instance %q is not a virtual machine scale set instance", instanceID)
-	}
-
-	networkInterfaces, err := c.listVirtualMachineScaleSetVMNetworkInterfaces(ctx, resourceID.Parent.Name, resourceID.Name)
-	if err != nil {
-		return nil, err
-	}
-
-	return c.ParseInterfacesIntoInstance(networkInterfaces, subnets), nil
-}
-
 // ListVMNetworkInterfaces returns all network interfaces for a specific VMSS instance
 // This is exposed to allow callers to fetch network interfaces once and parse them multiple times
 func (c *Client) ListVMNetworkInterfaces(ctx context.Context, instanceID string) ([]*armnetwork.Interface, error) {
@@ -475,94 +438,11 @@ func (c *Client) ParseInterfacesIntoInstance(networkInterfaces []*armnetwork.Int
 	return &instance
 }
 
-// listAllVPCs lists all VPCs
-func (c *Client) listAllVPCs(ctx context.Context) (vpcs []*armnetwork.VirtualNetwork, err error) {
-	c.limiter.Limit(ctx, virtualNetworksListAll)
-	sinceStart := spanstat.Start()
-
-	// Note: lists all VPCs, not just those in c.resourcegroup
-	pager := c.virtualNetworks.NewListAllPager(nil)
-
-	defer func() {
-		c.metricsAPI.ObserveAPICall(virtualNetworksListAll, deriveStatus(err), sinceStart.Seconds())
-	}()
-
-	for pager.More() {
-		nextResult, err := pager.NextPage(ctx)
-		if err != nil {
-			return nil, err
-		}
-		vpcs = append(vpcs, nextResult.Value...)
-	}
-
-	return vpcs, nil
-}
-
-func parseSubnet(subnet *armnetwork.Subnet) (s *ipamTypes.Subnet) {
-	s = &ipamTypes.Subnet{ID: *subnet.ID}
-	if subnet.Name != nil {
-		s.Name = *subnet.Name
-	}
-
-	if subnet.Properties.AddressPrefix != nil {
-		cidr, err := netip.ParsePrefix(*subnet.Properties.AddressPrefix)
-		if err != nil {
-			return nil
-		}
-		s.CIDR = cidr
-		if subnet.Properties.IPConfigurations != nil {
-			s.AvailableAddresses = availableIPs(cidr) - len(subnet.Properties.IPConfigurations)
-		} else {
-			// Azure currently returns nil for subnet IPConfigs if the subnet has a large number of existing IPConfigs.
-			// API / SDK is supposed to return a IpConfigurationsNextLink which can be used to make an additional
-			// call to get all IPConfigs. This field however seems to be missing from the API spec.
-			// Since we cannot fall back to other subnets anyway, assume all IPs are available.
-			// TODO: Update this once azure-sdk-for-go supports ipConfigurationsNextLink
-			s.AvailableAddresses = availableIPs(cidr)
-		}
-	}
-
-	return
-}
-
 // availableIPs returns the number of IPs available in a CIDR
 func availableIPs(p netip.Prefix) int {
 	ones := p.Bits()
 	bits := p.Addr().BitLen()
 	return 1 << (bits - ones)
-}
-
-// GetVpcsAndSubnets retrieves and returns all Vpcs
-func (c *Client) GetVpcsAndSubnets(ctx context.Context) (ipamTypes.VirtualNetworkMap, ipamTypes.SubnetMap, error) {
-	vpcs := ipamTypes.VirtualNetworkMap{}
-	subnets := ipamTypes.SubnetMap{}
-
-	vpcList, err := c.listAllVPCs(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	for _, v := range vpcList {
-		if v.ID == nil {
-			continue
-		}
-
-		vpc := &ipamTypes.VirtualNetwork{ID: *v.ID}
-		vpcs[vpc.ID] = vpc
-
-		if v.Properties.Subnets != nil {
-			for _, subnet := range v.Properties.Subnets {
-				if subnet.ID == nil {
-					continue
-				}
-				if s := parseSubnet(subnet); s != nil {
-					subnets[*subnet.ID] = s
-				}
-			}
-		}
-	}
-
-	return vpcs, subnets, nil
 }
 
 // parseSubnetID extracts resource group, virtual network, and subnet names from an Azure subnet ID.
@@ -927,15 +807,13 @@ func (c *Client) AssignPublicIPAddressesVMSS(ctx context.Context, instanceID, vm
 				return "", fmt.Errorf("failed to delete public IP address configuration for VM %s from VMSS %s: %w", instanceID, vmssName, err)
 			}
 		} else {
-			netIfName := "<unknown>"
-			if primaryNetIfConfig.Name != nil {
-				netIfName = *primaryNetIfConfig.Name
+			// Public IP already successfully provisioned, return the existing prefix ID
+			// so the caller can record the assignment without re-attempting allocation.
+			cfg := primaryIPConfig.Properties.PublicIPAddressConfiguration
+			if cfg.Properties != nil && cfg.Properties.PublicIPPrefix != nil && cfg.Properties.PublicIPPrefix.ID != nil {
+				return *cfg.Properties.PublicIPPrefix.ID, nil
 			}
-			return "", fmt.Errorf("public IP address already assigned to primary IP configuration for network configuration %s from VM %s from VMSS %s",
-				netIfName,
-				instanceID,
-				vmssName,
-			)
+			return "", fmt.Errorf("public IP already assigned to VM %s from VMSS %s but prefix ID is unavailable", instanceID, vmssName)
 		}
 	}
 
@@ -1070,7 +948,12 @@ func (c *Client) AssignPublicIPAddressesVM(ctx context.Context, instanceID strin
 				return "", fmt.Errorf("failed to delete public IP address configuration for interface %s for VM %s: %w", interfaceName, vmName, err)
 			}
 		} else {
-			return "", fmt.Errorf("public IP address already assigned to primary IP configuration for interface %s", interfaceName)
+			// Public IP already successfully provisioned, return the existing IP resource
+			// ID so the caller can record the assignment without re-attempting allocation.
+			if primaryIPConfig.Properties.PublicIPAddress.ID != nil {
+				return *primaryIPConfig.Properties.PublicIPAddress.ID, nil
+			}
+			return "", fmt.Errorf("public IP already assigned to VM %s but resource ID is unavailable", vmName)
 		}
 	}
 

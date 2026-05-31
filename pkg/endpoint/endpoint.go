@@ -1267,6 +1267,11 @@ func (e *Endpoint) leaveLocked(conf DeleteConfig) []error {
 		}
 	}
 
+	// Endpoint's network policy must be released even if the identity is not released.
+	// Remove network policy before (possibly) releasing identity so proxy cleanup
+	// can still observe the endpoint exactly as it was published.
+	e.removeNetworkPolicy()
+
 	if !conf.NoIdentityRelease && e.SecurityIdentity != nil {
 		if e.identitySet {
 			// Restored endpoint may be created with a reserved identity of 5
@@ -1283,7 +1288,6 @@ func (e *Endpoint) leaveLocked(conf DeleteConfig) []error {
 				errs = append(errs, fmt.Errorf("unable to release identity: %w", err))
 			}
 		}
-		e.removeNetworkPolicy()
 		e.SecurityIdentity = nil
 	}
 
@@ -2321,7 +2325,7 @@ func (e *Endpoint) identityLabelsChanged(ctx context.Context) (regenTriggered bo
 	// identity is new, then this will start updating the policy for other
 	// co-located endpoints without having to wait for that RTT.
 	//
-	// This must happen before triggering regeration, as this ID must be
+	// This must happen before triggering regeneration, as this ID must be
 	// plumbed in to the SelectorCache in order for policy to correctly apply
 	// to this endpoint. Fortunately AllocateIdentity() will synchronously
 	// update the SelectorCache, so there are no problems here.
@@ -2398,7 +2402,7 @@ func (e *Endpoint) identityLabelsChanged(ctx context.Context) (regenTriggered bo
 
 	scopedLog.Debug(
 		"Assigned new identity to endpoint",
-		logfields.IdentityNew, allocatedIdentity.StringID(),
+		logfields.IdentityNew, allocatedIdentity,
 	)
 
 	identityToRelease := e.SetIdentity(allocatedIdentity)
