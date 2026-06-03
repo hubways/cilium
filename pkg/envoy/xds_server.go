@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"iter"
 	"log/slog"
 	"net"
 	"os"
@@ -40,6 +41,7 @@ import (
 	envoypolicy "github.com/cilium/cilium/pkg/envoy/policy"
 	_ "github.com/cilium/cilium/pkg/envoy/resource"
 	"github.com/cilium/cilium/pkg/envoy/xds"
+	"github.com/cilium/cilium/pkg/identity"
 	"github.com/cilium/cilium/pkg/lock"
 	"github.com/cilium/cilium/pkg/logging/logfields"
 	"github.com/cilium/cilium/pkg/maps/ipcache"
@@ -50,6 +52,7 @@ import (
 	"github.com/cilium/cilium/pkg/proxy/endpoint"
 	"github.com/cilium/cilium/pkg/revert"
 	"github.com/cilium/cilium/pkg/time"
+	ciliumTypes "github.com/cilium/cilium/pkg/types"
 	"github.com/cilium/cilium/pkg/u8proto"
 )
 
@@ -1529,7 +1532,30 @@ func isEmptyRule(rule *cilium.PortNetworkPolicyRule) bool {
 	return rule.Precedence == 0 && isEmptyRuleButPrecedence(rule)
 }
 
-func (s *xdsServer) getDirectionNetworkPolicy(ep endpoint.EndpointUpdater, selectors policy.SelectorSnapshot, l4DirectionPolicy *policy.L4DirectionPolicy, policyEnforced bool, useFullTLSContext, useSDS bool, dir string, policySecretsNamespace string) []*cilium.PortNetworkPolicy {
+type portKey struct {
+	port    uint16
+	endPort uint16
+}
+
+type portState struct {
+	rules []*cilium.PortNetworkPolicyRule
+
+	// Assume none of the rules have side-effects so that rule evaluation can be
+	// stopped as soon as the first allowing rule is found. Values are added to
+	// 'cantShortCircuit' for each precedence for which this is not true.
+	cantShortCircuit map[uint32]struct{}
+
+	// port-specific wildcard selector rules, if any, only for the highest
+	// precedence rules.
+	allowAllPrecedence uint32
+	denyAllPrecedence  uint32
+	allowAllRule       *cilium.PortNetworkPolicyRule
+	denyAllRule        *cilium.PortNetworkPolicyRule
+}
+
+type GetEgressNamedPorts func(name string, proto u8proto.U8proto, idents iter.Seq[identity.NumericIdentity]) ciliumTypes.NidPortSeq
+
+func (s *xdsServer) getDirectionNetworkPolicy(ep endpoint.EndpointUpdater, getEgressNamedPorts GetEgressNamedPorts, selectors policy.SelectorSnapshot, l4DirectionPolicy *policy.L4DirectionPolicy, policyEnforced bool, useFullTLSContext, useSDS bool, dir string, policySecretsNamespace string) []*cilium.PortNetworkPolicy {
 	// TODO: integrate visibility with enforced policy
 	if !policyEnforced {
 		// Always allow all ports
@@ -1612,40 +1638,29 @@ func (s *xdsServer) getDirectionNetworkPolicy(ep endpoint.EndpointUpdater, selec
 			}
 		}
 
+		rulesByPort := map[portKey]portState{}
+		var ports []portKey
+		ensurePortState := func(key portKey) portState {
+			byPort, ok := rulesByPort[key]
+			if !ok {
+				byPort.cantShortCircuit = make(map[uint32]struct{})
+				ports = append(ports, key)
+			}
+			return byPort
+		}
+
 		for l4 := range l4Policy[tier].Filters() {
-			var protocol envoy_config_core.SocketAddress_Protocol
 			switch l4.U8Proto {
 			case u8proto.TCP, u8proto.ANY:
-				protocol = envoy_config_core.SocketAddress_TCP
 			default:
 				// Other protocol rules not sent to Envoy for now.
 				continue
 			}
 
 			port := l4.Port
-			if port == 0 && l4.PortName != "" {
-				port = ep.GetNamedPort(l4.Ingress, l4.PortName, l4.U8Proto, l4.Identities(selectors))
+			if port == 0 && l4.PortName != "" && l4.Ingress {
+				port = ep.GetIngressNamedPort(l4.PortName, l4.U8Proto)
 			}
-
-			// Skip if a named port can not be resolved (yet)
-			// wildcard port already taken care of above
-			if port == 0 {
-				continue
-			}
-
-			rules := make([]*cilium.PortNetworkPolicyRule, 0, len(l4.PerSelectorPolicies))
-
-			// Assume none of the rules have side-effects so that rule evaluation can be
-			// stopped as soon as the first allowing rule is found. Values are added to
-			// 'cantShortCircuit' for each precedence for which this is not true.
-			cantShortCircuit := make(map[uint32]struct{})
-
-			// port-specific wildcard selector rules, if any, only for the highest
-			// precedence rules.
-			var allowAllPrecedence uint32
-			var allowAllRule *cilium.PortNetworkPolicyRule
-			var denyAllPrecedence uint32
-			var denyAllRule *cilium.PortNetworkPolicyRule
 
 			for sel, psp := range l4.PerSelectorPolicies {
 				precedence := psp.GetPrecedence()
@@ -1663,14 +1678,65 @@ func (s *xdsServer) getDirectionNetworkPolicy(ep endpoint.EndpointUpdater, selec
 					continue
 				}
 
+				// Handle egress named ports separately
+				if port == 0 && l4.PortName != "" && !l4.Ingress {
+					if getEgressNamedPorts == nil {
+						continue
+					}
+
+					selections := sel.GetSelectionsAt(selectors)
+					if len(selections) == 0 {
+						continue
+					}
+
+					remotePoliciesByPort := map[uint16][]uint32{}
+					for id, port := range getEgressNamedPorts(l4.PortName, l4.U8Proto, slices.Values(selections)) {
+						// selections is sorted, so remotePolicies is also sorted.
+						remotePoliciesByPort[port] = append(remotePoliciesByPort[port], uint32(id))
+					}
+					for port, remotePolicies := range remotePoliciesByPort {
+						rule, csc := s.getPortNetworkPolicyRule(ep, selectors, sel, psp,
+							tierBasePriority, tierLastPriority,
+							useFullTLSContext, useSDS, policySecretsNamespace)
+						if rule == nil {
+							continue
+						}
+						rule.RemotePolicies = remotePolicies
+
+						if debugEnabled {
+							s.logger.Debug("PortNetworkPolicyRule matching remote IDs",
+								logfields.EndpointID, ep.GetID(),
+								logfields.Version, selectors,
+								logfields.TrafficDirection, dir,
+								logfields.Port, port,
+								logfields.ProxyPort, rule.ProxyId,
+								logfields.PolicyID, rule.RemotePolicies,
+								logfields.ServerNames, rule.ServerNames,
+							)
+						}
+
+						portKey := portKey{port, l4.EndPort}
+						byPort := ensurePortState(portKey)
+						if !csc {
+							byPort.cantShortCircuit[rule.Precedence] = struct{}{}
+						}
+						byPort.rules = append(byPort.rules, rule)
+						rulesByPort[portKey] = byPort
+					}
+					continue
+				}
+
+				// Skip if a named port can not be resolved (yet)
+				// wildcard port already taken care of above
+				if port == 0 {
+					continue
+				}
+
 				rule, csc := s.getPortNetworkPolicyRule(ep, selectors, sel, psp,
 					tierBasePriority, tierLastPriority,
 					useFullTLSContext, useSDS, policySecretsNamespace)
 				if rule == nil {
 					continue
-				}
-				if !csc {
-					cantShortCircuit[rule.Precedence] = struct{}{}
 				}
 
 				if debugEnabled {
@@ -1685,22 +1751,51 @@ func (s *xdsServer) getDirectionNetworkPolicy(ep endpoint.EndpointUpdater, selec
 					)
 				}
 
+				portKey := portKey{port, l4.EndPort}
+				byPort := ensurePortState(portKey)
+				if !csc {
+					byPort.cantShortCircuit[rule.Precedence] = struct{}{}
+				}
+
 				if len(rule.RemotePolicies) == 0 {
 					if rule.GetDeny() {
-						if rule.Precedence > denyAllPrecedence {
-							denyAllRule = rule
-							denyAllPrecedence = rule.Precedence
+						if rule.Precedence > byPort.denyAllPrecedence {
+							byPort.denyAllRule = rule
+							byPort.denyAllPrecedence = rule.Precedence
 						}
 					} else if isEmptyRuleButPrecedence(rule) {
-						if rule.Precedence > allowAllPrecedence {
-							allowAllRule = rule
-							allowAllPrecedence = rule.Precedence
+						if rule.Precedence > byPort.allowAllPrecedence {
+							byPort.allowAllRule = rule
+							byPort.allowAllPrecedence = rule.Precedence
 						}
 					}
 				}
-
-				rules = append(rules, rule)
+				byPort.rules = append(byPort.rules, rule)
+				rulesByPort[portKey] = byPort
 			}
+		}
+
+		if len(ports) > 1 {
+			slices.SortFunc(ports, func(a, b portKey) int {
+				if a.port < b.port {
+					return -1
+				}
+				if a.port > b.port {
+					return 1
+				}
+				if a.endPort < b.endPort {
+					return -1
+				}
+				if a.endPort > b.endPort {
+					return 1
+				}
+				return 0
+			})
+		}
+		for _, portKey := range ports {
+			byPort := rulesByPort[portKey]
+			rules, cantShortCircuit, allowAllRule, denyAllRule :=
+				byPort.rules, byPort.cantShortCircuit, byPort.allowAllRule, byPort.denyAllRule
 
 			// prune out rules due to wildcard rules on this port, if any
 			if denyAllRule != nil || allowAllRule != nil {
@@ -1719,7 +1814,7 @@ func (s *xdsServer) getDirectionNetworkPolicy(ep endpoint.EndpointUpdater, selec
 					s.logger.Debug("Pruned rules due to wildcard rules on the port ",
 						logfields.EndpointID, ep.GetID(),
 						logfields.TrafficDirection, dir,
-						logfields.Port, port,
+						logfields.Port, portKey.port,
 						logfields.Count, nRules-len(rules),
 					)
 				}
@@ -1733,7 +1828,7 @@ func (s *xdsServer) getDirectionNetworkPolicy(ep endpoint.EndpointUpdater, selec
 					s.logger.Debug("Skipping PortNetworkPolicy due to no matching remote identities",
 						logfields.EndpointID, ep.GetID(),
 						logfields.TrafficDirection, dir,
-						logfields.Port, port,
+						logfields.Port, portKey.port,
 					)
 				}
 				continue
@@ -1747,9 +1842,9 @@ func (s *xdsServer) getDirectionNetworkPolicy(ep endpoint.EndpointUpdater, selec
 
 			// NPDS supports port ranges.
 			portPolicy := &cilium.PortNetworkPolicy{
-				Port:     uint32(port),
-				EndPort:  uint32(l4.EndPort),
-				Protocol: protocol,
+				Port:     uint32(portKey.port),
+				EndPort:  uint32(portKey.endPort),
+				Protocol: envoy_config_core.SocketAddress_TCP,
 				Rules:    rules,
 			}
 			PerPortPolicies = append(PerPortPolicies, portPolicy)
@@ -1777,7 +1872,7 @@ func (s *xdsServer) getDirectionNetworkPolicy(ep endpoint.EndpointUpdater, selec
 }
 
 // getNetworkPolicy converts a network policy into a cilium.NetworkPolicy.
-func (s *xdsServer) getNetworkPolicy(ep endpoint.EndpointUpdater, selectors policy.SelectorSnapshot, names []string, l4Policy *policy.L4Policy,
+func (s *xdsServer) getNetworkPolicy(ep endpoint.EndpointUpdater, getEgressNamedPorts GetEgressNamedPorts, selectors policy.SelectorSnapshot, names []string, l4Policy *policy.L4Policy,
 	ingressPolicyEnforced, egressPolicyEnforced, useFullTLSContext, useSDS bool, policySecretsNamespace string,
 ) *cilium.NetworkPolicy {
 	p := &cilium.NetworkPolicy{
@@ -1786,8 +1881,8 @@ func (s *xdsServer) getNetworkPolicy(ep endpoint.EndpointUpdater, selectors poli
 	}
 
 	if l4Policy != nil {
-		p.IngressPerPortPolicies = s.getDirectionNetworkPolicy(ep, selectors, &l4Policy.Ingress, ingressPolicyEnforced, useFullTLSContext, useSDS, ingressDirection, policySecretsNamespace)
-		p.EgressPerPortPolicies = s.getDirectionNetworkPolicy(ep, selectors, &l4Policy.Egress, egressPolicyEnforced, useFullTLSContext, useSDS, egressDirection, policySecretsNamespace)
+		p.IngressPerPortPolicies = s.getDirectionNetworkPolicy(ep, getEgressNamedPorts, selectors, &l4Policy.Ingress, ingressPolicyEnforced, useFullTLSContext, useSDS, ingressDirection, policySecretsNamespace)
+		p.EgressPerPortPolicies = s.getDirectionNetworkPolicy(ep, getEgressNamedPorts, selectors, &l4Policy.Egress, egressPolicyEnforced, useFullTLSContext, useSDS, egressDirection, policySecretsNamespace)
 	}
 
 	return p
@@ -1855,7 +1950,7 @@ func (s *xdsServer) UpdateNetworkPolicy(ep endpoint.EndpointUpdater, epp *policy
 		}
 	}
 
-	networkPolicy := s.getNetworkPolicy(ep, selectors, names, l4policy, ingressPolicyEnforced, egressPolicyEnforced, s.config.useFullTLSContext, s.config.useSDS, s.secretManager.GetSecretSyncNamespace())
+	networkPolicy := s.getNetworkPolicy(ep, epp.SelectorPolicy.GetEgressNamedPorts, selectors, names, l4policy, ingressPolicyEnforced, egressPolicyEnforced, s.config.useFullTLSContext, s.config.useSDS, s.secretManager.GetSecretSyncNamespace())
 
 	// First, validate the policy
 	err := networkPolicy.Validate()

@@ -58,6 +58,7 @@ var (
 func Test_Conformance(t *testing.T) {
 	logger := hivetest.Logger(t, hivetest.LogLevel(slog.LevelDebug))
 	cecTranslator := translation.NewCECTranslator(translation.Config{
+		SecretsNamespace: "cilium-secrets",
 		RouteConfig: translation.RouteConfig{
 			HostNameSuffixMatch: true,
 		},
@@ -67,10 +68,16 @@ func Test_Conformance(t *testing.T) {
 		ClusterConfig: translation.ClusterConfig{
 			IdleTimeoutSeconds: 60,
 		},
+		OriginalIPDetectionConfig: translation.OriginalIPDetectionConfig{
+			UseRemoteAddress: true,
+		},
 	})
 	gatewayAPITranslator := gatewayApiTranslation.NewTranslator(cecTranslator, translation.Config{
 		ServiceConfig: translation.ServiceConfig{
 			ExternalTrafficPolicy: string(corev1.ServiceExternalTrafficPolicyCluster),
+		},
+		OriginalIPDetectionConfig: translation.OriginalIPDetectionConfig{
+			UseRemoteAddress: true,
 		},
 	})
 
@@ -105,7 +112,7 @@ func Test_Conformance(t *testing.T) {
 		{
 			name: "gateway-invalid-route-kind",
 			gateway: []gwDetails{
-				{FullName: types.NamespacedName{Name: "gateway-only-invalid-route-kind", Namespace: "gateway-conformance-infra"}, wantErr: true},
+				{FullName: types.NamespacedName{Name: "gateway-only-invalid-route-kind", Namespace: "gateway-conformance-infra"}},
 				{FullName: types.NamespacedName{Name: "gateway-supported-and-invalid-route-kind", Namespace: "gateway-conformance-infra"}},
 			},
 		},
