@@ -2764,6 +2764,8 @@ envoy:
   maxConcurrentRetries: 128
   # -- Maximum number of connections on Envoy clusters
   clusterMaxConnections: 1024
+  # -- Maximum number of pending requests on Envoy clusters
+  clusterMaxPendingRequests: 1024
   # -- Maximum number of requests on Envoy clusters
   clusterMaxRequests: 1024
   # -- Maximum number of global downstream connections
@@ -2929,7 +2931,7 @@ envoy:
       # Even though granted to the container, the cilium-envoy-starter wrapper drops
       # all capabilities after forking the actual Envoy process.
       # `NET_BIND_SERVICE` is the only capability that can be passed to the Envoy process by
-      # setting `envoy.securityContext.capabilities.keepNetBindService=true` (in addition to granting the
+      # setting `envoy.securityContext.capabilities.keepCapNetBindService=true` (in addition to granting the
       # capability to the container).
       # Note: In case of embedded envoy, the capability must  be granted to the cilium-agent container.
       envoy:

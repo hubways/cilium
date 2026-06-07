@@ -39,6 +39,10 @@ import (
 )
 
 // Cell manages the Gateway API related controllers.
+const (
+	defaultControllerName = "io.cilium/gateway-controller"
+)
+
 var Cell = cell.Module(
 	"gateway-api",
 	"Manages the Gateway API controllers",
@@ -285,6 +289,7 @@ func initGatewayAPIController(params gatewayAPIParams) error {
 		params.CtrlRuntimeManager,
 		gatewayAPITranslator,
 		params.Logger,
+		defaultControllerName,
 		installedKinds,
 	); err != nil {
 		return fmt.Errorf("failed to create gateway controller: %w", err)
@@ -316,17 +321,19 @@ func registerSecretSync(params secretSyncParams) secretsync.SecretSyncRegistrati
 		return secretsync.SecretSyncRegistrationOut{}
 	}
 
+	handler := NewSecretSyncHandler(params.CtrlRuntimeManager.GetClient(), params.Logger, defaultControllerName)
+
 	return secretsync.SecretSyncRegistrationOut{
 		SecretSyncRegistration: &secretsync.SecretSyncRegistration{
 			RefObject:            &gatewayv1.Gateway{},
-			RefObjectEnqueueFunc: EnqueueTLSSecrets(params.CtrlRuntimeManager.GetClient(), params.Logger),
-			RefObjectCheckFunc:   IsReferencedByCiliumGateway,
+			RefObjectEnqueueFunc: handler.EnqueueTLSSecrets(),
+			RefObjectCheckFunc:   handler.IsReferencedByGateway,
 			SecretsNamespace:     params.GatewayApiConfig.GatewayAPISecretsNamespace,
 		},
 		ConfigMapSyncRegistration: &secretsync.ConfigMapSyncRegistration{
 			RefObject:            &gatewayv1.BackendTLSPolicy{},
-			RefObjectEnqueueFunc: EnqueueBackendTLSPolicyConfigMaps(params.CtrlRuntimeManager.GetClient(), params.Logger),
-			RefObjectCheckFunc:   ConfigMapIsReferencedInCiliumGateway,
+			RefObjectEnqueueFunc: handler.EnqueueBackendTLSPolicyConfigMaps(),
+			RefObjectCheckFunc:   handler.ConfigMapIsReferencedInGateway,
 			SecretsNamespace:     params.GatewayApiConfig.GatewayAPISecretsNamespace,
 		},
 	}
@@ -423,13 +430,13 @@ func checkCRDs(ctx context.Context, clientset k8sClient.Clientset, logger *slog.
 
 // registerReconcilers registers Gateway API reconcilers to the controller-runtime library manager.
 // optionalKinds are previously autodetected based on what CRDs are present in the cluster.
-func registerReconcilers(mgr ctrlRuntime.Manager, translator translation.Translator, logger *slog.Logger, installedCRDs []schema.GroupVersionKind) error {
+func registerReconcilers(mgr ctrlRuntime.Manager, translator translation.Translator, logger *slog.Logger, controllerName string, installedCRDs []schema.GroupVersionKind) error {
 	requiredReconcilers := []interface {
 		SetupWithManager(mgr ctrlRuntime.Manager) error
 	}{
-		newGatewayClassReconciler(mgr, logger),
-		newGatewayReconciler(mgr, translator, logger, installedCRDs),
-		newGammaReconciler(mgr, translator, logger),
+		newGatewayClassReconciler(mgr, logger, controllerName),
+		newGatewayReconciler(mgr, translator, logger, controllerName, installedCRDs),
+		newGammaReconciler(mgr, translator, logger, controllerName),
 		newGatewayClassConfigReconciler(mgr, logger),
 	}
 

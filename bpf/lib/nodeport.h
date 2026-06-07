@@ -232,9 +232,15 @@ static __always_inline bool nodeport_uses_dsr6(const struct lb6_service *svc)
 	return nodeport_uses_dsr(svc->flags2 & SVC_FLAG_FWD_MODE_DSR);
 }
 
-static __always_inline bool nodeport_skip_xlate6(const struct lb6_service *svc)
+static __always_inline bool nodeport_skip_xlate6(const struct lb6_service *svc,
+						 bool backend_local)
 {
-	bool skip_xlate = DSR_ENCAP_MODE == DSR_ENCAP_IPIP;
+	/* Under DSR with IPIP dispatch the inner packet is shipped to the
+	 * remote backend unchanged, so skip the DNAT. When the backend is
+	 * local though (LB node with local backend, or backend node after
+	 * cilium_ipip decap) we must DNAT to reach the Pod.
+	 */
+	bool skip_xlate = (DSR_ENCAP_MODE == DSR_ENCAP_IPIP) && !backend_local;
 
 	if (skip_xlate)
 		skip_xlate = nodeport_uses_dsr6(svc);
@@ -1370,6 +1376,8 @@ static __always_inline int nodeport_svc_lb6(struct __ctx_buff *ctx,
 {
 	struct ct_state ct_state_svc = {};
 	const struct lb6_backend *backend;
+	const struct lb6_backend *forced_be_p __maybe_unused = NULL;
+	struct lb6_backend forced_be __maybe_unused = {};
 	bool backend_local;
 	__u32 monitor = 0;
 	int ret;
@@ -1417,8 +1425,21 @@ static __always_inline int nodeport_svc_lb6(struct __ctx_buff *ctx,
 		return CTX_ACT_OK;
 	}
 #endif
+	if (CONFIG(enable_ipip_termination)) {
+		union v6addr forced_addr = {};
+		const union v6addr zero = {};
+
+		ctx_load_meta_ipv6(ctx, &forced_addr, CB_FORCED_BACKEND_V6_1);
+		ctx_store_meta_ipv6(ctx, CB_FORCED_BACKEND_V6_1, &zero);
+		if (forced_addr.d1 || forced_addr.d2) {
+			ipv6_addr_copy(&forced_be.address, &forced_addr);
+			forced_be.flags = BE_STATE_ACTIVE;
+			forced_be_p = &forced_be;
+		}
+	}
 	ret = lb6_local(get_ct_map6(tuple), ctx, fraginfo, l4_off,
-			key, tuple, svc, &ct_state_svc, &backend, ext_err);
+			key, tuple, svc, &ct_state_svc, &backend,
+			ext_err, forced_be_p);
 	if (IS_ERR(ret)) {
 		if (ret == DROP_NO_SERVICE) {
 			if (!CONFIG(enable_no_service_endpoints_routable))
@@ -1445,7 +1466,7 @@ static __always_inline int nodeport_svc_lb6(struct __ctx_buff *ctx,
 		return CTX_ACT_OK;
 	}
 
-	if (!nodeport_skip_xlate6(svc)) {
+	if (!nodeport_skip_xlate6(svc, backend_local)) {
 		ret = lb6_dnat_request(ctx, backend, l3_off, fraginfo,
 				       l4_off, tuple, false);
 		if (IS_ERR(ret))
@@ -1618,9 +1639,15 @@ static __always_inline bool nodeport_uses_dsr4(const struct lb4_service *svc)
 	return nodeport_uses_dsr(svc->flags2 & SVC_FLAG_FWD_MODE_DSR);
 }
 
-static __always_inline bool nodeport_skip_xlate4(const struct lb4_service *svc)
+static __always_inline bool nodeport_skip_xlate4(const struct lb4_service *svc,
+						 bool backend_local)
 {
-	bool skip_xlate = DSR_ENCAP_MODE == DSR_ENCAP_IPIP;
+	/* Under DSR with IPIP dispatch the inner packet is shipped to the
+	 * remote backend unchanged, so skip the DNAT. When the backend is
+	 * local though (LB node with local backend, or backend node after
+	 * cilium_ipip decap) we must DNAT to reach the Pod.
+	 */
+	bool skip_xlate = (DSR_ENCAP_MODE == DSR_ENCAP_IPIP) && !backend_local;
 
 	if (skip_xlate)
 		skip_xlate = nodeport_uses_dsr4(svc);
@@ -2751,9 +2778,21 @@ static __always_inline int nodeport_svc_lb4(struct __ctx_buff *ctx,
 						  ext_err);
 		}
 	} else {
+		const struct lb4_backend *tmp = NULL;
+		struct lb4_backend forced_be __maybe_unused = {};
+
+		if (CONFIG(enable_ipip_termination)) {
+			__be32 forced_addr = ctx_load_and_clear_meta(ctx,
+							CB_FORCED_BACKEND_V4);
+			if (forced_addr) {
+				forced_be.address = forced_addr;
+				forced_be.flags = BE_STATE_ACTIVE;
+				tmp = &forced_be;
+			}
+		}
 		ret = lb4_local(get_ct_map4(tuple), ctx, fraginfo, l4_off,
 				key, tuple, svc, &ct_state_svc, &backend,
-				ext_err);
+				ext_err, tmp);
 		if (IS_ERR(ret)) {
 			if (ret == DROP_NO_SERVICE) {
 				if (!CONFIG(enable_no_service_endpoints_routable))
@@ -2786,7 +2825,7 @@ static __always_inline int nodeport_svc_lb4(struct __ctx_buff *ctx,
 		cluster_id = backend->cluster_id;
 #endif
 
-		if (!nodeport_skip_xlate4(svc))
+		if (!nodeport_skip_xlate4(svc, backend_local))
 			ret = lb4_dnat_request(ctx, backend, l3_off, fraginfo,
 					       l4_off, tuple, false);
 	}

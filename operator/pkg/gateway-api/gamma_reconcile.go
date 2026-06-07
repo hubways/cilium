@@ -167,7 +167,7 @@ func (r *gammaReconciler) setHTTPRouteStatuses(gammaLogger *slog.Logger, ctx con
 	for httpRouteIndex, original := range httpRoutes.Items {
 
 		hr := original.DeepCopy()
-		hr.Status.Parents = pruneRouteParentStatuses(hr.Status.Parents, hr.Spec.ParentRefs)
+		hr.Status.Parents = pruneRouteParentStatuses(hr.Status.Parents, hr.Spec.ParentRefs, r.controllerName)
 
 		hrName := types.NamespacedName{
 			Name:      hr.Name,
@@ -175,11 +175,12 @@ func (r *gammaReconciler) setHTTPRouteStatuses(gammaLogger *slog.Logger, ctx con
 		}
 		// input for the validators
 		i := &routechecks.HTTPRouteInput{
-			Ctx:       ctx,
-			Logger:    gammaLogger.With(httpRoute, hrName),
-			Client:    r.Client,
-			Grants:    grants,
-			HTTPRoute: hr,
+			Ctx:            ctx,
+			Logger:         gammaLogger.With(httpRoute, hrName),
+			Client:         r.Client,
+			Grants:         grants,
+			HTTPRoute:      hr,
+			ControllerName: r.controllerName,
 		}
 
 		// Route validators
@@ -270,7 +271,7 @@ func (r *gammaReconciler) setGRPCRouteStatuses(gammaLogger *slog.Logger, ctx con
 	for grpcRouteIndex, original := range grpcRoutes.Items {
 
 		grpc := original.DeepCopy()
-		grpc.Status.Parents = pruneRouteParentStatuses(grpc.Status.Parents, grpc.Spec.ParentRefs)
+		grpc.Status.Parents = pruneRouteParentStatuses(grpc.Status.Parents, grpc.Spec.ParentRefs, r.controllerName)
 
 		grpcName := types.NamespacedName{
 			Name:      grpc.Name,
@@ -278,11 +279,12 @@ func (r *gammaReconciler) setGRPCRouteStatuses(gammaLogger *slog.Logger, ctx con
 		}
 		// input for the validators
 		i := &routechecks.GRPCRouteInput{
-			Ctx:       ctx,
-			Logger:    gammaLogger.With(grpcRoute, grpcName),
-			Client:    r.Client,
-			Grants:    grants,
-			GRPCRoute: grpc,
+			Ctx:            ctx,
+			Logger:         gammaLogger.With(grpcRoute, grpcName),
+			Client:         r.Client,
+			Grants:         grants,
+			GRPCRoute:      grpc,
+			ControllerName: r.controllerName,
 		}
 
 		// Route validators

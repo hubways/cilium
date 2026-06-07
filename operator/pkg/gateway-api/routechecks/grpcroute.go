@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"reflect"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -24,11 +25,12 @@ var _ Input = (*GRPCRouteInput)(nil)
 
 // GRPCRouteInput is used to implement the Input interface for GRPCRoute
 type GRPCRouteInput struct {
-	Ctx       context.Context
-	Logger    *slog.Logger
-	Client    client.Client
-	Grants    *gatewayv1.ReferenceGrantList
-	GRPCRoute *gatewayv1.GRPCRoute
+	Ctx            context.Context
+	Logger         *slog.Logger
+	Client         client.Client
+	Grants         *gatewayv1.ReferenceGrantList
+	GRPCRoute      *gatewayv1.GRPCRoute
+	ControllerName string
 
 	gateways      map[gatewayv1.ParentReference]*gatewayv1.Gateway
 	gammaServices map[gatewayv1.ParentReference]*corev1.Service
@@ -176,7 +178,7 @@ func (g *GRPCRouteInput) GetValidProtocols() []gatewayv1.ProtocolType {
 func (g *GRPCRouteInput) mergeStatusConditions(parentRef gatewayv1.ParentReference, updates []metav1.Condition) {
 	index := -1
 	for i, parent := range g.GRPCRoute.Status.RouteStatus.Parents {
-		if parent.ParentRef == parentRef {
+		if reflect.DeepEqual(parent.ParentRef, parentRef) {
 			index = i
 			break
 		}
@@ -187,7 +189,7 @@ func (g *GRPCRouteInput) mergeStatusConditions(parentRef gatewayv1.ParentReferen
 	}
 	g.GRPCRoute.Status.RouteStatus.Parents = append(g.GRPCRoute.Status.RouteStatus.Parents, gatewayv1.RouteParentStatus{
 		ParentRef:      parentRef,
-		ControllerName: controllerName,
+		ControllerName: gatewayv1.GatewayController(g.ControllerName),
 		Conditions:     updates,
 	})
 }

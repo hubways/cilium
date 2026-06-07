@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"reflect"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -21,11 +22,12 @@ import (
 
 // HTTPRouteInput is used to implement the Input interface for HTTPRoute
 type HTTPRouteInput struct {
-	Ctx       context.Context
-	Logger    *slog.Logger
-	Client    client.Client
-	Grants    *gatewayv1.ReferenceGrantList
-	HTTPRoute *gatewayv1.HTTPRoute
+	Ctx            context.Context
+	Logger         *slog.Logger
+	Client         client.Client
+	Grants         *gatewayv1.ReferenceGrantList
+	HTTPRoute      *gatewayv1.HTTPRoute
+	ControllerName string
 
 	gateways      map[gatewayv1.ParentReference]*gatewayv1.Gateway
 	gammaServices map[gatewayv1.ParentReference]*corev1.Service
@@ -56,7 +58,7 @@ func (h *HTTPRouteInput) SetAllParentCondition(condition metav1.Condition) {
 func (h *HTTPRouteInput) mergeStatusConditions(parentRef gatewayv1.ParentReference, updates []metav1.Condition) {
 	index := -1
 	for i, parent := range h.HTTPRoute.Status.RouteStatus.Parents {
-		if parent.ParentRef == parentRef {
+		if reflect.DeepEqual(parent.ParentRef, parentRef) {
 			index = i
 			break
 		}
@@ -67,7 +69,7 @@ func (h *HTTPRouteInput) mergeStatusConditions(parentRef gatewayv1.ParentReferen
 	}
 	h.HTTPRoute.Status.RouteStatus.Parents = append(h.HTTPRoute.Status.RouteStatus.Parents, gatewayv1.RouteParentStatus{
 		ParentRef:      parentRef,
-		ControllerName: controllerName,
+		ControllerName: gatewayv1.GatewayController(h.ControllerName),
 		Conditions:     updates,
 	})
 }

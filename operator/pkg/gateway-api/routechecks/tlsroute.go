@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"reflect"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -21,11 +22,12 @@ import (
 
 // TLSRouteInput is used to implement the Input interface for TLSRoute
 type TLSRouteInput struct {
-	Ctx      context.Context
-	Logger   *slog.Logger
-	Client   client.Client
-	Grants   *gatewayv1.ReferenceGrantList
-	TLSRoute *gatewayv1.TLSRoute
+	Ctx            context.Context
+	Logger         *slog.Logger
+	Client         client.Client
+	Grants         *gatewayv1.ReferenceGrantList
+	TLSRoute       *gatewayv1.TLSRoute
+	ControllerName string
 
 	gateways map[gatewayv1.ParentReference]*gatewayv1.Gateway
 }
@@ -55,7 +57,7 @@ func (t *TLSRouteInput) SetAllParentCondition(condition metav1.Condition) {
 func (t *TLSRouteInput) mergeStatusConditions(parentRef gatewayv1.ParentReference, updates []metav1.Condition) {
 	index := -1
 	for i, parent := range t.TLSRoute.Status.RouteStatus.Parents {
-		if parent.ParentRef == parentRef {
+		if reflect.DeepEqual(parent.ParentRef, parentRef) {
 			index = i
 			break
 		}
@@ -66,7 +68,7 @@ func (t *TLSRouteInput) mergeStatusConditions(parentRef gatewayv1.ParentReferenc
 	}
 	t.TLSRoute.Status.RouteStatus.Parents = append(t.TLSRoute.Status.RouteStatus.Parents, gatewayv1.RouteParentStatus{
 		ParentRef:      parentRef,
-		ControllerName: controllerName,
+		ControllerName: gatewayv1.GatewayController(t.ControllerName),
 		Conditions:     updates,
 	})
 }

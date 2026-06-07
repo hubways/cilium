@@ -5,6 +5,7 @@ package gateway_api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -89,7 +90,7 @@ func (r *gatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return controllerruntime.Success()
 	}
 
-	if string(gwc.Spec.ControllerName) != helpers.CiliumDefaultControllerName {
+	if string(gwc.Spec.ControllerName) != r.controllerName {
 		scopedLog.InfoContext(ctx, "GatewayClass does not have matching controller name, cleaning up previously managed resources",
 			gatewayClass, gw.Spec.GatewayClassName,
 			logfields.Controller, gwc.Spec.ControllerName)
@@ -98,6 +99,20 @@ func (r *gatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			return controllerruntime.Fail(err)
 		}
 		return controllerruntime.Success()
+	}
+
+	if ref := gwc.Spec.ParametersRef; ref != nil {
+		if !isParameterRefSupported(ref) {
+			setGatewayAccepted(gw, false, "Invalid GatewayClass parameters: spec.parametersRef.kind must be CiliumGatewayClassConfig", gatewayv1.GatewayReasonInvalidParameters)
+			setGatewayProgrammed(gw, metav1.ConditionUnknown, "Waiting for Accepted condition to be True", gatewayv1.GatewayReasonPending)
+			return r.handleReconcileErrorWithStatus(ctx, errors.New("Invalid GatewayClass"), original, gw)
+		}
+
+		if !hasNamespacedName(ref) {
+			setGatewayAccepted(gw, false, "Invalid GatewayClass parametersRef: both name and namespace are required", gatewayv1.GatewayReasonInvalidParameters)
+			setGatewayProgrammed(gw, metav1.ConditionUnknown, "Waiting for Accepted condition to be True", gatewayv1.GatewayReasonPending)
+			return r.handleReconcileErrorWithStatus(ctx, errors.New("Invalid GatewayClass"), original, gw)
+		}
 	}
 
 	httpRouteList := &gatewayv1.HTTPRouteList{}
@@ -874,7 +889,7 @@ func (r *gatewayReconciler) runCommonRouteChecks(input routechecks.Input, parent
 }
 
 func (r *gatewayReconciler) parentIsMatchingGateway(parent gatewayv1.ParentReference, namespace string) bool {
-	hasMatchingControllerFn := helpers.GatewayHasMatchingControllerFn(context.Background(), r.Client, helpers.CiliumDefaultControllerName, r.logger)
+	hasMatchingControllerFn := helpers.GatewayHasMatchingControllerFn(context.Background(), r.Client, r.controllerName, r.logger)
 	if !helpers.IsGateway(parent) {
 		return false
 	}
@@ -893,16 +908,17 @@ func (r *gatewayReconciler) setHTTPRouteStatuses(scopedLog *slog.Logger, ctx con
 	for httpRouteIndex, original := range httpRoutes.Items {
 
 		hr := original.DeepCopy()
-		hr.Status.Parents = pruneRouteParentStatuses(hr.Status.Parents, hr.Spec.ParentRefs)
+		hr.Status.Parents = pruneRouteParentStatuses(hr.Status.Parents, hr.Spec.ParentRefs, r.controllerName)
 
 		// input for the validators
 		// The validators will mutate the HTTPRoute as required, setting its status correctly.
 		i := &routechecks.HTTPRouteInput{
-			Ctx:       ctx,
-			Logger:    scopedLog.With(logfields.HTTPRoute, hr),
-			Client:    r.Client,
-			Grants:    grants,
-			HTTPRoute: hr,
+			Ctx:            ctx,
+			Logger:         scopedLog.With(logfields.HTTPRoute, hr),
+			Client:         r.Client,
+			Grants:         grants,
+			HTTPRoute:      hr,
+			ControllerName: r.controllerName,
 		}
 
 		if err := r.runCommonRouteChecks(i, hr.Spec.ParentRefs, hr.Namespace); err != nil {
@@ -933,16 +949,17 @@ func (r *gatewayReconciler) setTLSRouteStatuses(scopedLog *slog.Logger, ctx cont
 	for tlsRouteIndex, original := range tlsRoutes.Items {
 
 		tlsr := original.DeepCopy()
-		tlsr.Status.Parents = pruneRouteParentStatuses(tlsr.Status.Parents, tlsr.Spec.ParentRefs)
+		tlsr.Status.Parents = pruneRouteParentStatuses(tlsr.Status.Parents, tlsr.Spec.ParentRefs, r.controllerName)
 
 		// input for the validators
 		// The validators will mutate the TLSRoute as required, setting its status correctly.
 		i := &routechecks.TLSRouteInput{
-			Ctx:      ctx,
-			Logger:   scopedLog.With(logfields.TLSRoute, tlsr),
-			Client:   r.Client,
-			Grants:   grants,
-			TLSRoute: tlsr,
+			Ctx:            ctx,
+			Logger:         scopedLog.With(logfields.TLSRoute, tlsr),
+			Client:         r.Client,
+			Grants:         grants,
+			TLSRoute:       tlsr,
+			ControllerName: r.controllerName,
 		}
 
 		if err := r.runCommonRouteChecks(i, tlsr.Spec.ParentRefs, tlsr.Namespace); err != nil {
@@ -968,16 +985,17 @@ func (r *gatewayReconciler) setGRPCRouteStatuses(scopedLog *slog.Logger, ctx con
 	for grpcRouteIndex, original := range grpcRoutes.Items {
 
 		grpcr := original.DeepCopy()
-		grpcr.Status.Parents = pruneRouteParentStatuses(grpcr.Status.Parents, grpcr.Spec.ParentRefs)
+		grpcr.Status.Parents = pruneRouteParentStatuses(grpcr.Status.Parents, grpcr.Spec.ParentRefs, r.controllerName)
 
 		// input for the validators
 		// The validators will mutate the GRPCRoute as required, setting its status correctly.
 		i := &routechecks.GRPCRouteInput{
-			Ctx:       ctx,
-			Logger:    scopedLog.With(logfields.GRPCRoute, grpcr),
-			Client:    r.Client,
-			Grants:    grants,
-			GRPCRoute: grpcr,
+			Ctx:            ctx,
+			Logger:         scopedLog.With(logfields.GRPCRoute, grpcr),
+			Client:         r.Client,
+			Grants:         grants,
+			GRPCRoute:      grpcr,
+			ControllerName: r.controllerName,
 		}
 
 		if err := r.runCommonRouteChecks(i, grpcr.Spec.ParentRefs, grpcr.Namespace); err != nil {
@@ -1111,6 +1129,7 @@ func (r *gatewayReconciler) setBackendTLSPolicyStatuses(scopedLog *slog.Logger,
 				input := &policychecks.BackendTLSPolicyInput{
 					Client:           r.Client,
 					BackendTLSPolicy: btlsp,
+					ControllerName:   r.controllerName,
 				}
 				input.SetAncestorCondition(currentGatewayRef, metav1.Condition{
 					Type:    string(gatewayv1.PolicyConditionAccepted),
@@ -1150,6 +1169,7 @@ func (r *gatewayReconciler) setBackendTLSPolicyStatuses(scopedLog *slog.Logger,
 				input := &policychecks.BackendTLSPolicyInput{
 					Client:           r.Client,
 					BackendTLSPolicy: btlsp,
+					ControllerName:   r.controllerName,
 				}
 				input.SetAncestorCondition(currentGatewayRef, metav1.Condition{
 					Type:    string(gatewayv1.PolicyConditionAccepted),
@@ -1187,6 +1207,7 @@ func (r *gatewayReconciler) setBackendTLSPolicyStatuses(scopedLog *slog.Logger,
 			input := &policychecks.BackendTLSPolicyInput{
 				Client:           r.Client,
 				BackendTLSPolicy: btlsp,
+				ControllerName:   r.controllerName,
 			}
 
 			// Now, we run the Policy checks against it, which will update the status correctly.
@@ -1245,6 +1266,7 @@ func (r *gatewayReconciler) setBackendTLSPolicyStatuses(scopedLog *slog.Logger,
 			input := &policychecks.BackendTLSPolicyInput{
 				Client:           r.Client,
 				BackendTLSPolicy: btlsp,
+				ControllerName:   r.controllerName,
 			}
 
 			input.SetAncestorCondition(currentGatewayRef, metav1.Condition{
