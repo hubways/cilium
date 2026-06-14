@@ -13,7 +13,7 @@ cilium-operator [flags]
 ```
       --alibaba-cloud-release-excess-ips                           Enable releasing excess free IP addresses from Alibaba Cloud ENI.
       --alibaba-cloud-vpc-id string                                Specific VPC ID for AlibabaCloud ENI. If not set use same VPC as operator
-      --auto-create-cilium-pod-ip-pools stringToString             Automatically create CiliumPodIPPool resources on startup. Specify pools in the form of <pool>=ipv4-cidrs:<cidr>,[<cidr>...];ipv4-mask-size:<size> (multiple pools can also be passed by repeating the CLI flag) (default [])
+      --auto-create-cilium-pod-ip-pools stringToString             Automatically create CiliumPodIPPool resources on startup. Specify pools in the form of <pool>=ipv4-cidrs:<cidr>,[<cidr>...];ipv4-mask-size:<size>[;allow-first-ip:<bool>][;allow-last-ip:<bool>] (multiple pools can also be passed by repeating the CLI flag) (default [])
       --aws-enable-prefix-delegation                               Allows operator to allocate prefixes to ENIs instead of individual IP addresses
       --aws-max-results-per-call int32                             Maximum results per AWS API call for DescribeNetworkInterfaces and DescribeSecurityGroups. Set to 0 to let AWS determine optimal page size (default). If set to 0 and AWS returns OperationNotPermitted errors, automatically switches to 1000 for all future requests
       --aws-release-excess-ips                                     Enable releasing excess free IP addresses from AWS ENI.
@@ -52,6 +52,7 @@ cilium-operator [flags]
       --ec2-api-endpoint string                                    AWS API endpoint for the EC2 service
       --enable-cilium-endpoint-slice                               If set to true, the CiliumEndpointSlice feature is enabled. If any CiliumEndpoints resources are created, updated, or deleted in the cluster, all those changes are broadcast as CiliumEndpointSlice updates to all of the Cilium agents.
       --enable-cilium-operator-server-access strings               List of cilium operator APIs which are administratively enabled. Supports '*'. (default [*])
+      --enable-cluster-pool-to-multi-pool-migration                Enable the migration of all nodes from cluster-pool IPAM to multi-pool IPAM
       --enable-gateway-api-alpn                                    Enables exposing ALPN with HTTP2 and HTTP/1.1 support for Gateway API
       --enable-gateway-api-app-protocol                            Enables Backend Protocol selection (GEP-1911) for Gateway API via appProtocol
       --enable-gateway-api-proxy-protocol                          Enable proxy protocol for all GatewayAPI listeners. Note that _only_ Proxy protocol traffic will be accepted once this is enabled.
@@ -110,6 +111,7 @@ cilium-operator [flags]
       --ingress-use-remote-address                                 Use the immediate client's IP address as the origin client's IP address (default true)
       --instance-tags-filter map                                   EC2 Instance tags in the form of k1=v1,k2=v2 (multiple k/v pairs can also be passed by repeating the CLI flag
       --ipam string                                                Backend to use for IPAM (default "cluster-pool")
+      --ipam-default-ip-pool string                                Name of the default IP Pool when using multi-pool (default "default")
       --k8s-api-server-urls strings                                Kubernetes API server URLs
       --k8s-client-connection-keep-alive duration                  Configures the keep alive duration of K8s client connections. K8 client is disabled if the value is set to 0 (default 30s)
       --k8s-client-connection-timeout duration                     Configures the timeout of K8s client connections. K8s client is disabled if the value is set to 0 (default 30s)
@@ -140,6 +142,7 @@ cilium-operator [flags]
       --mesh-auth-spire-server-address string                      SPIRE server endpoint. (default "spire-server.spire.svc:8081")
       --mesh-auth-spire-server-connection-timeout duration         SPIRE server connection timeout. (default 10s)
       --metrics-sampling-interval duration                         Set the internal metrics sampling interval (default 5m0s)
+      --multi-pool-migration-workers int                           Number of workers to use for migrating nodes from cluster-pool IPAM to multi-pool IPAM (default 16)
       --nodes-gc-interval duration                                 GC interval for CiliumNodes (default 5m0s)
       --operator-api-serve-addr string                             Address to serve API requests (default "localhost:9234")
       --operator-k8s-client-burst int                              Burst value allowed for the K8s client (default 200)

@@ -264,9 +264,15 @@ func (r *ingressReconciler) buildDedicatedResources(ctx context.Context, ingress
 		m.HTTP = append(m.HTTP, ingestion.Ingress(scopedLog, *ingress, r.defaultSecretNamespace, r.defaultSecretName, r.enforcedHTTPS, insecureHTTPPort, secureHTTPPort, r.defaultRequestTimeout)...)
 	}
 
-	cec, svc, ep, err := r.dedicatedTranslator.Translate(m)
+	cec, svc, eps, err := r.dedicatedTranslator.Translate(m)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to translate model into resources: %w", err)
+	}
+	// Ingress only ever produces a single dummy EndpointSlice; unwrap from the
+	// shared Translator interface that returns a list to support gateway-api L4.
+	var ep *discoveryv1.EndpointSlice
+	if len(eps) > 0 {
+		ep = eps[0]
 	}
 
 	r.propagateIngressAnnotationsAndLabels(ingress, &svc.ObjectMeta)
@@ -440,7 +446,7 @@ func (r *ingressReconciler) updateIngressLoadbalancerStatus(ctx context.Context,
 	serviceNamespacedName := types.NamespacedName{}
 	if r.isEffectiveLoadbalancerModeDedicated(ingress) {
 		serviceNamespacedName.Namespace = ingress.Namespace
-		serviceNamespacedName.Name = fmt.Sprintf("%s-%s", ciliumIngressPrefix, ingress.Name)
+		serviceNamespacedName.Name = shortener.ShortenK8sResourceName(fmt.Sprintf("%s-%s", ciliumIngressPrefix, ingress.Name))
 	} else {
 		serviceNamespacedName.Namespace = r.ciliumNamespace
 		serviceNamespacedName.Name = r.sharedResourcesName
