@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of Cilium
 
-package eni
+package ipam
 
 import (
 	"net/netip"
@@ -10,8 +10,7 @@ import (
 	"github.com/cilium/hive/hivetest"
 	"github.com/stretchr/testify/require"
 
-	ec2mock "github.com/cilium/cilium/pkg/aws/ec2/mock"
-	eniTypes "github.com/cilium/cilium/pkg/aws/eni/types"
+	apiMock "github.com/cilium/cilium/pkg/aws/api/mock"
 	metadataMock "github.com/cilium/cilium/pkg/aws/metadata/mock"
 	"github.com/cilium/cilium/pkg/aws/types"
 	iputil "github.com/cilium/cilium/pkg/ip"
@@ -135,7 +134,7 @@ var (
 		},
 	}
 
-	enis = map[string]ec2mock.ENIMap{
+	enis = map[string]apiMock.ENIMap{
 		"i-1": {
 			"eni-1": {
 				ID:             "eni-1",
@@ -143,24 +142,24 @@ var (
 				Number:         0,
 				SecurityGroups: []string{"sg1", "sg2"},
 				Addresses:      []iputil.Addr{},
-				Subnet:         eniTypes.AwsSubnet{ID: "subnet-1"},
-				VPC:            eniTypes.AwsVPC{ID: "vpc-1"},
+				Subnet:         types.AwsSubnet{ID: "subnet-1"},
+				VPC:            types.AwsVPC{ID: "vpc-1"},
 			},
 		},
 		"i-2": {
-			"eni-3": &eniTypes.ENI{
+			"eni-3": &types.ENI{
 				ID:             "eni-3",
 				IP:             iputil.AddrFrom(netip.MustParseAddr("3.3.3.3")),
 				Number:         0,
 				SecurityGroups: []string{"sg3", "sg4"},
 				Addresses:      []iputil.Addr{},
-				Subnet:         eniTypes.AwsSubnet{ID: "subnet-2"},
-				VPC:            eniTypes.AwsVPC{ID: "vpc-2"},
+				Subnet:         types.AwsSubnet{ID: "subnet-2"},
+				VPC:            types.AwsVPC{ID: "vpc-2"},
 			},
 		},
 	}
 
-	enis2 = map[string]ec2mock.ENIMap{
+	enis2 = map[string]apiMock.ENIMap{
 		"i-1": {
 			"eni-1": {
 				ID:             "eni-1",
@@ -168,8 +167,8 @@ var (
 				Number:         0,
 				SecurityGroups: []string{"sg1", "sg2"},
 				Addresses:      []iputil.Addr{},
-				Subnet:         eniTypes.AwsSubnet{ID: "subnet-1"},
-				VPC:            eniTypes.AwsVPC{ID: "vpc-1"},
+				Subnet:         types.AwsSubnet{ID: "subnet-1"},
+				VPC:            types.AwsVPC{ID: "vpc-1"},
 			},
 			"eni-2": {
 				ID:             "eni-2",
@@ -177,31 +176,31 @@ var (
 				Number:         1,
 				SecurityGroups: []string{"sg3", "sg4"},
 				Addresses:      []iputil.Addr{},
-				Subnet:         eniTypes.AwsSubnet{ID: "subnet-1"},
-				VPC:            eniTypes.AwsVPC{ID: "vpc-1"},
+				Subnet:         types.AwsSubnet{ID: "subnet-1"},
+				VPC:            types.AwsVPC{ID: "vpc-1"},
 			},
 		},
 		"i-2": {
-			"eni-3": &eniTypes.ENI{
+			"eni-3": &types.ENI{
 				ID:             "eni-3",
 				IP:             iputil.AddrFrom(netip.MustParseAddr("3.3.3.3")),
 				Number:         0,
 				SecurityGroups: []string{"sg3", "sg4"},
 				Addresses:      []iputil.Addr{},
-				Subnet:         eniTypes.AwsSubnet{ID: "subnet-2"},
-				VPC:            eniTypes.AwsVPC{ID: "vpc-2"},
+				Subnet:         types.AwsSubnet{ID: "subnet-2"},
+				VPC:            types.AwsVPC{ID: "vpc-2"},
 			},
 		},
 	}
 )
 
-func iteration1(t *testing.T, api *ec2mock.API, mngr *InstancesManager) {
+func iteration1(t *testing.T, api *apiMock.API, mngr *InstancesManager) {
 	api.UpdateENIs(enis)
 	_, err := mngr.Resync(t.Context())
 	require.NoError(t, err)
 }
 
-func iteration2(t *testing.T, api *ec2mock.API, mngr *InstancesManager) {
+func iteration2(t *testing.T, api *apiMock.API, mngr *InstancesManager) {
 	api.UpdateSubnets(subnets2)
 	api.UpdateSecurityGroups(securityGroups2)
 	api.UpdateENIs(enis2)
@@ -210,7 +209,7 @@ func iteration2(t *testing.T, api *ec2mock.API, mngr *InstancesManager) {
 }
 
 func TestGetSubnet(t *testing.T) {
-	api := ec2mock.NewAPI(subnets, vpcs, securityGroups, routeTables)
+	api := apiMock.NewAPI(subnets, vpcs, securityGroups, routeTables)
 	require.NotNil(t, api)
 	metadataMockapi, _ := metadataMock.NewMetadataMock()
 	mngr, err := NewInstancesManager(t.Context(), hivetest.Logger(t), api, metadataMockapi)
@@ -249,7 +248,7 @@ func TestGetSubnet(t *testing.T) {
 }
 
 func TestFindSubnetByIDs(t *testing.T) {
-	api := ec2mock.NewAPI(subnets2, vpcs, securityGroups, routeTables)
+	api := apiMock.NewAPI(subnets2, vpcs, securityGroups, routeTables)
 	require.NotNil(t, api)
 	metadataMockapi, _ := metadataMock.NewMetadataMock()
 	mngr, err := NewInstancesManager(t.Context(), hivetest.Logger(t), api, metadataMockapi)
@@ -289,7 +288,7 @@ func TestFindSubnetByIDs(t *testing.T) {
 }
 
 func TestFindSubnetByTags(t *testing.T) {
-	api := ec2mock.NewAPI(subnets, vpcs, securityGroups, routeTables)
+	api := apiMock.NewAPI(subnets, vpcs, securityGroups, routeTables)
 	require.NotNil(t, api)
 	metadataMockapi, _ := metadataMock.NewMetadataMock()
 	mngr, err := NewInstancesManager(t.Context(), hivetest.Logger(t), api, metadataMockapi)
@@ -326,7 +325,7 @@ func TestFindSubnetByTags(t *testing.T) {
 }
 
 func TestGetSecurityGroupByTags(t *testing.T) {
-	api := ec2mock.NewAPI(subnets, vpcs, securityGroups, routeTables)
+	api := apiMock.NewAPI(subnets, vpcs, securityGroups, routeTables)
 	require.NotNil(t, api)
 
 	metadataMockapi, _ := metadataMock.NewMetadataMock()
