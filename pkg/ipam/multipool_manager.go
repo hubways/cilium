@@ -272,10 +272,12 @@ type multiPoolManager struct {
 	poolsMutex      lock.Mutex
 	pools           map[Pool]*poolPair
 	poolsUpdated    chan struct{}
+	staticIPUpdated chan struct{}
 	finishedRestore map[Family]bool
 
-	nodeMutex lock.Mutex
-	node      *ciliumv2.CiliumNode
+	nodeMutex  lock.Mutex
+	node       *ciliumv2.CiliumNode
+	nodeSynced bool
 
 	jobGroup   job.Group
 	k8sUpdater job.Trigger
@@ -303,6 +305,7 @@ func newMultiPoolManager(p MultiPoolManagerParams) *multiPoolManager {
 		pendingIPsPerPool:      newPendingAllocationsPerPool(p.Logger),
 		pools:                  map[Pool]*poolPair{},
 		poolsUpdated:           make(chan struct{}, 1),
+		staticIPUpdated:        make(chan struct{}, 1),
 		jobGroup:               p.JobGroup,
 		k8sUpdater:             job.NewTrigger(job.WithDebounce(p.CiliumNodeUpdateRate)),
 		cnClient:               p.CNClient,
@@ -327,6 +330,8 @@ func newMultiPoolManager(p MultiPoolManagerParams) *multiPoolManager {
 			func(ctx context.Context, health cell.Health) error {
 				for ev := range p.Node.Events(ctx) {
 					switch ev.Kind {
+					case resource.Sync:
+						mgr.setNodeSynced()
 					case resource.Upsert:
 						mgr.ciliumNodeUpdated(ev.Object)
 					case resource.Delete:
@@ -349,6 +354,7 @@ func newMultiPoolManager(p MultiPoolManagerParams) *multiPoolManager {
 	)
 
 	mgr.waitForAllPools()
+	mgr.waitForStaticIP()
 
 	return mgr
 }
@@ -370,6 +376,27 @@ func (m *multiPoolManager) waitForAllPools() {
 				allPoolsReady = m.waitForPool(ctx, IPv6, pool) && allPoolsReady
 			}
 			cancel()
+		}
+	}
+}
+
+// waitForStaticIP blocks until a requested static IP address has been assigned
+// to the local node by the operator. If no static IP was requested, it returns
+// immediately.
+func (m *multiPoolManager) waitForStaticIP() {
+	for {
+		requested, assigned := m.staticIPStatus()
+		if !requested || assigned != "" {
+			return
+		}
+
+		select {
+		case <-m.staticIPUpdated:
+		case <-time.After(5 * time.Second):
+			m.logger.Info(
+				"Waiting for static IP address to be assigned",
+				logfields.HelpMessage, "Check if cilium-operator pod is running and does not have any warnings or error messages.",
+			)
 		}
 	}
 }
@@ -435,10 +462,29 @@ func (m *multiPoolManager) ciliumNodeUpdated(newNode *ciliumv2.CiliumNode) {
 	if oldNode == nil {
 		m.k8sUpdater.Trigger()
 	}
+
+	// Signal any goroutine waiting in waitForStaticIP if the static IP
+	// request or assignment changed.
+	if oldNode == nil ||
+		!maps.Equal(oldNode.Spec.IPAM.StaticIPTags, newNode.Spec.IPAM.StaticIPTags) ||
+		oldNode.Status.IPAM.AssignedStaticIP != newNode.Status.IPAM.AssignedStaticIP {
+		select {
+		case m.staticIPUpdated <- struct{}{}:
+		default:
+		}
+	}
 }
 
 func (m *multiPoolManager) localNodeUpdated() <-chan struct{} {
 	return m.localNodeUpdate
+}
+
+func (m *multiPoolManager) staticIPStatus() (requested bool, assigned string) {
+	node := m.getNode()
+	if node == nil {
+		return false, ""
+	}
+	return len(node.Spec.IPAM.StaticIPTags) > 0, node.Status.IPAM.AssignedStaticIP
 }
 
 // neededIPCeil rounds up numIPs to the next but one multiple of preAlloc.
@@ -563,13 +609,14 @@ func (m *multiPoolManager) isRestoreFinishedLocked(family Family) bool {
 }
 
 func (m *multiPoolManager) updateLocalNode(ctx context.Context) error {
-	m.poolsMutex.Lock()
-
 	curNode := m.getNode()
 	if curNode == nil {
-		m.poolsMutex.Unlock()
 		return nil
 	}
+
+	nodeSynced := m.isNodeSynced()
+
+	m.poolsMutex.Lock()
 
 	newNode := curNode.DeepCopy()
 	requested := []types.IPAMPoolRequest{}
@@ -644,11 +691,9 @@ func (m *multiPoolManager) updateLocalNode(ctx context.Context) error {
 	// Only update Allocated once local pools have been populated. Before
 	// that, the agent has no CIDRs of its own and updating with an empty
 	// Allocated would clear CIDRs that may still be in use from a
-	// previous agent run. Once the agent has observed at least one CIDR
-	// (from Status.ENI.ENIs in ENI mode, or from Pools.Allocated in
-	// standard multi-pool mode), it updates Allocated to communicate
-	// in-use CIDRs back to the operator.
-	if len(m.pools) > 0 {
+	// previous agent run. Once the CiliumNode resource has been synced
+	// it updates Allocated to communicate in-use CIDRs back to the operator.
+	if nodeSynced {
 		newPoolsSpec.Allocated = allocated
 	} else {
 		pools := m.poolsAccessor.FromResource(curNode)
@@ -933,4 +978,18 @@ func (m *multiPoolManager) setNode(node *ciliumv2.CiliumNode) *ciliumv2.CiliumNo
 	oldNode := m.node
 	m.node = node
 	return oldNode
+}
+
+func (m *multiPoolManager) isNodeSynced() bool {
+	m.nodeMutex.Lock()
+	defer m.nodeMutex.Unlock()
+
+	return m.nodeSynced
+}
+
+func (m *multiPoolManager) setNodeSynced() {
+	m.nodeMutex.Lock()
+	defer m.nodeMutex.Unlock()
+
+	m.nodeSynced = true
 }
