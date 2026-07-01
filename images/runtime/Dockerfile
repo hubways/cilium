@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 ARG GOLANG_IMAGE=docker.io/library/golang:1.26.3@sha256:2d6c80227255c3112a4d08e67ba98e58efd3846daf15d9d7d4c389565d881b1a
-ARG UBUNTU_IMAGE=docker.io/library/ubuntu:24.04@sha256:c4a8d5503dfb2a3eb8ab5f807da5bc69a85730fb49b5cfca2330194ebcc41c7b
+ARG UBUNTU_IMAGE=docker.io/library/ubuntu:24.04@sha256:786a8b558f7be160c6c8c4a54f9a57274f3b4fb1491cf65146521ae77ff1dc54
 
 ARG CILIUM_LLVM_IMAGE=quay.io/cilium/cilium-llvm:19.1.7-1772622536-65b121f@sha256:4320b57bde46d6642efeb72e405f699a5e189f8377614900f58f54f2641afdf3
 ARG CILIUM_BPFTOOL_IMAGE=quay.io/cilium/cilium-bpftool:7.6.0-1772622536-65b121f@sha256:7bd6330b1d92eb1e923cd7d1ad44808ac7598b4661a6726fabf24407a95f5bde
@@ -17,12 +17,12 @@ FROM ${CILIUM_IPTABLES_IMAGE} AS iptables-dist
 FROM ${GOLANG_IMAGE} AS go-builder
 
 WORKDIR /go/src/github.com/cilium/cilium/images/runtime
+ARG TARGETARCH
 RUN --mount=type=bind,readwrite,target=/go/src/github.com/cilium/cilium/images/runtime \
     --mount=target=/root/.cache,type=cache \
     --mount=target=/go/pkg/mod,type=cache \
     ./build-gops.sh
 
-ARG TARGETARCH
 RUN --mount=type=bind,readwrite,target=/go/src/github.com/cilium/cilium/images/runtime \
     --mount=target=/root/.cache,type=cache \
     --mount=target=/go/pkg/mod,type=cache \
