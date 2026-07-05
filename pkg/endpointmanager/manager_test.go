@@ -230,43 +230,6 @@ func TestLookup(t *testing.T) {
 			},
 		},
 		{
-			name: "endpoint by container ID (deprecated)",
-			cm: &apiv1.EndpointChangeRequest{
-				ContainerID: "1234",
-			},
-			setupArgs: func() args {
-				return args{
-					endpointid.NewID(endpointid.ContainerIdPrefix, "1234"),
-				}
-			},
-			setupWant: func() want {
-				return want{
-					ep:       true,
-					err:      nil,
-					errCheck: assert.EqualValues,
-				}
-			},
-		},
-		{
-			name: "endpoint by pod name",
-			cm: &apiv1.EndpointChangeRequest{
-				K8sNamespace: "default",
-				K8sPodName:   "foo",
-			},
-			setupArgs: func() args {
-				return args{
-					endpointid.NewID(endpointid.PodNamePrefix, "default/foo"),
-				}
-			},
-			setupWant: func() want {
-				return want{
-					ep:       true,
-					err:      nil,
-					errCheck: assert.EqualValues,
-				}
-			},
-		},
-		{
 			name: "endpoint by cep name",
 			cm: &apiv1.EndpointChangeRequest{
 				K8sNamespace: "default",
@@ -306,12 +269,12 @@ func TestLookup(t *testing.T) {
 			},
 		},
 		{
-			name: "endpoint by cep name with interface and disabled legacy identifers",
+			name: "endpoint by cep name with secondary interface",
 			cm: &apiv1.EndpointChangeRequest{
-				K8sNamespace:             "default",
-				K8sPodName:               "foo",
-				ContainerInterfaceName:   "net1",
-				DisableLegacyIdentifiers: true,
+				K8sNamespace:           "default",
+				K8sPodName:             "foo",
+				ContainerInterfaceName: "net1",
+				IsSecondaryInterface:   true,
 			},
 			setupArgs: func() args {
 				return args{
@@ -371,25 +334,6 @@ func TestLookup(t *testing.T) {
 				return want{
 					err:      nil,
 					errCheck: assert.NotEqualValues,
-				}
-			},
-		},
-		{
-			name: "invalid lookup with container id with disabled legacy identifiers",
-			cm: &apiv1.EndpointChangeRequest{
-				ContainerID:              "1234",
-				DisableLegacyIdentifiers: true,
-			},
-			setupArgs: func() args {
-				return args{
-					endpointid.NewID(endpointid.ContainerIdPrefix, "1234"),
-				}
-			},
-			setupWant: func() want {
-				return want{
-					ep:       false,
-					err:      nil,
-					errCheck: assert.EqualValues,
 				}
 			},
 		},
@@ -636,10 +580,10 @@ func TestLookupCEPName(t *testing.T) {
 		{
 			name: "existing pod name with container interface name",
 			cm: apiv1.EndpointChangeRequest{
-				K8sNamespace:             "default",
-				K8sPodName:               "bar",
-				ContainerInterfaceName:   "eth1",
-				DisableLegacyIdentifiers: true,
+				K8sNamespace:           "default",
+				K8sPodName:             "bar",
+				ContainerInterfaceName: "eth1",
+				IsSecondaryInterface:   true,
 			},
 			preTestRun: func(ep *endpoint.Endpoint) {
 				require.NoError(t, mgr.expose(ep))
