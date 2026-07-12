@@ -87,6 +87,7 @@ jobs:
           extra-helm-set: "--helm-set=envoy.xdsMode=split"
     env:
       job_name: "Installation and Connectivity Test (${{ matrix.name }})"
+      ENABLE_CLUSTERNETWORKPOLICY: "true"
     steps:
       - name: Collect Workflow Telemetry
         uses: cilium/workflow-telemetry-action@b1a318f80a08acede58027afe1455d037379966f # v2.2.0
@@ -160,6 +161,7 @@ jobs:
             --helm-set=hubble.relay.enabled=true
             --helm-set=cni.chainingMode=portmap \
             --helm-set-string=kubeProxyReplacement=true \
+            --helm-set=k8sClusterNetworkPolicy.enabled=${ENABLE_CLUSTERNETWORKPOLICY} \
             --helm-set=loadBalancer.l7.backend=envoy \
             --helm-set=tls.readSecretsOnlyFromSecretsNamespace=true \
             --helm-set=tls.secretSync.enabled=true \
@@ -185,6 +187,7 @@ jobs:
           release-version: ${{ env.CILIUM_CLI_VERSION }}
 
       - name: Create imagePullSecret
+        if: ${{ vars.DOCKER_AUTH_REQUIRED == 'true' }}
         run: |
           kubectl create secret docker-registry cilium-registry \
             --namespace kube-system \
@@ -193,6 +196,7 @@ jobs:
             --docker-password="${{ secrets.DOCKER_READ_PASSWORD }}"
 
       - name: Login to docker registry for image wait
+        if: ${{ vars.DOCKER_AUTH_REQUIRED == 'true' }}
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
         with:
           registry: ${{ vars.DOCKER_READ_HOST}}
@@ -217,6 +221,10 @@ jobs:
           path: untrusted
           sparse-checkout: |
             install/kubernetes/cilium
+
+      - name: Install KCNP CRD
+        run: |
+          make kind-install-kcnp-crd ENABLE_CLUSTERNETWORKPOLICY=${ENABLE_CLUSTERNETWORKPOLICY}
 
       - name: Install Cilium
         id: install-cilium
@@ -251,6 +259,7 @@ jobs:
           helm upgrade cilium untrusted/install/kubernetes/cilium \
             --namespace kube-system \
             --reuse-values \
+            --set=k8sClusterNetworkPolicy.enabled=${ENABLE_CLUSTERNETWORKPOLICY} \
             --set=tls.readSecretsOnlyFromSecretsNamespace=false \
             --set=tls.secretSync.enabled=false
 
