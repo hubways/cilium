@@ -652,6 +652,10 @@
      - Additional clustermesh-apiserver environment variables.
      - list
      - ``[]``
+   * - :spelling:ignore:`clustermesh.apiserver.extraInitContainers`
+     - Additional init containers added to the clustermesh-apiserver Deployment.
+     - list
+     - ``[]``
    * - :spelling:ignore:`clustermesh.apiserver.extraVolumeMounts`
      - Additional clustermesh-apiserver volumeMounts.
      - list
@@ -944,6 +948,10 @@
      - X509Subject Full X509 name specification used when clustermesh.apiserver.tls.auto.method=certmanager. https://cert-manager.io/docs/reference/api-docs/#cert-manager.io/v1.X509Subject
      - object
      - ``{}``
+   * - :spelling:ignore:`clustermesh.apiserver.tls.disableDefaultVolumes`
+     - Disable the default TLS certificate volumes and mounts for clustermesh-apiserver (including KVStoreMesh), cilium-agent and cilium-operator, allowing you to provide your own via extraVolumes/extraVolumeMounts. This also disables mounting the clustermesh configuration, which then needs to be provided separately (likely at a different location).
+     - bool
+     - ``false``
    * - :spelling:ignore:`clustermesh.apiserver.tolerations`
      - Node tolerations for pod assignment on nodes with taints ref: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
      - list
@@ -1683,7 +1691,7 @@
    * - :spelling:ignore:`envoy.image`
      - Envoy container image.
      - object
-     - ``{"digest":"sha256:abc439b70846a384b8d728b0bc42e5dd48bbbc456515a4cd989f3652d8986b43","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.37.5-1782264709-cdc3744d2a0d37948ed88498195c637ece94c44b","useDigest":true}``
+     - ``{"digest":"sha256:583057dd4f7d54cd41efff3c413aa0b148ac201f522e2c3336851fa89c78b039","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.37.5-1782911245-7cffc778c923f68a77954a53b1a98d6b5353f004","useDigest":true}``
    * - :spelling:ignore:`envoy.initContainers`
      - Init containers added to the cilium Envoy DaemonSet.
      - list
@@ -1888,6 +1896,10 @@
      - Timeout for the startup probe
      - int
      - ``5``
+   * - :spelling:ignore:`envoy.staticRuntimeConfig`
+     - Static runtime bootstrap config for envoy. ref: https://www.envoyproxy.io/docs/envoy/latest/configuration/operations/runtime#static-bootstrap
+     - object
+     - ``{}``
    * - :spelling:ignore:`envoy.streamIdleTimeoutDurationSeconds`
      - Set Envoy the amount of time that the connection manager will allow a stream to exist with no upstream or downstream activity. default 5 minutes
      - int
@@ -1909,7 +1921,7 @@
      - bool
      - ``true``
    * - :spelling:ignore:`envoy.xdsMode`
-     - xDS server operating mode for Envoy proxy configuration. Supported values are: "split" for the existing per-resource-type xDS, "ads" for the ADS (Aggregated Discovery Service) xDS, and "strict-ads" for ADS with strict snapshot cache behavior and generated snapshot consistency checks. Null value omits setting this option. Cilium Agent defaults missing option to "split" to keep upgrades in the legacy mode.
+     - xDS server operating mode for Envoy proxy configuration. Supported values are: "split" for the existing per-resource-type xDS, "delta-split" for incremental Delta xDS, "ads" for the ADS (Aggregated Discovery Service) xDS, and "strict-ads" for ADS with strict snapshot cache behavior and generated snapshot consistency checks. Null value omits setting this option. Cilium Agent defaults missing option to "split" to keep upgrades in the legacy mode.
      - string
      - ``ads`` for new 1.20+ installations; none when ``upgradeCompatibility`` is set below ``1.20``
    * - :spelling:ignore:`envoy.xffNumTrustedHopsL7PolicyEgress`
@@ -2288,6 +2300,10 @@
      - Additional hubble-relay environment variables.
      - list
      - ``[]``
+   * - :spelling:ignore:`hubble.relay.extraInitContainers`
+     - Additional init containers added to the hubble-relay Deployment.
+     - list
+     - ``[]``
    * - :spelling:ignore:`hubble.relay.extraVolumeMounts`
      - Additional hubble-relay volumeMounts.
      - list
@@ -2463,7 +2479,7 @@
    * - :spelling:ignore:`hubble.relay.tls`
      - TLS configuration for Hubble Relay
      - object
-     - ``{"client":{"cert":"","existingSecret":"","key":""},"server":{"cert":"","enabled":false,"existingSecret":"","extraDnsNames":[],"extraIpAddresses":[],"key":"","mtls":false,"relayName":"ui.hubble-relay.cilium.io"}}``
+     - ``{"client":{"cert":"","existingSecret":"","key":""},"disableDefaultVolumes":false,"server":{"cert":"","enabled":false,"existingSecret":"","extraDnsNames":[],"extraIpAddresses":[],"key":"","mtls":false,"relayName":"ui.hubble-relay.cilium.io"}}``
    * - :spelling:ignore:`hubble.relay.tls.client`
      - The hubble-relay client certificate and private key. This keypair is presented to Hubble server instances for mTLS authentication and is required when hubble.tls.enabled is true. These values need to be set manually if hubble.tls.auto.enabled is false.
      - object
@@ -2480,6 +2496,10 @@
      - base64 encoded PEM values for the Hubble relay client key (deprecated). Use existingSecret instead.
      - string
      - ``""``
+   * - :spelling:ignore:`hubble.relay.tls.disableDefaultVolumes`
+     - Disable the default TLS certificate volumes and mounts for Hubble Relay, allowing you to provide your own via extraVolumes/extraVolumeMounts.
+     - bool
+     - ``false``
    * - :spelling:ignore:`hubble.relay.tls.server`
      - The hubble-relay server certificate and private key
      - object
@@ -2527,7 +2547,7 @@
    * - :spelling:ignore:`hubble.tls`
      - TLS configuration for Hubble
      - object
-     - ``{"auto":{"certManagerIssuerRef":{},"certValidityDuration":365,"enabled":true,"method":"helm","privateKey":{},"schedule":"0 0 1 */4 *","subject":{}},"enabled":true,"server":{"cert":"","existingSecret":"","extraDnsNames":[],"extraIpAddresses":[],"key":""}}``
+     - ``{"auto":{"certManagerIssuerRef":{},"certValidityDuration":365,"enabled":true,"method":"helm","privateKey":{},"schedule":"0 0 1 */4 *","subject":{}},"disableDefaultVolumes":false,"enabled":true,"server":{"cert":"","existingSecret":"","extraDnsNames":[],"extraIpAddresses":[],"key":""}}``
    * - :spelling:ignore:`hubble.tls.auto`
      - Configure automatic TLS certificates generation.
      - object
@@ -2560,6 +2580,10 @@
      - X509Subject Full X509 name specification used when hubble.tls.auto.method=certmanager. https://cert-manager.io/docs/reference/api-docs/#cert-manager.io/v1.X509Subject
      - object
      - ``{}``
+   * - :spelling:ignore:`hubble.tls.disableDefaultVolumes`
+     - Disable the default TLS certificate volumes and mounts for the Hubble server, allowing you to provide your own via extraVolumes/extraVolumeMounts.
+     - bool
+     - ``false``
    * - :spelling:ignore:`hubble.tls.enabled`
      - Enable mutual TLS for listenAddress. Setting this value to false is highly discouraged as the Hubble API provides access to potentially sensitive network flow metadata and is exposed on the host network.
      - bool
@@ -2628,6 +2652,10 @@
      - Whether to enable the Hubble UI.
      - bool
      - ``false``
+   * - :spelling:ignore:`hubble.ui.extraInitContainers`
+     - Additional init containers added to the hubble-ui Deployment.
+     - list
+     - ``[]``
    * - :spelling:ignore:`hubble.ui.frontend.extraEnv`
      - Additional hubble-ui frontend environment variables.
      - list
@@ -2748,6 +2776,10 @@
      - base64 encoded PEM values for the Hubble UI client key (deprecated). Use existingSecret instead.
      - string
      - ``""``
+   * - :spelling:ignore:`hubble.ui.tls.disableDefaultVolumes`
+     - Disable the default TLS certificate volumes and mounts for Hubble UI, allowing you to provide your own via extraVolumes/extraVolumeMounts.
+     - bool
+     - ``false``
    * - :spelling:ignore:`hubble.ui.tmpVolume`
      - Configure temporary volume for hubble-ui
      - object
@@ -3244,6 +3276,10 @@
      - Derive the native routing CIDRs from the cluster-pool IPAM CIDRs when ipv4NativeRoutingCIDR / ipv6NativeRoutingCIDR are not explicitly set. Only effective with ipam.mode=cluster-pool and requires exactly one CIDR per enabled IP family in clusterPoolIPv4PodCIDRList / clusterPoolIPv6PodCIDRList.
      - bool
      - ``false``
+   * - :spelling:ignore:`networkDriver`
+     - Enable the Network Driver feature
+     - object
+     - ``{"enabled":false}``
    * - :spelling:ignore:`nodeIPAM.enabled`
      - Configure Node IPAM ref: https://docs.cilium.io/en/stable/network/node-ipam/
      - bool
@@ -3406,6 +3442,10 @@
      - ``[]``
    * - :spelling:ignore:`operator.extraHostPathMounts`
      - Additional cilium-operator hostPath mounts.
+     - list
+     - ``[]``
+   * - :spelling:ignore:`operator.extraInitContainers`
+     - Additional init containers added to the operator Deployment.
      - list
      - ``[]``
    * - :spelling:ignore:`operator.extraVolumeMounts`
@@ -3671,7 +3711,7 @@
    * - :spelling:ignore:`preflight.envoy.image`
      - Envoy pre-flight image.
      - object
-     - ``{"digest":"sha256:abc439b70846a384b8d728b0bc42e5dd48bbbc456515a4cd989f3652d8986b43","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.37.5-1782264709-cdc3744d2a0d37948ed88498195c637ece94c44b","useDigest":true}``
+     - ``{"digest":"sha256:583057dd4f7d54cd41efff3c413aa0b148ac201f522e2c3336851fa89c78b039","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.37.5-1782911245-7cffc778c923f68a77954a53b1a98d6b5353f004","useDigest":true}``
    * - :spelling:ignore:`preflight.extraEnv`
      - Additional preflight environment variables.
      - list

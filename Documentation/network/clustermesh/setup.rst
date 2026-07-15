@@ -5,9 +5,10 @@
 Setting up Cluster Mesh
 ***********************
 
-This is a step-by-step guide on how to build a mesh of Kubernetes clusters by
-connecting them together, enable pod-to-pod connectivity across all clusters,
-define global services to load-balance between clusters and enforce security
+This is a step-by-step guide on how to build a mesh of Kubernetes clusters.
+This guide shows you how to connect the clusters together, enable pod-to-pod
+connectivity across all clusters, set up cross-cluster :ref:`service discovery
+and load-balancing <gs_clustermesh_load_balancing>` and finally enforce security
 policies to restrict access.
 
 .. admonition:: Video
@@ -173,6 +174,24 @@ from one cluster to another:
   kubectl --context=$CLUSTER1 get secret -n kube-system cilium-ca -o yaml | \
     kubectl --context $CLUSTER2 create -f -
 
+.. _clustermesh_external_tls:
+
+Custom Per-Pod Certificates
+===========================
+
+You can inject custom certificates for Cluster Mesh components by
+configuring the following Helm settings:
+
+- Set ``disableDefaultVolumes=true``
+- Inject your own certificate agent via ``extraInitContainers``
+- Specify ``extraVolumes``/``extraVolumeMounts`` to share the certificate
+  mount with the init container
+
+This is useful when you want to provide certificates directly to each pod
+rather than through Kubernetes Secrets (e.g., per-pod certificates issued
+at runtime by HashiCorp Vault, the cert-manager CSI driver, or SPIFFE).
+See :ref:`hubble_enable_tls` for the general pattern.
+
 .. _enable_clustermesh:
 
 Enable Cluster Mesh
@@ -281,7 +300,7 @@ Next Steps
 
 Logical next steps to explore from here are:
 
- * :ref:`gs_clustermesh_services`
+ * :ref:`gs_clustermesh_load_balancing`
  * :ref:`gs_clustermesh_network_policy`
 
 Troubleshooting

@@ -1029,6 +1029,10 @@
               "items": {},
               "type": "array"
             },
+            "extraInitContainers": {
+              "items": {},
+              "type": "array"
+            },
             "extraVolumeMounts": {
               "items": {},
               "type": "array"
@@ -1448,6 +1452,9 @@
                     }
                   },
                   "type": "object"
+                },
+                "disableDefaultVolumes": {
+                  "type": "boolean"
                 }
               },
               "type": "object"
@@ -2813,6 +2820,9 @@
           },
           "type": "object"
         },
+        "staticRuntimeConfig": {
+          "type": "object"
+        },
         "streamIdleTimeoutDurationSeconds": {
           "type": "integer"
         },
@@ -2863,6 +2873,7 @@
             {
               "enum": [
                 "split",
+                "delta-split",
                 "ads",
                 "strict-ads"
               ]
@@ -3483,6 +3494,10 @@
               "items": {},
               "type": "array"
             },
+            "extraInitContainers": {
+              "items": {},
+              "type": "array"
+            },
             "extraVolumeMounts": {
               "items": {},
               "type": "array"
@@ -3778,6 +3793,9 @@
                   },
                   "type": "object"
                 },
+                "disableDefaultVolumes": {
+                  "type": "boolean"
+                },
                 "server": {
                   "properties": {
                     "cert": {
@@ -3878,6 +3896,9 @@
                 }
               },
               "type": "object"
+            },
+            "disableDefaultVolumes": {
+              "type": "boolean"
             },
             "enabled": {
               "type": "boolean"
@@ -3989,6 +4010,10 @@
             },
             "enabled": {
               "type": "boolean"
+            },
+            "extraInitContainers": {
+              "items": {},
+              "type": "array"
             },
             "frontend": {
               "properties": {
@@ -4230,6 +4255,9 @@
                     }
                   },
                   "type": "object"
+                },
+                "disableDefaultVolumes": {
+                  "type": "boolean"
                 }
               },
               "type": "object"
@@ -4875,6 +4903,14 @@
     "nativeRoutingCIDRFromClusterPool": {
       "type": "boolean"
     },
+    "networkDriver": {
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
     "nodeIPAM": {
       "properties": {
         "enabled": {
@@ -5207,6 +5243,10 @@
           "type": "array"
         },
         "extraHostPathMounts": {
+          "items": {},
+          "type": "array"
+        },
+        "extraInitContainers": {
           "items": {},
           "type": "array"
         },

@@ -2469,19 +2469,16 @@ func testXdsServer(t *testing.T) *xdsServer {
 	}
 }
 
-func (s *xdsServer) GetNetworkPolicies(resourceNames []string) (map[string]*cilium.NetworkPolicy, error) {
-	resources, err := s.networkPolicyCache.GetResources(NetworkPolicyTypeURL, 0, "", resourceNames)
-	if err != nil {
-		return nil, err
-	}
-	networkPolicies := make(map[string]*cilium.NetworkPolicy, len(resources.Resources))
-	for _, res := range resources.Resources {
-		networkPolicy := res.(*cilium.NetworkPolicy)
+func (s *xdsServer) GetNetworkPolicies(resourceNames []string) map[string]*cilium.NetworkPolicy {
+	resources := s.networkPolicyCache.GetResources(NetworkPolicyTypeURL, 0, resourceNames)
+	networkPolicies := make(map[string]*cilium.NetworkPolicy, len(resources.VersionedResources))
+	for i := range resources.VersionedResources {
+		networkPolicy := resources.VersionedResources[i].Resource.(*cilium.NetworkPolicy)
 		for _, ip := range networkPolicy.EndpointIps {
 			networkPolicies[ip] = networkPolicy
 		}
 	}
-	return networkPolicies, nil
+	return networkPolicies
 }
 
 func TestUpdateNetworkPolicyRevertKeepsLocalEndpointStoreAfterStaleDuplicateRemoval(t *testing.T) {
@@ -2538,8 +2535,7 @@ func TestUpdateNetworkPolicyRevertKeepsLocalEndpointStoreAfterStaleDuplicateRemo
 	require.Equal(t, currentEP.GetID(), localEP.GetID())
 	require.Nil(t, xds.localEndpointStore.getLocalEndpoint(staleEP.Ipv6))
 
-	stalePolicy, err := xds.networkPolicyCache.Lookup(NetworkPolicyTypeURL, staleResourceName)
-	require.NoError(t, err)
+	stalePolicy := xds.networkPolicyCache.Lookup(NetworkPolicyTypeURL, staleResourceName)
 	require.Nil(t, stalePolicy)
 }
 
@@ -2565,9 +2561,8 @@ func TestUpdateNetworkPolicyLegacyACKUsesNodeIP(t *testing.T) {
 	acker, ok := xdsServer.networkPolicyMutator.(*xds.AckingResourceMutatorWrapper)
 	require.True(t, ok)
 	resourceName := strconv.FormatUint(currentEP.GetID(), 10)
-	resources, err := xdsServer.networkPolicyCache.GetResources(NetworkPolicyTypeURL, 0, "127.0.0.1", nil)
-	require.NoError(t, err)
-	acker.HandleResourceVersionAck(resources.Version, resources.Version, "127.0.0.1", []string{resourceName}, NetworkPolicyTypeURL, "")
+	resources := xdsServer.networkPolicyCache.GetResources(NetworkPolicyTypeURL, 0, nil)
+	acker.HandleResourceVersionAck("127.0.0.1", resources.Version, resources.Version, false, "", NetworkPolicyTypeURL, []string{resourceName})
 
 	require.NoError(t, wg.Wait())
 	finalize()
