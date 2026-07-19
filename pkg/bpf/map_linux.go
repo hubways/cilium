@@ -935,10 +935,17 @@ func (m *Map) DumpReliablyWithCallback(cb DumpCallback, stats *DumpStats) error 
 	return ErrMaxLookup
 }
 
+// IterableMap is a map that can be iterated through [BatchIterator].
+type IterableMap interface {
+	BatchLookup(cursor *ebpf.MapBatchCursor, keysOut, valuesOut any, opts *ebpf.BatchOptions) (int, error)
+	MaxEntries() uint32
+	Type() ebpf.MapType
+}
+
 // BatchIterator provides a typed wrapper *Map that allows for batched iteration
 // of bpf maps.
 type BatchIterator[KT, VT any, KP KeyPointer[KT], VP ValuePointer[VT]] struct {
-	m    *Map
+	m    IterableMap
 	err  error
 	keys []KT
 	vals []VT
@@ -976,7 +983,7 @@ type BatchIterator[KT, VT any, KP KeyPointer[KT], VP ValuePointer[VT]] struct {
 //	for k, v := range iter.IterateAll(context.TODO()) {
 //		// ...
 //	}
-func NewBatchIterator[KT any, VT any, KP KeyPointer[KT], VP ValuePointer[VT]](m *Map) *BatchIterator[KT, VT, KP, VP] {
+func NewBatchIterator[KT any, VT any, KP KeyPointer[KT], VP ValuePointer[VT]](m IterableMap) *BatchIterator[KT, VT, KP, VP] {
 	return &BatchIterator[KT, VT, KP, VP]{
 		m: m,
 	}
@@ -1186,6 +1193,16 @@ func (m *Map) Dump(hash map[string][]string) error {
 // BatchLookup returns the count of elements in the map by dumping the map
 // using batch lookup.
 func (m *Map) BatchLookup(cursor *ebpf.MapBatchCursor, keysOut, valuesOut any, opts *ebpf.BatchOptions) (int, error) {
+	// Hold the read lock for the duration of the batch lookup so that a
+	// concurrent Close() (which takes the write lock and sets m.m to nil)
+	// cannot yank the underlying map out from under us mid-iteration.
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+
+	if m.m == nil {
+		return 0, fmt.Errorf("%s: %w", m.name, ErrMapNotOpened)
+	}
+
 	return m.m.BatchLookup(cursor, keysOut, valuesOut, opts)
 }
 

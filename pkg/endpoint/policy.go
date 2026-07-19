@@ -421,7 +421,7 @@ func (e *Endpoint) setDesiredPolicy(datapathRegenCtxt *datapathRegenerationConte
 					return fmt.Errorf("unable to dump PolicyMap when trying to revert failed endpoint regeneration: %w", err)
 				}
 
-				_, _, err = e.syncPolicyMapWith(currentMap, false, false)
+				_, _, err = e.syncPolicyMapWith(currentMap, false)
 				if err != nil {
 					e.getLogger().Error("failed to sync PolicyMap when reverting to last known good policy", logfields.Error, err)
 				}
@@ -557,17 +557,8 @@ func (e *Endpoint) regenerate(ctx *regenerationContext) (retErr error) {
 		// State will remain as waiting-to-regenerate if further
 		// changes are needed. There should be an another regenerate
 		// queued for taking care of it.
-		ready := e.BuilderSetStateLocked(StateReady, "Completed endpoint regeneration with no pending regeneration requests")
-
-		// Reap the restart-preserved leftovers now that the endpoint is ready,
-		// instead of waiting up to 15m for the next periodic reconciliation
-		// (GH-47012).
-		reapPreserved := ready && e.preservedRestoredPolicyEntries
+		e.BuilderSetStateLocked(StateReady, "Completed endpoint regeneration with no pending regeneration requests")
 		e.unlock()
-
-		if reapPreserved {
-			e.controllers.TriggerController(e.syncPolicyMapControllerName())
-		}
 	}()
 
 	revision, err = e.regenerateBPF(ctx)

@@ -115,20 +115,19 @@ else:
     chart_release = 'cilium/cilium ' + chart_version
     tags.add('stable')
 relinfo = semver.parse_version_info(release)
-current_release = '%d.%d' % (relinfo.major, relinfo.minor)
-if relinfo.patch == 90:
-    next_release = '%d.%d' % (relinfo.major, relinfo.minor + 1)
-    prev_release = current_release
+prev_release = '%d.%d' % (relinfo.major, relinfo.minor - 1)
+if relinfo.prerelease != '':
+    next_release = '%d.%d' % (relinfo.major, relinfo.minor)
+    current_release = prev_release
 else:
-    next_release = current_release
-    prev_release = '%d.%d' % (relinfo.major, relinfo.minor - 1)
+    next_release = '%d.%d' % (relinfo.major, relinfo.minor + 1)
+    current_release = '%d.%d' % (relinfo.major, relinfo.minor)
 githubusercontent = 'https://raw.githubusercontent.com/cilium/cilium/'
 scm_web = githubusercontent + branch
 github_repo = 'https://github.com/cilium/cilium/'
 archive_filename = archive_name + '.tar.gz'
 archive_link = github_repo + 'archive/' + archive_filename
 archive_name = 'cilium-' + archive_name.strip('v')
-project_link = github_repo + 'projects?type=classic&query=is:open+' + next_release
 backport_format = github_repo + \
     'pulls?q=is:open+is:pr+-label:backport/author+label:%s/' + current_release
 
@@ -161,7 +160,6 @@ language = "en"
 
 extlinks = {
     'git-tree': (scm_web + "/%s", None),
-    'github-project': (project_link + '%s', None),
     'github-backport': (backport_format, None),
     'gh-issue': (github_repo + 'issues/%s', 'GitHub issue %s'),
     'prev-docs': (versionwarning_api_url + language + '/v' + prev_release + '/%s', None),

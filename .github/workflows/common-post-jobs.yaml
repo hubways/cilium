@@ -22,6 +22,11 @@ on:
         required: false
         type: boolean
         default: true
+      merge-features:
+        description: "Whether to merge and upload features-tested-* artifacts. Set to false for workflows that do not collect feature status and therefore produce no such artifact (e.g. perf tests)."
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -38,7 +43,7 @@ jobs:
       actions: read
     steps:
       - name: Checkout context ref (trusted)
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ inputs.context-ref }}
           persist-credentials: false
@@ -52,6 +57,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Merge Features tested
+        if: ${{ inputs.merge-features }}
         uses: ./.github/actions/merge-artifacts
         with:
           name: features-tested

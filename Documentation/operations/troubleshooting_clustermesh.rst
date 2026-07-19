@@ -145,28 +145,30 @@ you may perform the following steps to troubleshoot ClusterMesh issues.
 
     If the connection fails, check the following:
 
-    * When KVStoreMesh is disabled, validate that the ``hostAliases`` section in the Cilium DaemonSet maps
-      each remote cluster to the IP of the LoadBalancer that makes the remote
-      control plane available; When KVStoreMesh is enabled,
-      validate the ``hostAliases`` section in the clustermesh-apiserver Deployment.
+    * When KVStoreMesh is disabled, validate that the ``cilium-host-aliases``
+      section in the ``cilium-clustermesh`` secret maps each remote cluster
+      to the IP of the LoadBalancer that makes the remote control plane
+      available; When KVStoreMesh is enabled, validate the
+      ``cilium-host-aliases`` section in the ``cilium-kvstoremesh`` secret.
 
-    * Validate that a local node in the source cluster can reach the IP
-      specified in the ``hostAliases`` section. When KVStoreMesh is disabled, the ``cilium-clustermesh``
-      secret contains a configuration file for each remote cluster, it will
-      point to a logical name representing the remote cluster;
-      When KVStoreMesh is enabled, it exists in the ``cilium-kvstoremesh`` secret.
+    * Validate that a local node in the source cluster can reach the IPs
+      specified in the ``cilium-host-aliases`` section. When KVStoreMesh
+      is disabled, those aliases are configured in the ``cilium-clustermesh``
+      secret. When KVStoreMesh is enabled, they are configured in the
+      ``cilium-kvstoremesh`` secret.
 
       .. code-block:: yaml
 
          endpoints:
          - https://cluster1.mesh.cilium.io:2379
+         cilium-host-aliases:
+         - hostname: cluster1.mesh.cilium.io
+           ips:
+           - 192.0.2.10
 
       The name will *NOT* be resolvable via DNS outside the Cilium agent pods.
-      The name is mapped to an IP using ``hostAliases``. Run ``kubectl -n
-      kube-system get daemonset cilium -o yaml`` when KVStoreMesh is disabled,
-      or run ``kubectl -n kube-system get deployment clustermesh-apiserver -o yaml`` when KVStoreMesh is enabled,
-      grep for the FQDN to retrieve the IP that is configured. Then use ``curl`` to validate that the port is
-      reachable.
+      Internally, the name is mapped to an IP using ``cilium-host-aliases``.
+      You can use ``curl`` to validate that those IPs and port are reachable.
 
     * A firewall between the local cluster and the remote cluster may drop the
       control plane connection. Ensure that port 2379/TCP is allowed.
@@ -202,39 +204,8 @@ State Propagation
     that the initial IPs synchronization from all clusters has completed.
 
  #. When using global services, ensure that global services are configured with
-    endpoints from all clusters. Run ``cilium-dbg service list`` in any Cilium pod
-    and validate that the backend IPs consist of pod IPs from all clusters
-    running relevant backends. You can further validate the correct datapath
-    plumbing by running ``cilium-dbg bpf lb list`` to inspect the state of the eBPF
-    maps.
-
-    If this fails:
-
-    * Run ``cilium-dbg debuginfo`` and look for the section ``k8s-service-cache``. In
-      that section, you will find the contents of the service correlation
-      cache. It will list the Kubernetes services and endpoints of the local
-      cluster.  It will also have a section ``externalEndpoints`` which must
-      list all endpoints of remote clusters.
-
-      ::
-
-          #### k8s-service-cache
-
-          (*k8s.ServiceCache)(0xc00000c500)({
-          [...]
-           services: (map[k8s.ServiceID]*k8s.Service) (len=2) {
-             (k8s.ServiceID) default/kubernetes: (*k8s.Service)(0xc000cd11d0)(frontend:172.20.0.1/ports=[https]/selector=map[]),
-             (k8s.ServiceID) kube-system/kube-dns: (*k8s.Service)(0xc000cd1220)(frontend:172.20.0.10/ports=[metrics dns dns-tcp]/selector=map[k8s-app:kube-dns])
-           },
-           endpoints: (map[k8s.ServiceID]*k8s.Endpoints) (len=2) {
-             (k8s.ServiceID) kube-system/kube-dns: (*k8s.Endpoints)(0xc0000103c0)(10.16.127.105:53/TCP,10.16.127.105:53/UDP,10.16.127.105:9153/TCP),
-             (k8s.ServiceID) default/kubernetes: (*k8s.Endpoints)(0xc0000103f8)(192.168.60.11:6443/TCP)
-           },
-           externalEndpoints: (map[k8s.ServiceID]k8s.externalEndpoints) {
-           }
-          })
-
-      The sections ``services`` and ``endpoints`` represent the services of the
-      local cluster, the section ``externalEndpoints`` lists all remote
-      services and will be correlated with services matching the same
-      ``ServiceID``.
+    endpoints from all clusters. Run ``cilium-dbg shell -- db/show backends``
+    (or ``cilium-dbg service list``) in any Cilium pod and validate that the
+    backend IPs consist of pod IPs from all clusters running relevant backends.
+    You can further validate the correct datapath plumbing by running
+    ``cilium-dbg bpf lb list`` to inspect the state of the eBPF maps.

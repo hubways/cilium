@@ -81,10 +81,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - name: default (ads)
-          extra-helm-set: ""
+        - name: ads
+          extra-helm-set: "--helm-set=envoy.xdsMode=ads"
         - name: split
           extra-helm-set: "--helm-set=envoy.xdsMode=split"
+        - name: delta-split
+          extra-helm-set: "--helm-set=envoy.xdsMode=delta-split"
     env:
       job_name: "Installation and Connectivity Test (${{ matrix.name }})"
       ENABLE_CLUSTERNETWORKPOLICY: "true"
@@ -212,6 +214,8 @@ jobs:
         with:
           ref: ${{ steps.vars.outputs.sha }}
           persist-credentials: false
+          # Required by checkout v7+ to fetch fork PR code; see the NOT TRUSTED warning above.
+          allow-unsafe-pr-checkout: true
           path: untrusted
           sparse-checkout: |
             install/kubernetes/cilium
