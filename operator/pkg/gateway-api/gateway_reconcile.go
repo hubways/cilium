@@ -339,27 +339,22 @@ func (r *gatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		scopedLog.ErrorContext(ctx, "Unable to update BackendTLSPolicy Status", logfields.Error, err)
 		return controllerruntime.Fail(err)
 	}
-	gatewayClassConfig := r.getGatewayClassConfig(ctx, gwc)
-	var serverHeaderTransformation model.ServerHeaderTransformation
-	if gatewayClassConfig != nil && gatewayClassConfig.Spec.Envoy != nil && gatewayClassConfig.Spec.Envoy.ServerHeaderTransformation != nil {
-		serverHeaderTransformation = model.ServerHeaderTransformation(*gatewayClassConfig.Spec.Envoy.ServerHeaderTransformation)
-	}
+
 	m := ingestion.GatewayAPI(scopedLog, ingestion.Input{
-		GatewayClass:               *gwc,
-		GatewayClassConfig:         gatewayClassConfig,
-		ServerHeaderTransformation: serverHeaderTransformation,
-		Gateway:                    *gw,
-		HTTPRoutes:                 httpRoutes,
-		TLSRoutes:                  tlsRoutes,
-		GRPCRoutes:                 grpcRoutes,
-		TCPRoutes:                  tcpRoutes,
-		UDPRoutes:                  udpRoutes,
-		Namespaces:                 namespaces,
-		Services:                   servicesList.Items,
-		ServiceImports:             serviceImportsList.Items,
-		ReferenceGrants:            grants.Items,
-		BackendTLSPolicyMap:        btlspMap,
-		MergedListeners:            mergedListeners,
+		GatewayClass:        *gwc,
+		GatewayClassConfig:  r.getGatewayClassConfig(ctx, gwc),
+		Gateway:             *gw,
+		HTTPRoutes:          httpRoutes,
+		TLSRoutes:           tlsRoutes,
+		GRPCRoutes:          grpcRoutes,
+		TCPRoutes:           tcpRoutes,
+		UDPRoutes:           udpRoutes,
+		Namespaces:          namespaces,
+		Services:            servicesList.Items,
+		ServiceImports:      serviceImportsList.Items,
+		ReferenceGrants:     grants.Items,
+		BackendTLSPolicyMap: btlspMap,
+		MergedListeners:     mergedListeners,
 	})
 
 	listenersStatus, err := r.setListenerStatus(ctx, gw, httpRouteList, tlsRouteList, grpcRouteList, tcpRouteList, udpRouteList, namespaceLabels)
@@ -1472,7 +1467,7 @@ func (r *gatewayReconciler) validateListener(ctx context.Context, l gatewayv1.Li
 	}
 
 	if l.TLS != nil {
-		ownerGVK := gatewayv1.SchemeGroupVersion.WithKind(params.ownerKind)
+		ownerGVK := helpers.GatewayV1GVK(params.ownerKind)
 		for _, cert := range l.TLS.CertificateRefs {
 			if !helpers.IsSecret(cert) {
 				res.conds = merge(res.conds, metav1.Condition{
@@ -2209,6 +2204,7 @@ func (r *gatewayReconciler) setTCPRouteStatuses(scopedLog *slog.Logger, ctx cont
 	for tcpRouteIndex, original := range tcpRoutes.Items {
 
 		tcpr := original.DeepCopy()
+		tcpr.Status.Parents = pruneRouteParentStatuses(tcpr.Status.Parents, tcpr.Spec.ParentRefs, r.controllerName)
 
 		i := &routechecks.TCPRouteInput{
 			Ctx:            ctx,
@@ -2240,6 +2236,7 @@ func (r *gatewayReconciler) setUDPRouteStatuses(scopedLog *slog.Logger, ctx cont
 	for udpRouteIndex, original := range udpRoutes.Items {
 
 		udpr := original.DeepCopy()
+		udpr.Status.Parents = pruneRouteParentStatuses(udpr.Status.Parents, udpr.Spec.ParentRefs, r.controllerName)
 
 		i := &routechecks.UDPRouteInput{
 			Ctx:            ctx,

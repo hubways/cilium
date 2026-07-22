@@ -358,7 +358,7 @@ jobs:
           path: untrusted
 
       - name: Install cilium-cli
-        uses: cilium/cilium-cli@e391e739db83a8b888ecf18786af6853c51a0c58 # v0.19.5
+        uses: cilium/cilium-cli@fc661364dd4962fb50f6415216d5f6edbfa6a822 # v0.19.6
         with:
           skip-build: ${{ env.CILIUM_CLI_SKIP_BUILD }}
           image-repo: ${{ env.CILIUM_CLI_IMAGE_REPO }}
@@ -516,10 +516,14 @@ jobs:
               export RACE=1
               export LOCKDEBUG=1
             fi
+            HELM_OVERRIDES="${{ env.HELM_OVERRIDES }}"
             # Only pass the imagePullSecrets helm override when registry auth is required.
-            HELM_OVERRIDES=""
             if [[ "${{ vars.DOCKER_AUTH_REQUIRED }}" == "true" ]]; then
-              HELM_OVERRIDES="-cilium.install-helm-overrides=imagePullSecrets[0].name=cilium-registry"
+              if [[ -n "${HELM_OVERRIDES}" ]]; then
+                HELM_OVERRIDES="${HELM_OVERRIDES},imagePullSecrets[0].name=cilium-registry"
+              else
+                HELM_OVERRIDES="-cilium.install-helm-overrides=imagePullSecrets[0].name=cilium-registry"
+              fi
             fi
             echo "/root/go/bin/ginkgo \
              --focus=\"${{ matrix.cliFocus }}\" \
@@ -567,6 +571,12 @@ jobs:
         run: |
           cd untrusted
           sudo chown $USER:$USER -R ./test
+          # The renamed reports must land in the workspace root, not here in
+          # untrusted/: the shared post-logic action uploads them with the glob
+          # './features-tested-*.json', which actions/upload-artifact resolves
+          # relative to $GITHUB_WORKSPACE. Moving them into untrusted/ (the '.'
+          # after this cd) leaves them outside that glob, so the upload found
+          # nothing and warned on every E2E job.
           find . -type f -iname 'feature-status-*.json' | while IFS= read -r file; do
             basename_file=$(basename "$file")
             suffix="${basename_file#feature-status-}"
@@ -576,12 +586,25 @@ jobs:
               new_filename="${new_filename:0:250}"
             fi
             # Check if file already exists and fail if it does
-            if [ -f "./${new_filename}" ]; then
-              echo "Error: File ./${new_filename} already exists. Aborting to prevent overwrite."
+            if [ -f "${GITHUB_WORKSPACE}/${new_filename}" ]; then
+              echo "Error: File ${GITHUB_WORKSPACE}/${new_filename} already exists. Aborting to prevent overwrite."
               exit 1
             fi
-            mv "$file" "./${new_filename}"
+            mv "$file" "${GITHUB_WORKSPACE}/${new_filename}"
           done
+          # Collect any feature-status collection error logs so a failure that
+          # would otherwise only appear on the (ephemeral) VM console survives,
+          # even on a passing run.
+          mkdir -p feature-status-errors
+          find ./test -type f -iname 'feature-status-error-*.log' -exec cp {} feature-status-errors/ \; || true
+
+      - name: Upload feature status error logs
+        if: ${{ always() && steps.run-tests.outcome != 'skipped' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: feature-status-errors-${{ env.job_name }}
+          path: untrusted/feature-status-errors/*.log
+          if-no-files-found: ignore
 
       - name: Fetch JUnits
         if: ${{ always() && steps.run-tests.outcome != 'skipped' }}

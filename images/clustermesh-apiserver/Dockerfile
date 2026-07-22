@@ -5,14 +5,14 @@
 
 # distroless images are signed by cosign and can be verified using:
 # $ cosign verify $IMAGE_NAME --certificate-oidc-issuer https://accounts.google.com --certificate-identity keyless@distroless.iam.gserviceaccount.com
-ARG BASE_IMAGE=gcr.io/distroless/static:nonroot@sha256:d29e660cc75a5b6b1334e03c5c81ccf9bc0884a002c6000dbf0fb96034814478
+ARG BASE_IMAGE=gcr.io/distroless/static:nonroot@sha256:f7f8f729987ad0fdf6b05eeeae94b26e6a0f613bdf46feea7fc40f7bd72953e6
 # These SHA256 digests are important for two reasons:
 # 1. They 'pin' the container image to a specific version. Unlike a tag that can be changed at any future point, a
 #    SHA265 hash cannot be modified. This increases the security of the build by protecting against a class of supply
 #    chain attacks where an attacker has write access to our 3rd party dependency image registries.
 # 2. These digests must be to the *overall* digest, not the digest for a specific image. This is because the images will
 #    be architecture specific, but the overall digest will contain all of the architectures.
-ARG GOLANG_IMAGE=docker.io/library/golang:1.26.5@sha256:079e59808d2d252516e27e3f3a9c003740dee7f75e55aa71528766d52bcfc16a
+ARG GOLANG_IMAGE=docker.io/library/golang:1.26.5@sha256:3aff6657219a4d9c14e27fb1d8976c49c29fddb70ba835014f477e1c70636647
 # We don't use ETCD_IMAGE because that's used in Makefile.defs to select a ETCD image approrpate for the *host platform*
 # to run tests with.
 ARG ETCD_SERVER_IMAGE=gcr.io/etcd-development/etcd:v3.7.0@sha256:6ecefbe2510c4a30573a62a4d6dd175acf881ca67003fcd91849a16df7a724d5

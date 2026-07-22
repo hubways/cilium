@@ -1154,7 +1154,7 @@ encryption:
   # -- Encryption method. Can be one of ipsec, wireguard or ztunnel.
   type: ipsec
   # -- Enable encryption for pure node to node traffic.
-  # This option is only effective when encryption.type is set to "wireguard".
+  # This option is only effective when encryption.type is set to "wireguard". Deprecated: will be removed in v1.22.
   nodeEncryption: false
   # -- Configure the Encryption Pod2Pod strict mode.
   strictMode:
@@ -1407,8 +1407,8 @@ certgen:
     # @schema
     override: ~
     repository: "quay.io/cilium/certgen"
-    tag: "v0.4.6"
-    digest: "sha256:511cedee817713fdf72db7e32fffb4b90da7747661b95180064f18198877626c"
+    tag: "v0.4.8"
+    digest: "sha256:e65f1d15a0ffaf2df32797c8ad1c797fc64dad11c274cd96a2eafa89d712cdc3"
     useDigest: true
     pullPolicy: "Always"
   # @schema
