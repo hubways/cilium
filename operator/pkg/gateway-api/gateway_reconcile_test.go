@@ -90,14 +90,6 @@ func Test_Conformance(t *testing.T) {
 			UseRemoteAddress: true,
 		},
 	})
-	gatewayAPITranslator := gatewayApiTranslation.NewTranslator(cecTranslator, translation.Config{
-		ServiceConfig: translation.ServiceConfig{
-			ExternalTrafficPolicy: string(corev1.ServiceExternalTrafficPolicyCluster),
-		},
-		OriginalIPDetectionConfig: translation.OriginalIPDetectionConfig{
-			UseRemoteAddress: true,
-		},
-	})
 
 	type gwDetails struct {
 		FullName types.NamespacedName
@@ -342,9 +334,13 @@ func Test_Conformance(t *testing.T) {
 		{name: "gateway-cross-protocol-same-hostname", gateway: []gwDetails{{FullName: types.NamespacedName{Name: "cross-protocol-same-hostname", Namespace: "gateway-conformance-infra"}}}},
 		{name: "gateway-cross-protocol-same-port-same-hostname", gateway: []gwDetails{{FullName: types.NamespacedName{Name: "cross-protocol-same-port-same-hostname", Namespace: "gateway-conformance-infra"}, wantErr: true}}},
 		{name: "gateway-ns-restricted-same-hostname", gateway: []gwDetails{{FullName: types.NamespacedName{Name: "ns-restricted-same-hostname", Namespace: "gateway-conformance-infra"}}}},
+		{name: "gatewayclassconfig-nodeport", gateway: []gwDetails{{FullName: types.NamespacedName{Name: "nodeport-gateway", Namespace: "gateway-conformance-infra"}}}},
 		{name: "hostNetwork-enabled-valid", gateway: []gwDetails{{FullName: types.NamespacedName{Name: "hostnetwork-enabled", Namespace: "gateway-conformance-infra"}}}, hostNetwork: true},
 		{name: "hostNetwork-enabled-exceed-max-address", gateway: []gwDetails{{FullName: types.NamespacedName{Name: "hostnetwork-enabled", Namespace: "gateway-conformance-infra"}}}, hostNetwork: true},
-		{name: "gatewayclassconfig-nodeport", gateway: []gwDetails{{FullName: types.NamespacedName{Name: "nodeport-gateway", Namespace: "gateway-conformance-infra"}}}},
+		{name: "hostNetwork-enabled-no-l4-listeners", gateway: []gwDetails{{FullName: types.NamespacedName{Name: "host-networking", Namespace: "gateway-conformance-infra"}}}, hostNetwork: true},
+		{name: "hostNetwork-enabled-mixed-routes", gateway: []gwDetails{{FullName: types.NamespacedName{Name: "host-networking", Namespace: "gateway-conformance-infra"}}}, hostNetwork: true},
+		{name: "hostNetwork-enabled-tcp-route", gateway: []gwDetails{{FullName: types.NamespacedName{Name: "host-networking", Namespace: "gateway-conformance-infra"}, wantErr: true, skipCEC: true}}, hostNetwork: true},
+		{name: "hostNetwork-enabled-udp-route", gateway: []gwDetails{{FullName: types.NamespacedName{Name: "host-networking", Namespace: "gateway-conformance-infra"}, wantErr: true, skipCEC: true}}, hostNetwork: true},
 		// ListenerSet tests
 		{name: "listenerset-default-not-allowed", gateway: []gwDetails{
 			{FullName: types.NamespacedName{Name: "default-not-allowed", Namespace: "gateway-conformance-infra"}},
@@ -440,24 +436,24 @@ func Test_Conformance(t *testing.T) {
 			clientBuilder.WithIndex(&gatewayv1.TLSRoute{}, indexers.TLSRouteListenerSetIndex, indexers.IndexTLSRouteByListenerSet)
 
 			c := clientBuilder.Build()
-			if tt.hostNetwork {
-				gatewayAPITranslator = gatewayApiTranslation.NewTranslator(cecTranslator, translation.Config{
-					ServiceConfig: translation.ServiceConfig{
-						ExternalTrafficPolicy: string(corev1.ServiceExternalTrafficPolicyCluster),
-					},
-					OriginalIPDetectionConfig: translation.OriginalIPDetectionConfig{
-						UseRemoteAddress: true,
-					},
-					HostNetworkConfig: translation.HostNetworkConfig{
-						Enabled: true,
-					},
-				})
-			}
+			gatewayAPITranslator := gatewayApiTranslation.NewTranslator(cecTranslator, translation.Config{
+				ServiceConfig: translation.ServiceConfig{
+					ExternalTrafficPolicy: string(corev1.ServiceExternalTrafficPolicyCluster),
+				},
+				OriginalIPDetectionConfig: translation.OriginalIPDetectionConfig{
+					UseRemoteAddress: true,
+				},
+				HostNetworkConfig: translation.HostNetworkConfig{
+					Enabled: tt.hostNetwork,
+				},
+			})
+
 			r := &gatewayReconciler{
-				Client:         c,
-				translator:     gatewayAPITranslator,
-				logger:         logger,
-				controllerName: defaultControllerName,
+				Client:             c,
+				translator:         gatewayAPITranslator,
+				logger:             logger,
+				controllerName:     defaultControllerName,
+				hostNetworkEnabled: tt.hostNetwork,
 			}
 
 			// Reconcile all related HTTPRoute objects
@@ -1321,6 +1317,22 @@ func fakeIndexHTTPRouteByBackendService(rawObj client.Object) []string {
 				types.NamespacedName{
 					Namespace: namespace,
 					Name:      string(backend.Name),
+				}.String(),
+			)
+		}
+		for _, f := range rule.Filters {
+			if f.Type != gatewayv1.HTTPRouteFilterRequestMirror || f.RequestMirror == nil {
+				continue
+			}
+			if !helpers.IsService(f.RequestMirror.BackendRef) {
+				continue
+			}
+			namespace := helpers.NamespaceDerefOr(f.RequestMirror.BackendRef.Namespace, route.Namespace)
+			backendServices = append(
+				backendServices,
+				types.NamespacedName{
+					Namespace: namespace,
+					Name:      string(f.RequestMirror.BackendRef.Name),
 				}.String(),
 			)
 		}

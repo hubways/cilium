@@ -46,7 +46,7 @@ struct ct_state {
 	__u16 loopback:1,
 	      node_port:1,
 	      dsr_internal:1,   /* DSR is k8s service related, cluster internal */
-	      syn:1,
+	      syn:1,		/* Is a TCP SYN */
 	      proxy_redirect:1,	/* Connection is redirected to a proxy */
 	      from_l7lb:1,	/* Connection is originated from an L7 LB proxy */
 	      reserved1:1,	/* Was auth_required, not used in production anywhere */
@@ -211,8 +211,8 @@ static __always_inline __u32 __ct_update_timeout(struct ct_entry *entry,
 	 * executed, it pulls the latest set of accumulated flags. Therefore
 	 * even in the worst case such a conflict is likely only to cause a
 	 * small number of additional notifications, which is still likely to
-	 * be significantly less under this MONITOR_AGGREGATION mode than would
-	 * otherwise be sent if the MONITOR_AGGREGATION level is set to none
+	 * be significantly less under this monitor aggregation mode than would
+	 * otherwise be sent if the monitor aggregation level is set to none
 	 * (ie, sending a notification for every packet).
 	 */
 	if (last_report + bpf_sec_to_mono(CT_REPORT_INTERVAL) < now ||
@@ -262,12 +262,11 @@ static __always_inline __u32 ct_update_timeout(struct ct_entry *entry,
 
 static __always_inline void
 ct_lookup_fill_state(struct ct_state *state, const struct ct_entry *entry,
-		     enum ct_dir dir, bool syn)
+		     enum ct_dir dir)
 {
 	state->rev_nat_index = entry->rev_nat_index;
 	if (dir == CT_SERVICE) {
 		state->backend_id = (__u32)entry->backend_id;
-		state->syn = syn;
 	} else if (dir == CT_INGRESS || dir == CT_EGRESS) {
 #ifdef USE_LOOPBACK_LB
 		state->loopback = entry->lb_loopback;
@@ -434,7 +433,7 @@ __ct_lookup(const void *map, const struct __ctx_buff *ctx, const void *tuple,
 
 		/* Fill ct_state after all potential CT_NEW returns. */
 		if (ct_state)
-			ct_lookup_fill_state(ct_state, entry, dir, syn);
+			ct_lookup_fill_state(ct_state, entry, dir);
 
 		return CT_ESTABLISHED;
 	}
@@ -680,6 +679,10 @@ __ct_lookup6(const void *map, struct ipv6_ct_tuple *tuple, const struct __ctx_bu
 			return DROP_CT_INVALID_HDR;
 
 		action = ct_tcp_select_action(tcp_flags);
+
+		if (ct_state && dir == CT_SERVICE &&
+		    (tcp_flags.value & TCP_FLAG_SYN) && !(tcp_flags.value & TCP_FLAG_ACK))
+			ct_state->syn = true;
 	} else {
 		action = ACTION_UNSPEC;
 	}
@@ -938,6 +941,10 @@ __ct_lookup4(const void *map, struct ipv4_ct_tuple *tuple, const struct __ctx_bu
 			return DROP_CT_INVALID_HDR;
 
 		action = ct_tcp_select_action(tcp_flags);
+
+		if (ct_state && dir == CT_SERVICE &&
+		    (tcp_flags.value & TCP_FLAG_SYN) && !(tcp_flags.value & TCP_FLAG_ACK))
+			ct_state->syn = true;
 	} else {
 		action = ACTION_UNSPEC;
 	}

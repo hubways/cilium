@@ -1656,6 +1656,9 @@ func (in *CiliumNetworkDriverNodeConfigSpec) DeepEqual(other *CiliumNetworkDrive
 	if in.DraRegistrationTimeoutSeconds != other.DraRegistrationTimeoutSeconds {
 		return false
 	}
+	if in.DraRegistrationMaxAttempts != other.DraRegistrationMaxAttempts {
+		return false
+	}
 	if in.PublishIntervalSeconds != other.PublishIntervalSeconds {
 		return false
 	}
@@ -1768,6 +1771,9 @@ func (in *DummyDeviceManagerConfig) DeepEqual(other *DummyDeviceManagerConfig) b
 	}
 
 	if in.Enabled != other.Enabled {
+		return false
+	}
+	if in.Count != other.Count {
 		return false
 	}
 
