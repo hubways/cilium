@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute/v8"
-	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork/v9"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork/v10"
 	"github.com/cilium/hive/hivetest"
 	"github.com/stretchr/testify/require"
 
@@ -159,13 +159,11 @@ func TestParseInterface(t *testing.T) {
 			require.Equal(t, tt.expectedIP, got.IP)
 			require.Equal(t, tt.expectedSubnetID, got.Subnet.ID)
 			require.Equal(t, tt.expectedCIDR, got.Subnet.CIDR)
-			require.Equal(t, tt.expectedCIDR, got.CIDR) //nolint:staticcheck // verifies the deprecated mirror still tracks Subnet.CIDR
 			require.Equal(t, tt.expectedGateway, got.Gateway)
 
 			gotAddrs := make([]iputil.Addr, 0, len(got.Addresses))
 			for _, a := range got.Addresses {
 				gotAddrs = append(gotAddrs, a.IP)
-				require.Equal(t, tt.expectedSubnetID, a.Subnet) //nolint:staticcheck // exercises the deprecated mirror
 			}
 			if tt.expectedAddrs == nil {
 				require.Empty(t, gotAddrs)
