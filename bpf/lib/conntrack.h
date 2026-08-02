@@ -46,7 +46,7 @@ struct ct_state {
 	__u16 loopback:1,
 	      node_port:1,
 	      dsr_internal:1,   /* DSR is k8s service related, cluster internal */
-	      syn:1,		/* Is a TCP SYN */
+	      syn:1,
 	      proxy_redirect:1,	/* Connection is redirected to a proxy */
 	      from_l7lb:1,	/* Connection is originated from an L7 LB proxy */
 	      reserved1:1,	/* Was auth_required, not used in production anywhere */
@@ -646,10 +646,10 @@ ct_extract_ports6(const struct __ctx_buff *ctx, const struct ipv6hdr *ip6, fragi
 		return ipv6_load_l4_ports(ctx, ip6, fraginfo, off,
 					  dir, &tuple->dport);
 	default:
+		tuple->sport = 0;
+		tuple->dport = 0;
 		/* See comment in ct_extract_ports4. */
 		if (CONFIG(enable_extended_ip_protocols)) {
-			tuple->sport = 0;
-			tuple->dport = 0;
 			break;
 		}
 		/* Unsupported L4 protocol */
@@ -681,8 +681,7 @@ __ct_lookup6(const void *map, struct ipv6_ct_tuple *tuple, const struct __ctx_bu
 
 		action = ct_tcp_select_action(tcp_flags);
 
-		if (ct_state && dir == CT_SERVICE &&
-		    (tcp_flags.value & TCP_FLAG_SYN) && !(tcp_flags.value & TCP_FLAG_ACK))
+		if (ct_state && dir == CT_SERVICE && (tcp_flags.value & TCP_FLAG_SYN))
 			ct_state->syn = true;
 	} else {
 		action = ACTION_UNSPEC;
@@ -908,10 +907,10 @@ ct_extract_ports4(const struct __ctx_buff *ctx, const struct iphdr *ip4, fraginf
 		return ipv4_load_l4_ports(ctx, ip4, fraginfo, off,
 					  dir, &tuple->dport);
 	default:
+		tuple->sport = 0;
+		tuple->dport = 0;
 		/* Traffic is allowed/dropped based on user-defined policies. */
 		if (CONFIG(enable_extended_ip_protocols)) {
-			tuple->sport = 0;
-			tuple->dport = 0;
 			break;
 		}
 		/* Unsupported L4 protocol */
@@ -943,8 +942,7 @@ __ct_lookup4(const void *map, struct ipv4_ct_tuple *tuple, const struct __ctx_bu
 
 		action = ct_tcp_select_action(tcp_flags);
 
-		if (ct_state && dir == CT_SERVICE &&
-		    (tcp_flags.value & TCP_FLAG_SYN) && !(tcp_flags.value & TCP_FLAG_ACK))
+		if (ct_state && dir == CT_SERVICE && (tcp_flags.value & TCP_FLAG_SYN))
 			ct_state->syn = true;
 	} else {
 		action = ACTION_UNSPEC;

@@ -123,7 +123,7 @@ else:
     tags.add('stable')
 relinfo = semver.parse_version_info(release)
 prev_release = '%d.%d' % (relinfo.major, relinfo.minor - 1)
-if relinfo.prerelease != '':
+if relinfo.prerelease:
     next_release = '%d.%d' % (relinfo.major, relinfo.minor)
     current_release = prev_release
 else:
@@ -178,7 +178,14 @@ extlinks = {
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This patterns also effect to html_static_path and html_extra_path
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
+exclude_patterns = [
+    '_build',
+    'Thumbs.db',
+    '.DS_Store',
+    # Already included as a fragment from another page, including it in source
+    # processing would process the labels twice
+    'operations/troubleshooting_clustermesh.rst'
+]
 
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = 'sphinx'
