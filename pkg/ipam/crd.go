@@ -236,15 +236,15 @@ func newNodeStore(logger *slog.Logger, nodeName string, conf *option.DaemonConfi
 	return store
 }
 
-func deriveVpcCIDRs(node *ciliumv2.CiliumNode) (primaryCIDR *cidr.CIDR, secondaryCIDRs []*cidr.CIDR) {
+func deriveVpcCIDRs(node *ciliumv2.CiliumNode) (primaryCIDR netip.Prefix, secondaryCIDRs []netip.Prefix) {
 	// A node belongs to a single VPC so we can pick the first ENI
 	// in the list and derive the VPC CIDR from it.
 	for _, eni := range node.Status.ENI.ENIs {
 		if p := eni.VPC.PrimaryCIDR; p.IsValid() {
-			primaryCIDR = cidr.NewCIDR(netipx.PrefixIPNet(p.Masked()))
+			primaryCIDR = p.Masked()
 			for _, sc := range eni.VPC.CIDRs {
 				if sc.IsValid() {
-					secondaryCIDRs = append(secondaryCIDRs, cidr.NewCIDR(netipx.PrefixIPNet(sc.Masked())))
+					secondaryCIDRs = append(secondaryCIDRs, sc.Masked())
 				}
 			}
 			return
@@ -252,19 +252,19 @@ func deriveVpcCIDRs(node *ciliumv2.CiliumNode) (primaryCIDR *cidr.CIDR, secondar
 	}
 	for _, azif := range node.Status.Azure.Interfaces {
 		if p := azif.Subnet.CIDR.Prefix; p.IsValid() {
-			primaryCIDR = cidr.NewCIDR(netipx.PrefixIPNet(p.Masked()))
+			primaryCIDR = p.Masked()
 			return
 		}
 	}
 	// return AlibabaCloud vpc CIDR
 	if len(node.Status.AlibabaCloud.ENIs) > 0 {
 		if p := node.Spec.AlibabaCloud.CIDRBlock; p.IsValid() {
-			primaryCIDR = cidr.NewCIDR(netipx.PrefixIPNet(p.Masked()))
+			primaryCIDR = p.Masked()
 		}
 		for _, eni := range node.Status.AlibabaCloud.ENIs {
 			for _, sc := range eni.VPC.SecondaryCIDRs {
 				if sc.IsValid() {
-					secondaryCIDRs = append(secondaryCIDRs, cidr.NewCIDR(netipx.PrefixIPNet(sc.Masked())))
+					secondaryCIDRs = append(secondaryCIDRs, sc.Masked())
 				}
 			}
 			return
@@ -274,22 +274,26 @@ func deriveVpcCIDRs(node *ciliumv2.CiliumNode) (primaryCIDR *cidr.CIDR, secondar
 }
 
 func (n *nodeStore) autoDetectIPv4NativeRoutingCIDR(localNodeStore *node.LocalNodeStore) bool {
-	if primaryCIDR, secondaryCIDRs := deriveVpcCIDRs(n.ownNode); primaryCIDR != nil {
-		allCIDRs := append([]*cidr.CIDR{primaryCIDR}, secondaryCIDRs...)
+	if primaryCIDR, secondaryCIDRs := deriveVpcCIDRs(n.ownNode); primaryCIDR.IsValid() {
+		allCIDRs := append([]netip.Prefix{primaryCIDR}, secondaryCIDRs...)
 		if nativeCIDR := n.conf.IPv4NativeRoutingCIDR; nativeCIDR != nil {
+			native, ok := netipx.FromStdIPNet(nativeCIDR.IPNet)
 			found := false
 			for _, vpcCIDR := range allCIDRs {
-				ranges4, _ := ip.CoalesceCIDRs([]*net.IPNet{nativeCIDR.IPNet, vpcCIDR.IPNet})
-				if len(ranges4) != 1 {
+				// Accept the configured native routing CIDR as long as it
+				// overlaps one of the VPC CIDRs, i.e. it is a VPC CIDR, a
+				// subnet of one (e.g. a single availability-zone subnet, used
+				// to masquerade cross-subnet traffic), or a supernet of one.
+				if !ok || !ip.LaminarCIDRsOverlap(native, vpcCIDR) {
 					n.logger.Info(
-						"Native routing CIDR does not contain VPC CIDR, trying next",
+						"Native routing CIDR does not overlap VPC CIDR, trying next",
 						logfields.VPCCIDR, vpcCIDR,
 						option.IPv4NativeRoutingCIDR, nativeCIDR,
 					)
 				} else {
 					found = true
 					n.logger.Info(
-						"Native routing CIDR contains VPC CIDR, ignoring autodetected VPC CIDRs.",
+						"Native routing CIDR overlaps VPC CIDR, ignoring autodetected VPC CIDRs.",
 						logfields.VPCCIDR, vpcCIDR,
 						option.IPv4NativeRoutingCIDR, nativeCIDR,
 					)
@@ -297,7 +301,7 @@ func (n *nodeStore) autoDetectIPv4NativeRoutingCIDR(localNodeStore *node.LocalNo
 				}
 			}
 			if !found {
-				logging.Fatal(n.logger, "None of the VPC CIDRs contains the specified native routing CIDR")
+				logging.Fatal(n.logger, "None of the VPC CIDRs overlaps the specified native routing CIDR")
 			}
 		} else {
 			n.logger.Info(
@@ -305,7 +309,7 @@ func (n *nodeStore) autoDetectIPv4NativeRoutingCIDR(localNodeStore *node.LocalNo
 				logfields.VPCCIDR, primaryCIDR,
 			)
 			localNodeStore.Update(func(n *node.LocalNode) {
-				n.Local.IPv4NativeRoutingCIDR = primaryCIDR
+				n.Local.IPv4NativeRoutingCIDR = cidr.NewCIDR(netipx.PrefixIPNet(primaryCIDR))
 			})
 		}
 		return true

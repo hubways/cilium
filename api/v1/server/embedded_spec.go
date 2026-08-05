@@ -1443,7 +1443,18 @@ func init() {
   "definitions": {
     "Address": {
       "description": "IP address",
-      "type": "string"
+      "type": "string",
+      "x-go-type": {
+        "hints": {
+          "kind": "primitive",
+          "noValidation": true
+        },
+        "import": {
+          "alias": "iputil",
+          "package": "github.com/cilium/cilium/pkg/ip"
+        },
+        "type": "Addr"
+      }
     },
     "AddressPair": {
       "description": "Addressing information of an endpoint",
@@ -2022,6 +2033,21 @@ func init() {
           "description": "BGP local preference value to be set on the matched route",
           "type": "integer"
         }
+      }
+    },
+    "CIDR": {
+      "description": "IP address prefix (CIDR)",
+      "type": "string",
+      "x-go-type": {
+        "hints": {
+          "kind": "primitive",
+          "noValidation": true
+        },
+        "import": {
+          "alias": "iputil",
+          "package": "github.com/cilium/cilium/pkg/ip"
+        },
+        "type": "Prefix"
       }
     },
     "CIDRList": {
@@ -3923,15 +3949,15 @@ func init() {
         },
         "snat-exclusion-cidr": {
           "description": "This field is obsolete, please use snat-exclusion-cidr-v4 or snat-exclusion-cidr-v6.",
-          "type": "string"
+          "$ref": "#/definitions/CIDR"
         },
         "snat-exclusion-cidr-v4": {
           "description": "SnatExclusionCIDRv4 exempts SNAT from being performed on any packet sent to\nan IPv4 address that belongs to this CIDR.",
-          "type": "string"
+          "$ref": "#/definitions/CIDR"
         },
         "snat-exclusion-cidr-v6": {
           "description": "SnatExclusionCIDRv6 exempts SNAT from being performed on any packet sent to\nan IPv6 address that belongs to this CIDR.\nFor IPv6 we only do masquerading in iptables mode.",
-          "type": "string"
+          "$ref": "#/definitions/CIDR"
         }
       }
     },
@@ -6788,7 +6814,18 @@ func init() {
   "definitions": {
     "Address": {
       "description": "IP address",
-      "type": "string"
+      "type": "string",
+      "x-go-type": {
+        "hints": {
+          "kind": "primitive",
+          "noValidation": true
+        },
+        "import": {
+          "alias": "iputil",
+          "package": "github.com/cilium/cilium/pkg/ip"
+        },
+        "type": "Addr"
+      }
     },
     "AddressPair": {
       "description": "Addressing information of an endpoint",
@@ -7367,6 +7404,21 @@ func init() {
           "description": "BGP local preference value to be set on the matched route",
           "type": "integer"
         }
+      }
+    },
+    "CIDR": {
+      "description": "IP address prefix (CIDR)",
+      "type": "string",
+      "x-go-type": {
+        "hints": {
+          "kind": "primitive",
+          "noValidation": true
+        },
+        "import": {
+          "alias": "iputil",
+          "package": "github.com/cilium/cilium/pkg/ip"
+        },
+        "type": "Prefix"
       }
     },
     "CIDRList": {
@@ -9698,15 +9750,15 @@ func init() {
         },
         "snat-exclusion-cidr": {
           "description": "This field is obsolete, please use snat-exclusion-cidr-v4 or snat-exclusion-cidr-v6.",
-          "type": "string"
+          "$ref": "#/definitions/CIDR"
         },
         "snat-exclusion-cidr-v4": {
           "description": "SnatExclusionCIDRv4 exempts SNAT from being performed on any packet sent to\nan IPv4 address that belongs to this CIDR.",
-          "type": "string"
+          "$ref": "#/definitions/CIDR"
         },
         "snat-exclusion-cidr-v6": {
           "description": "SnatExclusionCIDRv6 exempts SNAT from being performed on any packet sent to\nan IPv6 address that belongs to this CIDR.\nFor IPv6 we only do masquerading in iptables mode.",
-          "type": "string"
+          "$ref": "#/definitions/CIDR"
         }
       }
     },
