@@ -49,6 +49,7 @@ require (
 	github.com/go-openapi/swag/cmdutils v0.27.3
 	github.com/go-openapi/swag/conv v0.27.3
 	github.com/go-openapi/swag/jsonutils v0.27.3
+	github.com/go-openapi/swag/netutils v0.27.3
 	github.com/go-openapi/swag/typeutils v0.27.3
 	github.com/go-openapi/validate v0.26.1
 	github.com/google/cel-go v0.29.2
@@ -212,7 +213,6 @@ require (
 	github.com/go-openapi/swag/fileutils v0.27.3 // indirect
 	github.com/go-openapi/swag/loading v0.27.3 // indirect
 	github.com/go-openapi/swag/mangling v0.27.3 // indirect
-	github.com/go-openapi/swag/netutils v0.27.3 // indirect
 	github.com/go-openapi/swag/pools v0.27.3 // indirect
 	github.com/go-openapi/swag/stringutils v0.27.3 // indirect
 	github.com/go-openapi/swag/yamlutils v0.27.3 // indirect
@@ -284,6 +284,7 @@ require (
 	github.com/sergi/go-diff v1.4.0 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/sourcegraph/conc v0.3.1-0.20240121214520-5f936abd7ae8 // indirect
+	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/tetratelabs/wabin v0.0.0-20230304001439-f6f874872834 // indirect
 	github.com/tetratelabs/wazero v1.12.0 // indirect

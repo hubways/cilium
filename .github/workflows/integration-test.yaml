@@ -76,7 +76,7 @@ jobs:
     runs-on: ${{ vars.UBUNTU_2404_AMD64_4CPU_16GB }}
     steps:
       - name: Set initial commit status
-        uses: cilium/cilium/.github/actions/set-commit-status@main # main
+        uses: cilium/actions/set-commit-status@fe0702f5df0d8e44d48f1baa226c023b73ff6b5e # main
         with:
           sha: ${{ inputs.SHA || github.sha }}
 
@@ -94,7 +94,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Set commit status to pending
-        uses: cilium/cilium/.github/actions/set-commit-status@main # main
+        uses: cilium/actions/set-commit-status@fe0702f5df0d8e44d48f1baa226c023b73ff6b5e # main
         with:
           sha: ${{ inputs.SHA || github.sha }}
 
@@ -102,6 +102,11 @@ jobs:
         uses: cilium/workflow-telemetry-action@b1a318f80a08acede58027afe1455d037379966f # v2.2.0
         with:
           comment_on_pr: false
+
+      - name: Install Dependencies
+        shell: bash
+        run: |
+          sudo apt update && sudo apt install -y --no-install-recommends build-essential make libtinfo6
 
       - name: Checkout context ref (trusted)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -152,6 +157,16 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-integration-test-cache-${{ runner.arch }}-
 
+      - name: Set clang directory
+        id: set_clang_dir
+        run: echo "clang_dir=$HOME/.clang" >> $GITHUB_OUTPUT
+
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@ebc0426251bc40c7cd31162802432c68818ab8f0 # v2.0.9
+        with:
+          version: "19.1.7"
+          directory: ${{ steps.set_clang_dir.outputs.clang_dir }}
+
       - name: Create cache directories if they don't exist
         if: ${{ steps.go-cache.outputs.cache-hit != 'true' }}
         env:
@@ -183,6 +198,7 @@ jobs:
         run: |
           export V=0
           export DOCKER_BUILD_FLAGS=--quiet
+          export CFLAGS="-Werror"
           make integration-tests LOG_CODEOWNERS=1 JUNIT_PATH="test/${{ env.job_name }}.xml"
 
       - name: Fetch JUnits
@@ -236,7 +252,7 @@ jobs:
     runs-on: ${{ vars.UBUNTU_2404_AMD64_4CPU_16GB }}
     steps:
       - name: Set final commit status
-        uses: cilium/cilium/.github/actions/set-commit-status@main # main
+        uses: cilium/actions/set-commit-status@fe0702f5df0d8e44d48f1baa226c023b73ff6b5e # main
         with:
           sha: ${{ inputs.SHA || github.sha }}
           status: ${{ needs.integration-test.result }}

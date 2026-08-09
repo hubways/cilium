@@ -15,6 +15,7 @@ import (
 	allocatorTypes "github.com/cilium/cilium/operator/pkg/ipam/allocator"
 	"github.com/cilium/cilium/operator/pkg/ipam/allocator/aws"
 	ipamMetrics "github.com/cilium/cilium/operator/pkg/ipam/metrics"
+	cmtypes "github.com/cilium/cilium/pkg/clustermesh/types"
 	ipamOption "github.com/cilium/cilium/pkg/ipam/option"
 	k8sClient "github.com/cilium/cilium/pkg/k8s/client"
 	"github.com/cilium/cilium/pkg/metrics"
@@ -40,7 +41,6 @@ type AWSConfig struct {
 	ENITags                      map[string]string
 	ENIGarbageCollectionTags     map[string]string `mapstructure:"eni-gc-tags"`
 	ENIGarbageCollectionInterval time.Duration     `mapstructure:"eni-gc-interval"`
-	AWSUsePrimaryAddress         bool
 	EC2APIEndpoint               string
 	AWSMaxResultsPerCall         int32
 	IPAMSubnetsIDs               []string          `mapstructure:"subnet-ids-filter"`
@@ -54,7 +54,6 @@ var awsDefaultConfig = AWSConfig{
 	ENITags:                      nil,
 	ENIGarbageCollectionTags:     nil,
 	ENIGarbageCollectionInterval: 5 * time.Minute,
-	AWSUsePrimaryAddress:         false,
 	EC2APIEndpoint:               "",
 	AWSMaxResultsPerCall:         0,
 	IPAMSubnetsIDs:               nil,
@@ -71,7 +70,6 @@ func (cfg AWSConfig) Flags(flags *pflag.FlagSet) {
 		"Additional tags attached to ENIs created by Cilium. Dangling ENIs with this tag will be garbage collected")
 	flags.Duration("eni-gc-interval", awsDefaultConfig.ENIGarbageCollectionInterval,
 		"Interval for garbage collection of unattached ENIs. Set to 0 to disable")
-	flags.Bool("aws-use-primary-address", awsDefaultConfig.AWSUsePrimaryAddress, "Allows for using primary address of the ENI for allocations on the node")
 	flags.String("ec2-api-endpoint", awsDefaultConfig.EC2APIEndpoint, "AWS API endpoint for the EC2 service")
 	flags.Int32("aws-max-results-per-call", awsDefaultConfig.AWSMaxResultsPerCall, "Maximum results per AWS API call for DescribeNetworkInterfaces, DescribeSecurityGroups and GetSecurityGroupsForVpc. Set to 0 to let AWS determine optimal page size (default). If set to 0 and AWS returns OperationNotPermitted errors, automatically switches to 1000 for all future requests")
 	flags.StringSlice("subnet-ids-filter", awsDefaultConfig.IPAMSubnetsIDs, "Subnets IDs (separated by commas)")
@@ -88,6 +86,7 @@ type awsParams struct {
 	Clientset          k8sClient.Clientset
 	AWSMetrics         *aws.Metrics
 	IPAMMetrics        *ipamMetrics.Metrics
+	ClusterInfo        cmtypes.ClusterInfo
 	DaemonCfg          *option.DaemonConfig
 	NodeWatcherFactory allocatorTypes.NodeWatcherJobFactory
 
@@ -97,13 +96,13 @@ type awsParams struct {
 
 func startAWSAllocator(p awsParams) {
 	alloc := &aws.AllocatorAWS{
+		ClusterInfo:                  p.ClusterInfo,
 		AWSReleaseExcessIPs:          p.AwsCfg.AWSReleaseExcessIPs,
 		ExcessIPReleaseDelay:         p.AwsCfg.ExcessIPReleaseDelay,
 		AWSEnablePrefixDelegation:    p.AwsCfg.AWSEnablePrefixDelegation,
 		ENITags:                      p.AwsCfg.ENITags,
 		ENIGarbageCollectionTags:     p.AwsCfg.ENIGarbageCollectionTags,
 		ENIGarbageCollectionInterval: p.AwsCfg.ENIGarbageCollectionInterval,
-		AWSUsePrimaryAddress:         p.AwsCfg.AWSUsePrimaryAddress,
 		EC2APIEndpoint:               p.AwsCfg.EC2APIEndpoint,
 		AWSMaxResultsPerCall:         p.AwsCfg.AWSMaxResultsPerCall,
 		SubnetsIDs:                   p.AwsCfg.IPAMSubnetsIDs,
