@@ -205,6 +205,7 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 #endif /* ENABLE_NODEPORT */
 
 	if (svc) {
+		bool new_backend __maybe_unused = false;
 		const struct lb4_backend *backend;
 
 #if defined(ENABLE_L7_LB)
@@ -231,7 +232,7 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 
 		ret = lb4_local(get_ct_map4(&tuple), ctx, fraginfo,
 				l4_off, &key, &tuple, svc, &ct_state_new,
-				&backend, ext_err, NULL);
+				&backend, &new_backend, ext_err, NULL);
 
 		if (IS_ERR(ret)) {
 			if (ret == DROP_NO_SERVICE) {
@@ -383,6 +384,7 @@ static __always_inline int __per_packet_lb_svc_xlate_6(void *ctx, struct ipv6hdr
 #endif /* ENABLE_NODEPORT */
 
 	if (svc) {
+		bool new_backend __maybe_unused = false;
 		const struct lb6_backend *backend;
 
 #if defined(ENABLE_L7_LB)
@@ -401,7 +403,7 @@ static __always_inline int __per_packet_lb_svc_xlate_6(void *ctx, struct ipv6hdr
 
 		ret = lb6_local(get_ct_map6(&tuple), ctx, fraginfo,
 				l4_off, &key, &tuple, svc, &ct_state_new,
-				&backend, ext_err, NULL);
+				&backend, &new_backend, ext_err, NULL);
 
 		if (IS_ERR(ret)) {
 			if (ret == DROP_NO_SERVICE) {
@@ -1856,7 +1858,7 @@ ipv6_policy(struct __ctx_buff *ctx, struct ipv6hdr *ip6, __u32 src_label,
 	int ret, verdict, l4_off, zero = 0;
 	struct ct_buffer6 *ct_buffer;
 	struct trace_ctx trace;
-	union v6addr orig_sip;
+	union v6addr orig_sip __align_stack_8;
 	__u8 policy_match_type = POLICY_MATCH_NONE;
 	__u8 audited = 0;
 	__u8 auth_type = 0;
