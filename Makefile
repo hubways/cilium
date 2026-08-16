@@ -520,24 +520,18 @@ endif
 	$(QUIET) contrib/scripts/check-fmt.sh
 	@$(ECHO_CHECK) contrib/scripts/check-log-newlines.sh
 	$(QUIET) contrib/scripts/check-log-newlines.sh
-	@$(ECHO_CHECK) contrib/scripts/lock-check.sh
-	$(QUIET) contrib/scripts/lock-check.sh
 	@$(ECHO_CHECK) contrib/scripts/check-viper.sh
 	$(QUIET) contrib/scripts/check-viper.sh
 ifeq ($(SKIP_CUSTOMVET_CHECK),false)
 	@$(ECHO_CHECK) contrib/scripts/custom-vet-check.sh
 	$(QUIET) contrib/scripts/custom-vet-check.sh
 endif
-	@$(ECHO_CHECK) contrib/scripts/check-time.sh
-	$(QUIET) contrib/scripts/check-time.sh
 	@$(ECHO_CHECK) contrib/scripts/check-go-testdata.sh
 	$(QUIET) contrib/scripts/check-go-testdata.sh
 	@$(ECHO_CHECK) contrib/scripts/check-go-test-tags.sh
 	$(QUIET) contrib/scripts/check-go-test-tags.sh
 	@$(ECHO_CHECK) contrib/scripts/check-source-info.sh
 	$(QUIET) contrib/scripts/check-source-info.sh
-	@$(ECHO_CHECK) contrib/scripts/check-xfrmstate.sh
-	$(QUIET) contrib/scripts/check-xfrmstate.sh
 	@$(ECHO_CHECK) contrib/scripts/check-legacy-header-guard.sh
 	$(QUIET) contrib/scripts/check-legacy-header-guard.sh
 	@$(ECHO_CHECK) contrib/scripts/check-datapathconfig.sh

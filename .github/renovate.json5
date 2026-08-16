@@ -38,6 +38,8 @@
     ".github/actions/e2e/**",
     ".github/actions/kvstore/**",
     ".github/actions/gather-metrics/**",
+    ".github/actions/get-runner-ip/**",
+    ".github/actions/wait-for-images/**",
     ".github/actions/merge-artifacts/**",
     ".github/actions/post-logic/**",
     ".github/actions/ginkgo/**",
@@ -75,6 +77,8 @@
   // If removed, we would fall back on the config:base preset, which ignores any
   // paths that match 'examples/*' (which we explicitly do not want to ignore).
   "ignorePaths": [
+    // These files are pinned to a specific action on the branch
+    ".github/workflows/call-backport-label-updater*",
     // This file is deprecated and no longer present in main
     "images/cilium-test/Dockerfile"
   ],
