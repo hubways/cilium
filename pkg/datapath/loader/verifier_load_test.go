@@ -24,6 +24,7 @@ func setBasePermutations(t *config.Node) {
 	t.TracingIPOptionType = 1
 	t.DebugLB = true
 	t.EventsMapRateLimit = 1000
+	t.EnableIdentityMark = true
 }
 
 func baseLXCPermutations() *loadPermutationBuilder {
@@ -99,6 +100,11 @@ func baseSockPermutations() *loadPermutationBuilder {
 			setBasePermutations(&t.Node)
 			t.EnableIPv4Fragments = true
 			t.EnableIPv6Fragments = true
+		}),
+		Increment(func(t *config.BPFSock, v bool) {
+			if v {
+				t.MKEHost = option.HostExtensionMKE
+			}
 		}),
 		IncrementOrPermute(func(t *config.BPFSock, v bool) { t.EnableLRP = v }),
 	)

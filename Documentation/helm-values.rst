@@ -507,7 +507,7 @@
    * - :spelling:ignore:`certgen`
      - Configure certificate generation for Hubble integration. If hubble.tls.auto.method=cronJob, these values are used for the Kubernetes CronJob which will be scheduled regularly to (re)generate any certificates not provided manually.
      - object
-     - ``{"affinity":{},"annotations":{"cronJob":{},"job":{}},"cronJob":{"failedJobsHistoryLimit":1,"successfulJobsHistoryLimit":3},"enforceCAValidityThroughoutLeavesDuration":true,"extraVolumeMounts":[],"extraVolumes":[],"generateCA":true,"image":{"digest":"sha256:6213a4c54a1f36e14a9280765f058aaa2017550c28bc122f5b09ad146fd0da2b","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/certgen","tag":"v0.4.9","useDigest":true},"nodeSelector":{},"podLabels":{},"priorityClassName":"","resources":{},"tolerations":[],"ttlSecondsAfterFinished":null}``
+     - ``{"affinity":{},"annotations":{"cronJob":{},"job":{}},"cronJob":{"failedJobsHistoryLimit":1,"successfulJobsHistoryLimit":3},"enforceCAValidityThroughoutLeavesDuration":true,"extraVolumeMounts":[],"extraVolumes":[],"generateCA":true,"image":{"digest":"sha256:d507ee2160af548e9811fff802f956ba40fd650cab509e02bf21778d383930b7","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/certgen","tag":"v0.4.10","useDigest":true},"nodeSelector":{},"podLabels":{},"priorityClassName":"","resources":{},"tolerations":[],"ttlSecondsAfterFinished":null}``
    * - :spelling:ignore:`certgen.affinity`
      - Affinity for certgen
      - object
@@ -1699,7 +1699,7 @@
    * - :spelling:ignore:`envoy.image`
      - Envoy container image.
      - object
-     - ``{"digest":"sha256:18ad6e61ba405fdf6ab44828aeb6299f92de57231eaa7b998f29d117475e3a48","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.38.3-1786810643-4408e58b2a8a16a921d3f13c8c690a788655f0ba","useDigest":true}``
+     - ``{"digest":"sha256:41d4c20b0abcad3b82c0529ad783a99ff40cd73be5cd98637702e4d6bcf1efbf","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.38.3-1786847928-0512632eff02ed4971b16926ae6b82a3c0e07a70","useDigest":true}``
    * - :spelling:ignore:`envoy.initContainers`
      - Init containers added to the cilium Envoy DaemonSet.
      - list
@@ -3727,7 +3727,7 @@
    * - :spelling:ignore:`preflight.envoy.image`
      - Envoy pre-flight image.
      - object
-     - ``{"digest":"sha256:18ad6e61ba405fdf6ab44828aeb6299f92de57231eaa7b998f29d117475e3a48","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.38.3-1786810643-4408e58b2a8a16a921d3f13c8c690a788655f0ba","useDigest":true}``
+     - ``{"digest":"sha256:41d4c20b0abcad3b82c0529ad783a99ff40cd73be5cd98637702e4d6bcf1efbf","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.38.3-1786847928-0512632eff02ed4971b16926ae6b82a3c0e07a70","useDigest":true}``
    * - :spelling:ignore:`preflight.extraEnv`
      - Additional preflight environment variables.
      - list

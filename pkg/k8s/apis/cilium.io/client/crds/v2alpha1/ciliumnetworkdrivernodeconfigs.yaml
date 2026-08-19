@@ -211,17 +211,12 @@ spec:
                           type: array
                       type: object
                     name:
+                      pattern: ^[^/]+$
                       type: string
                   required:
                   - name
                   type: object
                 type: array
-              publishInterval:
-                default: 10
-                description: How often DRA plugin scans for devices and publishes
-                  resourceslices.
-                format: int64
-                type: integer
             type: object
         required:
         - spec
