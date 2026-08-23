@@ -461,9 +461,21 @@ func Test_Conformance(t *testing.T) {
 					IncludeServiceImports: helpers.HasServiceImportSupport(c.Scheme()),
 					IncludeListenerSets:   helpers.HasListenerSetSupport(c.Scheme()),
 				}),
-				logger:             logger,
-				controllerName:     defaultControllerName,
-				hostNetworkEnabled: tt.hostNetwork,
+				listenerStatusManager: NewListenerStatusManager(c, logger, ListenerStatusManagerConfig{
+					TCPUDPRouteSupport:      !tt.hostNetwork,
+					TCPUDPUnsupportedReason: hostNetworkTCPUDPRouteUnsupportedReason,
+				}),
+				routeStatusManager: NewRouteStatusManager(c, logger, defaultControllerName, RouteStatusManagerConfig{
+					IncludeTCPRoutes:        !tt.disableTCPRoute,
+					IncludeUDPRoutes:        !tt.disableUDPRoute,
+					TCPUDPRouteSupport:      !tt.hostNetwork,
+					TCPUDPUnsupportedReason: hostNetworkTCPUDPRouteUnsupportedReason,
+				}),
+				backendTLSPolicyStatusManager: NewBackendTLSPolicyStatusManager(c, defaultControllerName),
+				logger:                        logger,
+				controllerName:                defaultControllerName,
+				tcpUDPRouteSupport:            !tt.hostNetwork,
+				tcpUDPUnsupportedReason:       hostNetworkTCPUDPRouteUnsupportedReason,
 			}
 
 			// Reconcile all related HTTPRoute objects
@@ -822,6 +834,10 @@ func Test_gatewayReconciler_Reconcile_cleansUpResourcesOnHandoff(t *testing.T) {
 					IncludeServiceImports: helpers.HasServiceImportSupport(c.Scheme()),
 					IncludeListenerSets:   helpers.HasListenerSetSupport(c.Scheme()),
 				}),
+				listenerStatusManager: NewListenerStatusManager(c, hivetest.Logger(t, hivetest.LogLevel(slog.LevelDebug)), ListenerStatusManagerConfig{
+					TCPUDPRouteSupport:      true,
+					TCPUDPUnsupportedReason: hostNetworkTCPUDPRouteUnsupportedReason,
+				}),
 				logger:         hivetest.Logger(t, hivetest.LogLevel(slog.LevelDebug)),
 				controllerName: defaultControllerName,
 			}
@@ -1060,11 +1076,17 @@ func Test_gatewayReconciler_setListenerStatus(t *testing.T) {
 			}
 
 			r := &gatewayReconciler{
-				Client: fake.NewClientBuilder().
-					WithScheme(helpers.TestScheme(helpers.AllOptionalKinds)).
-					Build(),
+				Client: func() client.WithWatch {
+					return fake.NewClientBuilder().
+						WithScheme(helpers.TestScheme(helpers.AllOptionalKinds)).
+						Build()
+				}(),
 			}
-			gotStatus, err := r.setListenerStatus(
+			r.listenerStatusManager = NewListenerStatusManager(r.Client, hivetest.Logger(t, hivetest.LogLevel(slog.LevelDebug)), ListenerStatusManagerConfig{
+				TCPUDPRouteSupport:      true,
+				TCPUDPUnsupportedReason: hostNetworkTCPUDPRouteUnsupportedReason,
+			})
+			gotStatus, err := r.listenerStatusManager.setGatewayListenerStatus(
 				t.Context(),
 				gw,
 				nil,
@@ -1204,165 +1226,6 @@ func filterGRPCRoute(hrList *gatewayv1.GRPCRouteList, gatewayName string, namesp
 	return filterList
 }
 
-func Test_sectionNameMatched(t *testing.T) {
-	httpListener := &gatewayv1.Listener{
-		Name:     "http",
-		Port:     80,
-		Hostname: ptr.To[gatewayv1.Hostname]("*.cilium.io"),
-		Protocol: "HTTP",
-	}
-	httpNoMatchListener := &gatewayv1.Listener{
-		Name:     "http-no-match",
-		Port:     8080,
-		Hostname: ptr.To[gatewayv1.Hostname]("*.cilium.io"),
-		Protocol: "HTTP",
-	}
-	gw := &gatewayv1.Gateway{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Gateway",
-			APIVersion: gatewayv1.GroupName,
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "valid-gateway",
-			Namespace: "default",
-		},
-		Spec: gatewayv1.GatewaySpec{
-			GatewayClassName: "cilium",
-			Listeners: []gatewayv1.Listener{
-				*httpListener,
-				*httpNoMatchListener,
-			},
-		},
-	}
-	type args struct {
-		routeNamespace string
-		listener       *gatewayv1.Listener
-		refs           []gatewayv1.ParentReference
-	}
-	tests := []struct {
-		name string
-		args args
-		want bool
-	}{
-		{
-			name: "Matching Section name",
-			args: args{
-				listener: httpListener,
-				refs: []gatewayv1.ParentReference{
-					{
-						Kind:        (*gatewayv1.Kind)(ptr.To("Gateway")),
-						Name:        "valid-gateway",
-						SectionName: (*gatewayv1.SectionName)(ptr.To("http")),
-					},
-				},
-			},
-			want: true,
-		},
-		{
-			name: "Not matching Section name",
-			args: args{
-				listener: httpNoMatchListener,
-				refs: []gatewayv1.ParentReference{
-					{
-						Kind:        (*gatewayv1.Kind)(ptr.To("Gateway")),
-						Name:        "valid-gateway",
-						SectionName: (*gatewayv1.SectionName)(ptr.To("http")),
-					},
-				},
-			},
-			want: false,
-		},
-		{
-			name: "Matching Port number",
-			args: args{
-				listener: httpListener,
-				refs: []gatewayv1.ParentReference{
-					{
-						Kind: (*gatewayv1.Kind)(ptr.To("Gateway")),
-						Name: "valid-gateway",
-						Port: (*gatewayv1.PortNumber)(ptr.To[int32](80)),
-					},
-				},
-			},
-			want: true,
-		},
-		{
-			name: "No matching Port number",
-			args: args{
-				listener: httpNoMatchListener,
-				refs: []gatewayv1.ParentReference{
-					{
-						Kind: (*gatewayv1.Kind)(ptr.To("Gateway")),
-						Name: "valid-gateway",
-						Port: (*gatewayv1.PortNumber)(ptr.To[int32](80)),
-					},
-				},
-			},
-			want: false,
-		},
-		{
-			name: "Matching both Section name and Port number",
-			args: args{
-				listener: httpListener,
-				refs: []gatewayv1.ParentReference{
-					{
-						Kind:        (*gatewayv1.Kind)(ptr.To("Gateway")),
-						Name:        "valid-gateway",
-						SectionName: (*gatewayv1.SectionName)(ptr.To("http")),
-						Port:        (*gatewayv1.PortNumber)(ptr.To[int32](80)),
-					},
-				},
-			},
-			want: true,
-		},
-		{
-			name: "Matching any listener (httpListener)",
-			args: args{
-				listener: httpListener,
-				refs: []gatewayv1.ParentReference{
-					{
-						Kind: (*gatewayv1.Kind)(ptr.To("Gateway")),
-						Name: "valid-gateway",
-					},
-				},
-			},
-			want: true,
-		},
-		{
-			name: "Matching any listener (httpNoMatchListener)",
-			args: args{
-				listener: httpNoMatchListener,
-				refs: []gatewayv1.ParentReference{
-					{
-						Kind: (*gatewayv1.Kind)(ptr.To("Gateway")),
-						Name: "valid-gateway",
-					},
-				},
-			},
-			want: true,
-		},
-		{
-			name: "GAMMA Service with same name as Gateway should not match",
-			args: args{
-				listener: httpListener,
-				refs: []gatewayv1.ParentReference{
-					{
-						Kind:  (*gatewayv1.Kind)(ptr.To("Service")),
-						Group: (*gatewayv1.Group)(ptr.To("")),
-						Name:  "valid-gateway",
-					},
-				},
-			},
-			want: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equalf(t, tt.want, parentRefMatched(gw, tt.args.listener, nil, "default", tt.args.refs), "parentRefMatched(%v, %v, %v, %v)", gw, tt.args.listener, tt.args.routeNamespace, tt.args.refs)
-		})
-	}
-}
-
 // fakeIndexHTTPRouteByBackendService is a client.IndexerFunc that takes a single HTTPRoute and
 // returns all referenced backend service full names (`namespace/name`) to add to the relevant index.
 //
@@ -1422,9 +1285,22 @@ func testReconciler(t *testing.T, obj ...client.Object) (*gatewayReconciler, cli
 		Build()
 
 	reconciler := &gatewayReconciler{
-		Client:         fakeClient,
-		logger:         logger,
-		controllerName: defaultControllerName,
+		Client:                  fakeClient,
+		logger:                  logger,
+		controllerName:          defaultControllerName,
+		tcpUDPRouteSupport:      true,
+		tcpUDPUnsupportedReason: hostNetworkTCPUDPRouteUnsupportedReason,
+		listenerStatusManager: NewListenerStatusManager(fakeClient, logger, ListenerStatusManagerConfig{
+			TCPUDPRouteSupport:      true,
+			TCPUDPUnsupportedReason: hostNetworkTCPUDPRouteUnsupportedReason,
+		}),
+		routeStatusManager: NewRouteStatusManager(fakeClient, logger, defaultControllerName, RouteStatusManagerConfig{
+			IncludeTCPRoutes:        true,
+			IncludeUDPRoutes:        true,
+			TCPUDPRouteSupport:      true,
+			TCPUDPUnsupportedReason: hostNetworkTCPUDPRouteUnsupportedReason,
+		}),
+		backendTLSPolicyStatusManager: NewBackendTLSPolicyStatusManager(fakeClient, defaultControllerName),
 	}
 
 	return reconciler, fakeClient
@@ -1514,7 +1390,7 @@ func TestGatewayReconciler_statuses(t *testing.T) {
 
 		hrList := &gatewayv1.HTTPRouteList{}
 		require.NoError(t, c.List(ctx, hrList))
-		require.NoError(t, r.setHTTPRouteStatuses(r.logger, ctx, hrList.Items, nil))
+		require.NoError(t, r.routeStatusManager.setHTTPRouteStatuses(ctx, r.logger, hrList.Items, nil))
 
 		var updatedValidRoute, updatedInvalidRoute gatewayv1.HTTPRoute
 		require.NoError(t, c.Get(ctx, types.NamespacedName{Name: validRoute.Name, Namespace: validRoute.Namespace}, &updatedValidRoute))
@@ -1582,7 +1458,7 @@ func TestGatewayReconciler_statuses(t *testing.T) {
 
 		hrList := &gatewayv1.GRPCRouteList{}
 		require.NoError(t, c.List(ctx, hrList))
-		require.NoError(t, r.setGRPCRouteStatuses(r.logger, ctx, hrList.Items, nil))
+		require.NoError(t, r.routeStatusManager.setGRPCRouteStatuses(ctx, r.logger, hrList.Items, nil))
 
 		var updatedValidRoute, updatedInvalidRoute gatewayv1.GRPCRoute
 		require.NoError(t, c.Get(ctx, types.NamespacedName{Name: validRoute.Name, Namespace: validRoute.Namespace}, &updatedValidRoute))

@@ -607,7 +607,32 @@ func showAddresses(addrs []NodeAddress) string {
 	return strings.Join(ss, ", ")
 }
 
-// sortedAddresses returns a copy of the addresses sorted by following predicates
+// PreferredIPv6Address returns a non-link-local IPv6 address,
+// falling back to a link-local address when necessary.
+func PreferredIPv6Address(addrs []DeviceAddress) netip.Addr {
+	var ip netip.Addr
+	for _, addr := range addrs {
+		if addr.Addr.Is6() && !addr.Addr.IsUnspecified() {
+			ip = addr.Addr
+			if !ip.IsLinkLocalUnicast() {
+				break
+			}
+		}
+	}
+	return ip
+}
+
+// PreferredIPv4Address returns the first usable IPv4 address ordered by SortedAddresses.
+func PreferredIPv4Address(addrs []DeviceAddress) netip.Addr {
+	for _, addr := range SortedAddresses(addrs) {
+		if addr.Addr.Is4() && !addr.Addr.IsUnspecified() {
+			return addr.Addr
+		}
+	}
+	return netip.Addr{}
+}
+
+// SortedAddresses returns a copy of the addresses sorted by following predicates
 // (first predicate matching in this order wins):
 // - Primary (e.g. !IFA_F_SECONDARY)
 // - Scope, with lower scope going first (e.g. UNIVERSE before LINK)

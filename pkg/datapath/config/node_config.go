@@ -12,6 +12,8 @@ import "github.com/cilium/cilium/pkg/datapath/types"
 // Warning: do not instantiate directly! Always use [NewNode] to ensure the
 // default values configured in the ELF are honored.
 type Node struct {
+	// Conntrack timeout configuration.
+	CTTimeouts types.CTTimeoutConfig `config:"ct_timeouts"`
 	// Interface index of the cilium_host device.
 	CiliumHostIfIndex uint32 `config:"cilium_host_ifindex"`
 	// MAC address of the cilium_host device.
@@ -56,8 +58,12 @@ type Node struct {
 	HashInit4Seed uint32 `config:"hash_init4_seed"`
 	// Cluster-wide IPv6 tuple hash seed sourced.
 	HashInit6Seed uint32 `config:"hash_init6_seed"`
+	// IPv4 address of the device used for direct routing between nodes.
+	IPv4DirectRouting types.V4Addr `config:"ipv4_direct_routing"`
 	// Node IPv4 address used as the source for inter-cluster SNAT.
 	IPv4InterClusterSNAT types.V4Addr `config:"ipv4_inter_cluster_snat"`
+	// IPv6 address of the device used for direct routing between nodes.
+	IPv6DirectRouting types.V6Addr `config:"ipv6_direct_routing"`
 	// Number of timer ticks per second.
 	KernelHz uint32 `config:"kernel_hz"`
 	// Default load-balancer backend selection algorithm.
@@ -93,12 +99,15 @@ type Node struct {
 }
 
 func NewNode() *Node {
-	return &Node{0x0,
+	return &Node{cast[types.CTTimeoutConfig]([]byte{0x60, 0x54, 0x0, 0x0, 0x3c, 0x0, 0x0, 0x0, 0x60, 0x54, 0x0, 0x0, 0x3c, 0x0, 0x0, 0x0, 0x1e, 0x0, 0x0, 0x0, 0x3c, 0x0, 0x0, 0x0, 0xa, 0x0, 0x0, 0x0}),
+		0x0,
 		cast[types.MACAddr]([]byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}),
 		0x0,
 		cast[types.MACAddr]([]byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}),
 		0x0, 0x8, false, 0x0, false, false, false, false, false, false,
 		false, false, false, 0x0, 0x0, 0x0, 0x0, cast[types.V4Addr]([]byte{0x0, 0x0, 0x0, 0x0}),
+		cast[types.V4Addr]([]byte{0x0, 0x0, 0x0, 0x0}),
+		cast[types.V6Addr]([]byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}),
 		0x0, 0x1, false, 0x0, cast[types.V4Addr]([]byte{0x0, 0x0, 0x0, 0x0}),
 		0x0, 0x0, false,
 		cast[types.V6Addr]([]byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}),

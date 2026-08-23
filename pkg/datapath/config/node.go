@@ -5,6 +5,8 @@ package config
 
 import (
 	"github.com/cilium/cilium/pkg/datapath/linux/probes"
+	"github.com/cilium/cilium/pkg/datapath/tables"
+	"github.com/cilium/cilium/pkg/datapath/types"
 	"github.com/cilium/cilium/pkg/identity"
 	"github.com/cilium/cilium/pkg/loadbalancer"
 	"github.com/cilium/cilium/pkg/option"
@@ -18,6 +20,16 @@ func NodeConfig(lnc *Config) Node {
 	node.CiliumHostMAC.Addr = lnc.CiliumHostMAC.As6()
 	node.CiliumNetIfIndex = lnc.CiliumNetIfIndex
 	node.CiliumNetMAC.Addr = lnc.CiliumNetMAC.As6()
+
+	node.CTTimeouts = types.CTTimeoutConfig{
+		ConnectionLifetimeTCP:    uint32(option.Config.CTMapEntriesTimeoutTCP.Seconds()),
+		ConnectionLifetimeNonTCP: uint32(option.Config.CTMapEntriesTimeoutAny.Seconds()),
+		ServiceLifetimeTCP:       uint32(option.Config.CTMapEntriesTimeoutSVCTCP.Seconds()),
+		ServiceLifetimeNonTCP:    uint32(option.Config.CTMapEntriesTimeoutSVCAny.Seconds()),
+		ServiceCloseRebalance:    uint32(option.Config.CTMapEntriesTimeoutSVCTCPGrace.Seconds()),
+		SYNTimeout:               uint32(option.Config.CTMapEntriesTimeoutSYN.Seconds()),
+		CloseTimeout:             uint32(option.Config.CTMapEntriesTimeoutFIN.Seconds()),
+	}
 
 	if lnc.ServiceLoopbackIPv4.IsValid() {
 		node.ServiceLoopbackIPv4.Addr = lnc.ServiceLoopbackIPv4.As4()
@@ -38,6 +50,18 @@ func NodeConfig(lnc *Config) Node {
 
 	if lnc.DirectRoutingDevice != nil {
 		node.DirectRoutingDevIfIndex = uint32(lnc.DirectRoutingDevice.Index)
+		if option.Config.EnableIPv4 {
+			ipv4 := tables.PreferredIPv4Address(lnc.DirectRoutingDevice.Addrs)
+			if ipv4.IsValid() {
+				node.IPv4DirectRouting.Addr = ipv4.As4()
+			}
+		}
+		if option.Config.EnableIPv6 {
+			ipv6 := tables.PreferredIPv6Address(lnc.DirectRoutingDevice.Addrs)
+			if ipv6.IsValid() {
+				node.IPv6DirectRouting.Addr = ipv6.As16()
+			}
+		}
 	}
 
 	node.SupportsFIBLookupSkipNeigh = probes.HaveFibLookupSkipNeigh() == nil

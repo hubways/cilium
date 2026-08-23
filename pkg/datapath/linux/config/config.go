@@ -171,13 +171,6 @@ func (h *HeaderfileWriter) WriteNodeConfig(w io.Writer, cfg *config.Config) erro
 	cDefinesMap["POLICY_PROG_MAP_SIZE"] = fmt.Sprintf("%d", policymap.PolicyCallMaxEntries)
 	cDefinesMap["L2_RESPONDER_MAP4_SIZE"] = fmt.Sprintf("%d", l2respondermap.DefaultMaxEntries)
 	cDefinesMap["L2_RESPONDER_MAP6_SIZE"] = fmt.Sprintf("%d", l2v6respondermap.DefaultMaxEntries)
-	cDefinesMap["CT_CONNECTION_LIFETIME_TCP"] = fmt.Sprintf("%d", int64(option.Config.CTMapEntriesTimeoutTCP.Seconds()))
-	cDefinesMap["CT_CONNECTION_LIFETIME_NONTCP"] = fmt.Sprintf("%d", int64(option.Config.CTMapEntriesTimeoutAny.Seconds()))
-	cDefinesMap["CT_SERVICE_LIFETIME_TCP"] = fmt.Sprintf("%d", int64(option.Config.CTMapEntriesTimeoutSVCTCP.Seconds()))
-	cDefinesMap["CT_SERVICE_LIFETIME_NONTCP"] = fmt.Sprintf("%d", int64(option.Config.CTMapEntriesTimeoutSVCAny.Seconds()))
-	cDefinesMap["CT_SERVICE_CLOSE_REBALANCE"] = fmt.Sprintf("%d", int64(option.Config.CTMapEntriesTimeoutSVCTCPGrace.Seconds()))
-	cDefinesMap["CT_SYN_TIMEOUT"] = fmt.Sprintf("%d", int64(option.Config.CTMapEntriesTimeoutSYN.Seconds()))
-	cDefinesMap["CT_CLOSE_TIMEOUT"] = fmt.Sprintf("%d", int64(option.Config.CTMapEntriesTimeoutFIN.Seconds()))
 	cDefinesMap["CT_REPORT_INTERVAL"] = fmt.Sprintf("%d", int64(option.Config.MonitorAggregationInterval.Seconds()))
 	cDefinesMap["CT_REPORT_FLAGS"] = fmt.Sprintf("%#04x", int64(option.Config.MonitorAggregationFlags))
 
@@ -327,31 +320,6 @@ func (h *HeaderfileWriter) WriteNodeConfig(w io.Writer, cfg *config.Config) erro
 	// define maglev tables when loadbalancer algorith is maglev or config can
 	// be set by the Service annotation
 	cDefinesMap["LB_MAGLEV_LUT_SIZE"] = fmt.Sprintf("%d", cfg.MaglevConfig.TableSize)
-
-	// We assume that validation for DirectRoutingDevice requirement and presence is already done
-	// upstream when constructing the LocalNodeConfiguration.
-	// See orchestrator/localnodeconfig.go
-	drd := cfg.DirectRoutingDevice
-	if drd != nil {
-		if option.Config.EnableIPv4 {
-			ipv4 := preferredIPv4Address(drd.Addrs)
-			cDefinesMap["IPV4_DIRECT_ROUTING"] = fmt.Sprintf("%d", ipv4)
-		}
-		if option.Config.EnableIPv6 {
-			ip := preferredIPv6Address(drd.Addrs)
-			extraMacrosMap["IPV6_DIRECT_ROUTING"] = ip.String()
-			fw.WriteString(FmtDefineAddress("IPV6_DIRECT_ROUTING", ip.AsSlice()))
-		}
-	} else {
-		var directRoutingIPv6 net.IP
-		if option.Config.EnableIPv4 {
-			cDefinesMap["IPV4_DIRECT_ROUTING"] = "0"
-		}
-		if option.Config.EnableIPv6 {
-			extraMacrosMap["IPV6_DIRECT_ROUTING"] = directRoutingIPv6.String()
-			fw.WriteString(FmtDefineAddress("IPV6_DIRECT_ROUTING", directRoutingIPv6))
-		}
-	}
 
 	// --- WARNING: THIS CONFIGURATION METHOD IS DEPRECATED, SEE FUNCTION DOC ---
 
@@ -607,28 +575,4 @@ func (h *HeaderfileWriter) writeTemplateConfig(fw *bufio.Writer, e endpoint.Conf
 func (h *HeaderfileWriter) WriteTemplateConfig(w io.Writer, e endpoint.Config) error {
 	fw := bufio.NewWriter(w)
 	return h.writeTemplateConfig(fw, e)
-}
-
-func preferredIPv4Address(deviceAddresses []tables.DeviceAddress) uint32 {
-	var ip uint32
-	for _, addr := range tables.SortedAddresses(deviceAddresses) {
-		if addr.Addr.Is4() {
-			ip = byteorder.NetIPAddrToHost32(addr.Addr)
-			break
-		}
-	}
-	return ip
-}
-
-func preferredIPv6Address(deviceAddresses []tables.DeviceAddress) netip.Addr {
-	var ip netip.Addr
-	for _, addr := range deviceAddresses {
-		if addr.Addr.Is6() {
-			ip = addr.Addr
-			if !ip.IsLinkLocalUnicast() {
-				break
-			}
-		}
-	}
-	return ip
 }
