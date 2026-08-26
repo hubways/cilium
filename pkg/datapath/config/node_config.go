@@ -62,8 +62,12 @@ type Node struct {
 	IPv4DirectRouting types.V4Addr `config:"ipv4_direct_routing"`
 	// Node IPv4 address used as the source for inter-cluster SNAT.
 	IPv4InterClusterSNAT types.V4Addr `config:"ipv4_inter_cluster_snat"`
+	// IPv4 destination prefix excluded from SNAT.
+	IPv4SNATExclusion types.IPv4SNATExclusionPrefix `config:"ipv4_snat_exclusion"`
 	// IPv6 address of the device used for direct routing between nodes.
 	IPv6DirectRouting types.V6Addr `config:"ipv6_direct_routing"`
+	// IPv6 destination prefix excluded from SNAT.
+	IPv6SNATExclusion types.IPv6SNATExclusionPrefix `config:"ipv6_snat_exclusion"`
 	// Number of timer ticks per second.
 	KernelHz uint32 `config:"kernel_hz"`
 	// Default load-balancer backend selection algorithm.
@@ -76,8 +80,12 @@ type Node struct {
 	NAT46X64Prefix types.V4Addr `config:"nat_46x64_prefix"`
 	// Nodeport maximum port value.
 	NodeportPortMax uint16 `config:"nodeport_port_max"`
+	// Nodeport NAT extended maximum port value.
+	NodeportPortMaxNATExt uint16 `config:"nodeport_port_max_nat_ext"`
 	// Nodeport minimum port value.
 	NodeportPortMin uint16 `config:"nodeport_port_min"`
+	// Nodeport NAT extended minimum port value.
+	NodeportPortMinNATExt uint16 `config:"nodeport_port_min_nat_ext"`
 	// Enable ICMP responses for policy-denied traffic.
 	PolicyDenyResponseEnabled bool `config:"policy_deny_response_enabled"`
 	// Internal IPv6 router address assigned to the cilium_host interface.
@@ -107,9 +115,11 @@ func NewNode() *Node {
 		0x0, 0x8, false, 0x0, false, false, false, false, false, false,
 		false, false, false, 0x0, 0x0, 0x0, 0x0, cast[types.V4Addr]([]byte{0x0, 0x0, 0x0, 0x0}),
 		cast[types.V4Addr]([]byte{0x0, 0x0, 0x0, 0x0}),
+		cast[types.IPv4SNATExclusionPrefix]([]byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}),
 		cast[types.V6Addr]([]byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}),
+		cast[types.IPv6SNATExclusionPrefix]([]byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}),
 		0x0, 0x1, false, 0x0, cast[types.V4Addr]([]byte{0x0, 0x0, 0x0, 0x0}),
-		0x0, 0x0, false,
+		0x0, 0x0, 0x0, 0x0, false,
 		cast[types.V6Addr]([]byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}),
 		cast[types.V4Addr]([]byte{0x0, 0x0, 0x0, 0x0}),
 		cast[types.V6Addr]([]byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}),

@@ -46,6 +46,10 @@ DECLARE_CONFIG(__u16, ephemeral_min, "Ephemeral port range minimun")
 # define ENABLE_SNAT_ICMPV4 1
 #endif
 
+#if defined(ENABLE_MASQUERADE_IPV6)
+# define ENABLE_SNAT_ICMPV6 1
+#endif
+
 enum  nat_dir {
 	NAT_DIR_EGRESS  = TUPLE_F_OUT,
 	NAT_DIR_INGRESS = TUPLE_F_IN,
@@ -71,6 +75,19 @@ nat_min_egress()
 	return NODEPORT_PORT_MIN_NAT;
 #endif
 	return CONFIG(ephemeral_min);
+}
+
+static __always_inline bool
+is_port_in_nat_range(__u16 sport)
+{
+	bool in_nat_range = sport >= NODEPORT_PORT_MIN_NAT &&
+			    sport <= NODEPORT_PORT_MAX_NAT;
+
+	if (CONFIG(nodeport_port_max_nat_ext))
+		in_nat_range |= sport >= CONFIG(nodeport_port_min_nat_ext) &&
+				sport <= CONFIG(nodeport_port_max_nat_ext);
+
+	return in_nat_range;
 }
 
 /* Clamp a port to the range [start, end].
@@ -144,6 +161,18 @@ struct ipv4_nat_target {
 	__u32 ifindex; /* Obtained from EGW policy */
 	__u32 tbid;
 };
+
+static __always_inline void
+swap_nat_port_range_ipv4(struct ipv4_nat_target *target)
+{
+	if (target->min_port == NODEPORT_PORT_MIN_NAT) {
+		target->min_port = CONFIG(nodeport_port_min_nat_ext);
+		target->max_port = CONFIG(nodeport_port_max_nat_ext);
+	} else {
+		target->min_port = NODEPORT_PORT_MIN_NAT;
+		target->max_port = NODEPORT_PORT_MAX_NAT;
+	}
+}
 
 struct {
 	__uint(type, BPF_MAP_TYPE_LRU_HASH);
@@ -599,7 +628,7 @@ snat_v4_nat_can_skip(const struct ipv4_nat_target *target,
 		return false;
 #endif
 
-	return (!target->from_local_endpoint && sport < nat_min_egress());
+	return (!target->from_local_endpoint && !is_port_in_nat_range(sport));
 }
 
 static __always_inline bool
@@ -697,9 +726,9 @@ __snat_v4_needs_masquerade(struct __ctx_buff *ctx, struct ipv4_ct_tuple *tuple,
 
 	/* Check if the packet matches an egress NAT policy and so needs to be SNAT'ed.
 	 *
-	 * This check must happen before the IPV4_SNAT_EXCLUSION_DST_CIDR check below as
-	 * the destination may be in the SNAT exclusion CIDR but regardless of that we
-	 * always want to SNAT a packet if it's matched by an egress NAT policy.
+	 * This check must happen before the IPv4 SNAT exclusion check below.
+	 * The destination may be in the SNAT exclusion CIDR but regardless of
+	 * that we always want to SNAT a packet if it's matched by an egress NAT policy.
 	 */
 #if defined(ENABLE_EGRESS_GATEWAY_COMMON)
 	if (egress_gw_snat_needed_hook(tuple->saddr, tuple->daddr, &target->addr,
@@ -722,11 +751,11 @@ __snat_v4_needs_masquerade(struct __ctx_buff *ctx, struct ipv4_ct_tuple *tuple,
 	/* Do not MASQ if a dst IP belongs to a pods CIDR
 	 * (ipv4-native-routing-cidr if specified, otherwise local pod CIDR).
 	 */
-#ifdef IPV4_SNAT_EXCLUSION_DST_CIDR
-	if (ipv4_is_in_subnet(tuple->daddr, IPV4_SNAT_EXCLUSION_DST_CIDR,
-			      IPV4_SNAT_EXCLUSION_DST_CIDR_LEN))
+	if (CONFIG(ipv4_snat_exclusion).enabled &&
+	    ipv4_is_in_subnet(tuple->daddr,
+			      CONFIG(ipv4_snat_exclusion).dst_addr.be32,
+			      CONFIG(ipv4_snat_exclusion).bits))
 		return NAT_PUNT_TO_STACK;
-#endif
 
 	/* Do not SNAT if this is a localhost endpoint or
 	 * endpoint explicitly disallows it (normally multi-pool IPAM endpoints)
@@ -1326,6 +1355,18 @@ struct ipv6_nat_target {
 	__u32 tbid;
 };
 
+static __always_inline void
+swap_nat_port_range_ipv6(struct ipv6_nat_target *target)
+{
+	if (target->min_port == NODEPORT_PORT_MIN_NAT) {
+		target->min_port = CONFIG(nodeport_port_min_nat_ext);
+		target->max_port = CONFIG(nodeport_port_max_nat_ext);
+	} else {
+		target->min_port = NODEPORT_PORT_MIN_NAT;
+		target->max_port = NODEPORT_PORT_MAX_NAT;
+	}
+}
+
 struct {
 	__uint(type, BPF_MAP_TYPE_LRU_HASH);
 	__type(key, struct ipv6_ct_tuple);
@@ -1694,7 +1735,7 @@ snat_v6_nat_can_skip(const struct ipv6_nat_target *target,
 		return false;
 #endif
 
-	return (!target->from_local_endpoint && sport < nat_min_egress());
+	return (!target->from_local_endpoint && !is_port_in_nat_range(sport));
 }
 
 static __always_inline bool
@@ -1781,15 +1822,13 @@ __snat_v6_needs_masquerade(struct __ctx_buff *ctx, struct ipv6_ct_tuple *tuple,
 	}
 #endif
 
-# ifdef IPV6_SNAT_EXCLUSION_DST_CIDR
-	{
-		union v6addr excl_cidr_mask = IPV6_SNAT_EXCLUSION_DST_CIDR_MASK;
-		union v6addr excl_cidr = IPV6_SNAT_EXCLUSION_DST_CIDR;
+	if (CONFIG(ipv6_snat_exclusion).enabled) {
+		union v6addr excl_cidr = CONFIG(ipv6_snat_exclusion).dst_addr;
+		union v6addr excl_cidr_mask = CONFIG(ipv6_snat_exclusion).dst_mask;
 
 		if (ipv6_addr_in_net(&tuple->daddr, &excl_cidr, &excl_cidr_mask))
 			return NAT_PUNT_TO_STACK;
 	}
-# endif /* IPV6_SNAT_EXCLUSION_DST_CIDR */
 
 	/* Do not SNAT if this is a localhost endpoint or
 	 * endpoint explicitly disallows it (normally multi-pool IPAM endpoints)
@@ -1857,6 +1896,7 @@ snat_v6_needs_masquerade(struct __ctx_buff *ctx __maybe_unused,
 	return __snat_v6_needs_masquerade(ctx, &args->tuple, fraginfo, l4_off, &args->target);
 }
 
+#ifdef ENABLE_SNAT_ICMPV6
 static __always_inline __maybe_unused int
 snat_v6_nat_handle_icmp_error(struct __ctx_buff *ctx, __u64 off,
 			      struct ipv6_nat_entry **state)
@@ -1933,6 +1973,7 @@ snat_v6_nat_handle_icmp_error(struct __ctx_buff *ctx, __u64 off,
 				       &tuple.saddr, &(*state)->to_saddr, IPV6_DADDR_OFF,
 				       tuple.sport, (*state)->to_sport, port_off);
 }
+#endif /* ENABLE_SNAT_ICMPV6 */
 
 static __always_inline int
 __snat_v6_nat(struct __ctx_buff *ctx, struct ipv6_ct_tuple *tuple,
@@ -2012,6 +2053,7 @@ snat_v6_nat(struct __ctx_buff *ctx, fraginfo_t fraginfo, int off, __s8 *ext_err)
 			return NAT_PUNT_TO_STACK;
 
 		break;
+#ifdef ENABLE_SNAT_ICMPV6
 	case IPPROTO_ICMPV6: {
 		struct icmp6hdr icmp6hdr __align_stack_8;
 
@@ -2064,6 +2106,7 @@ nat_icmp_v6:
 		}
 		break;
 	}
+#endif /* ENABLE_SNAT_ICMPV6 */
 	default:
 		return NAT_PUNT_TO_STACK;
 	};
@@ -2072,6 +2115,7 @@ nat_icmp_v6:
 			     port_off, &args->trace, ext_err);
 }
 
+#ifdef ENABLE_SNAT_ICMPV6
 static __always_inline __maybe_unused int
 snat_v6_rev_nat_handle_icmp_pkt_toobig(struct __ctx_buff *ctx,
 				       __u32 inner_l3_off,
@@ -2152,6 +2196,7 @@ snat_v6_rev_nat_handle_icmp_pkt_toobig(struct __ctx_buff *ctx,
 				       &tuple.daddr, &(*state)->to_daddr, IPV6_SADDR_OFF,
 				       tuple.dport, (*state)->to_dport, port_off);
 }
+#endif /* ENABLE_SNAT_ICMPV6 */
 
 static __always_inline __maybe_unused int
 snat_v6_rev_nat(struct __ctx_buff *ctx, const struct ipv6_nat_target *target,
@@ -2159,13 +2204,13 @@ snat_v6_rev_nat(struct __ctx_buff *ctx, const struct ipv6_nat_target *target,
 {
 	struct ipv6_nat_entry *state = NULL;
 	struct ipv6_ct_tuple tuple = {};
-	__u32 off, inner_l3_off;
 	fraginfo_t fraginfo = 0;
 	void *data, *data_end;
 	struct ipv6hdr *ip6;
 	__be16 to_dport = 0;
 	__u16 port_off = 0;
 	int ret, hdrlen;
+	__u32 off;
 
 	build_bug_on(sizeof(struct ipv6_nat_entry) > 64);
 
@@ -2198,8 +2243,10 @@ snat_v6_rev_nat(struct __ctx_buff *ctx, const struct ipv6_nat_target *target,
 			return NAT_PUNT_TO_STACK;
 
 		break;
+#ifdef ENABLE_SNAT_ICMPV6
 	case IPPROTO_ICMPV6: {
 		struct icmp6hdr icmp6hdr __align_stack_8;
+		__u32 inner_l3_off;
 
 		if (ipfrag_is_fragment(fraginfo))
 			return DROP_INVALID;
@@ -2233,6 +2280,7 @@ snat_v6_rev_nat(struct __ctx_buff *ctx, const struct ipv6_nat_target *target,
 		}
 		break;
 	}
+#endif /* ENABLE_SNAT_ICMPV6 */
 	default:
 		return NAT_PUNT_TO_STACK;
 	};
@@ -2244,7 +2292,7 @@ snat_v6_rev_nat(struct __ctx_buff *ctx, const struct ipv6_nat_target *target,
 	/* Skip port rewrite for ICMPV6_PKT_TOOBIG by passing old_port == new_port == 0. */
 	to_dport = state->to_dport;
 
-rewrite:
+rewrite: __maybe_unused
 	return snat_v6_rewrite_headers(ctx, tuple.nexthdr, ETH_HLEN,
 				       ipfrag_has_l4_header(fraginfo), off,
 				       &tuple.daddr, &state->to_daddr, IPV6_DADDR_OFF,

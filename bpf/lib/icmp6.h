@@ -592,24 +592,17 @@ int generate_icmp6_reply(struct __ctx_buff *ctx, __u8 icmp_type, __u8 icmp_code,
 			 __u32 icmp_data)
 {
 	__u64 full_len = ctx_full_len(ctx);
+	struct ipv6hdr *ip6, *inner_ip6;
 	__u64 new_len, sample_len;
 	void *data, *data_end;
 	struct ethhdr *ethhdr;
-	struct ipv6hdr *ip6;
 	struct icmp6hdr *icmphdr;
 	struct ipv6_pseudo_header_t pseudo_header;
 	union macaddr smac = {};
 	union macaddr dmac = {};
-	struct in6_addr saddr;
-	struct in6_addr daddr;
 	__wsum csum;
 	int i;
 	int ret;
-	const int inner_offset = sizeof(struct ethhdr) + sizeof(struct ipv6hdr) +
-		sizeof(struct icmp6hdr);
-
-	if (!revalidate_data(ctx, &data, &data_end, &ip6))
-		return DROP_INVALID;
 
 	/* copy the incoming src and dest IPs and mac addresses to the stack.
 	 * the pointers will not be valid after adding headroom.
@@ -620,9 +613,6 @@ int generate_icmp6_reply(struct __ctx_buff *ctx, __u8 icmp_type, __u8 icmp_code,
 
 	if (eth_load_daddr(ctx, dmac.addr, 0) < 0)
 		return DROP_INVALID;
-
-	memcpy(&saddr, &ip6->saddr, sizeof(struct in6_addr));
-	memcpy(&daddr, &ip6->daddr, sizeof(struct in6_addr));
 
 	/* Trim down to sample size */
 	if (full_len < sizeof(struct ethhdr))
@@ -648,13 +638,8 @@ int generate_icmp6_reply(struct __ctx_buff *ctx, __u8 icmp_type, __u8 icmp_code,
 	 * Make that room.
 	 */
 
-#if __ctx_is == __ctx_xdp
-	ret = xdp_adjust_head(ctx, 0 - (int)(sizeof(struct ipv6hdr) + sizeof(struct icmp6hdr)));
-#else
-	ret = skb_adjust_room(ctx, sizeof(struct ipv6hdr) + sizeof(struct icmp6hdr),
-			      BPF_ADJ_ROOM_MAC, 0);
-#endif
-
+	ret = ctx_adjust_hroom(ctx, sizeof(*ip6) + sizeof(*icmphdr),
+			       BPF_ADJ_ROOM_MAC, ctx_adjust_hroom_flags());
 	if (ret < 0)
 		return DROP_INVALID;
 
@@ -662,18 +647,20 @@ int generate_icmp6_reply(struct __ctx_buff *ctx, __u8 icmp_type, __u8 icmp_code,
 	data = ctx_data(ctx);
 	data_end = ctx_data_end(ctx);
 
-	/* Bound check all 3 headers at once. */
-	if (data + inner_offset > data_end)
+	/* Bound check all headers at once. */
+	ethhdr = data;
+	ip6 = (void *)ethhdr + sizeof(*ethhdr);
+	icmphdr = (void *)ip6 + sizeof(*ip6);
+	inner_ip6 = (void *)icmphdr + sizeof(*icmphdr);
+	if ((void *)inner_ip6 + sizeof(*inner_ip6) > data_end)
 		return DROP_INVALID;
 
 	/* Write reversed eth header, ready for egress */
-	ethhdr = data;
 	memcpy(ethhdr->h_dest, smac.addr, sizeof(smac.addr));
 	memcpy(ethhdr->h_source, dmac.addr, sizeof(dmac.addr));
 	ethhdr->h_proto = bpf_htons(ETH_P_IPV6);
 
 	/* Write reversed ip header, ready for egress */
-	ip6 = data + sizeof(struct ethhdr);
 	ip6->version = 6;
 	ip6->priority = 0;
 	ip6->flow_lbl[0] = 0;
@@ -682,11 +669,12 @@ int generate_icmp6_reply(struct __ctx_buff *ctx, __u8 icmp_type, __u8 icmp_code,
 	ip6->payload_len = bpf_htons(sizeof(struct icmp6hdr) + (__u16)sample_len);
 	ip6->nexthdr = IPPROTO_ICMPV6;
 	ip6->hop_limit = IPDEFTTL;
-	memcpy(&ip6->daddr, &saddr, sizeof(struct in6_addr));
-	memcpy(&ip6->saddr, &daddr, sizeof(struct in6_addr));
+	ipv6_addr_copy((union v6addr *)&ip6->daddr,
+		       (const union v6addr *)&inner_ip6->saddr);
+	ipv6_addr_copy((union v6addr *)&ip6->saddr,
+		       (const union v6addr *)&inner_ip6->daddr);
 
 	/* Write reversed icmp header */
-	icmphdr = data + sizeof(struct ethhdr) + sizeof(struct ipv6hdr);
 	icmphdr->icmp6_type = icmp_type;
 	icmphdr->icmp6_code = icmp_code;
 	icmphdr->icmp6_cksum = 0;

@@ -11,6 +11,8 @@
 #pragma once
 
 #include <bpf/lb_selection.h>
+#include <lib/ipv4_core.h>
+#include <lib/ipv6_core.h>
 #include <lib/static_data.h>
 
 /* Legacy node config rendered at agent runtime. */
@@ -80,6 +82,8 @@ ASSIGN_CONFIG(__u8, lb_default_alg, LB_DEFAULT_ALG)
 
 NODE_CONFIG(__u16, nodeport_port_min, "Nodeport minimum port value.")
 NODE_CONFIG(__u16, nodeport_port_max, "Nodeport maximum port value.")
+NODE_CONFIG(__u16, nodeport_port_min_nat_ext, "Nodeport NAT extended minimum port value.")
+NODE_CONFIG(__u16, nodeport_port_max_nat_ext, "Nodeport NAT extended maximum port value.")
 
 NODE_CONFIG(__u32, hash_init4_seed, "Cluster-wide IPv4 tuple hash seed sourced")
 NODE_CONFIG(__u32, hash_init6_seed, "Cluster-wide IPv6 tuple hash seed sourced")
@@ -138,3 +142,21 @@ NODE_CONFIG(union v4addr, ipv4_direct_routing,
 	    "IPv4 address of the device used for direct routing between nodes")
 NODE_CONFIG(union v6addr, ipv6_direct_routing,
 	    "IPv6 address of the device used for direct routing between nodes")
+
+struct ipv4_snat_exclusion_prefix {
+	union v4addr dst_addr;
+	__u8 bits;
+	bool enabled;
+};
+
+NODE_CONFIG(struct ipv4_snat_exclusion_prefix, ipv4_snat_exclusion,
+	    "IPv4 destination prefix excluded from SNAT")
+
+struct ipv6_snat_exclusion_prefix {
+	union v6addr dst_addr;
+	union v6addr dst_mask;
+	bool enabled;
+};
+
+NODE_CONFIG(struct ipv6_snat_exclusion_prefix, ipv6_snat_exclusion,
+	    "IPv6 destination prefix excluded from SNAT")

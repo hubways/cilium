@@ -4,6 +4,8 @@
 package config
 
 import (
+	"net"
+
 	"github.com/cilium/cilium/pkg/datapath/linux/probes"
 	"github.com/cilium/cilium/pkg/datapath/tables"
 	"github.com/cilium/cilium/pkg/datapath/types"
@@ -17,9 +19,9 @@ func NodeConfig(lnc *Config) Node {
 	node.ClusterIDBits = identity.GetClusterIDBits()
 
 	node.CiliumHostIfIndex = lnc.CiliumHostIfIndex
-	node.CiliumHostMAC.Addr = lnc.CiliumHostMAC.As6()
+	node.CiliumHostMAC.Addr = lnc.CiliumHostMAC
 	node.CiliumNetIfIndex = lnc.CiliumNetIfIndex
-	node.CiliumNetMAC.Addr = lnc.CiliumNetMAC.As6()
+	node.CiliumNetMAC.Addr = lnc.CiliumNetMAC
 
 	node.CTTimeouts = types.CTTimeoutConfig{
 		ConnectionLifetimeTCP:    uint32(option.Config.CTMapEntriesTimeoutTCP.Seconds()),
@@ -95,6 +97,8 @@ func NodeConfig(lnc *Config) Node {
 
 	node.NodeportPortMin = lnc.LBConfig.NodePortMin
 	node.NodeportPortMax = lnc.LBConfig.NodePortMax
+	node.NodeportPortMinNATExt = lnc.LBConfig.NodePortMinNATExt
+	node.NodeportPortMaxNATExt = lnc.LBConfig.NodePortMaxNATExt
 
 	if option.Config.EnableNat46X64Gateway {
 		node.NAT46X64Prefix.Addr = option.Config.IPv6NAT46x64CIDRBase.As4()
@@ -102,6 +106,35 @@ func NodeConfig(lnc *Config) Node {
 
 	if lnc.NodeIPv4.Is4() {
 		node.IPv4InterClusterSNAT.Addr = lnc.NodeIPv4.As4()
+	}
+
+	if option.Config.EnableBPFMasquerade {
+		if option.Config.EnableIPv4Masquerade {
+			excludeCIDR := lnc.NativeRoutingCIDRIPv4
+			if option.Config.EnableIPMasqAgent {
+				excludeCIDR = option.Config.IPv4NativeRoutingCIDR
+			}
+
+			if excludeCIDR.IsValid() {
+				node.IPv4SNATExclusion.DstAddr.Addr = excludeCIDR.Addr().As4()
+				node.IPv4SNATExclusion.Bits = uint8(excludeCIDR.Bits())
+				node.IPv4SNATExclusion.Enabled = true
+			}
+		}
+
+		if option.Config.EnableIPv6Masquerade {
+			excludeCIDR := lnc.NativeRoutingCIDRIPv6
+			if option.Config.EnableIPMasqAgent {
+				excludeCIDR = option.Config.IPv6NativeRoutingCIDR
+			}
+
+			if excludeCIDR.IsValid() {
+				node.IPv6SNATExclusion.DstAddr.Addr = excludeCIDR.Addr().As16()
+				mask := net.CIDRMask(excludeCIDR.Bits(), excludeCIDR.Addr().BitLen())
+				copy(node.IPv6SNATExclusion.DstMask.Addr[:], mask)
+				node.IPv6SNATExclusion.Enabled = true
+			}
+		}
 	}
 
 	node.EnableJiffies = option.Config.ClockSource == option.ClockSourceJiffies

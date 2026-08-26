@@ -308,8 +308,16 @@ func (h *ciliumHealthManager) launchAsEndpoint(baseCtx context.Context, endpoint
 	hostLinkAttrs := linkPair.GetHostLink().Attrs()
 	peerLinkAttrs := linkPair.GetPeerLink().Attrs()
 
-	info.Mac = mac.MAC(peerLinkAttrs.HardwareAddr)
-	info.HostMac = mac.MAC(hostLinkAttrs.HardwareAddr)
+	// L3 devices, such as netkit in its default mode, have no link-layer
+	// address to report.
+	if linkPair.GetMode().IsLayer2() {
+		if info.Mac, err = mac.FromHardwareAddr(peerLinkAttrs.HardwareAddr); err != nil {
+			return nil, fmt.Errorf("invalid MAC address for %s: %w", peerLinkAttrs.Name, err)
+		}
+		if info.HostMac, err = mac.FromHardwareAddr(hostLinkAttrs.HardwareAddr); err != nil {
+			return nil, fmt.Errorf("invalid MAC address for %s: %w", hostLinkAttrs.Name, err)
+		}
+	}
 	info.InterfaceIndex = int64(hostLinkAttrs.Index)
 	info.InterfaceName = hostLinkAttrs.Name
 
@@ -379,11 +387,13 @@ func (h *ciliumHealthManager) launchAsEndpoint(baseCtx context.Context, endpoint
 	}
 
 	if option.Config.IPAM == ipamOption.IPAMENI || option.Config.IPAM == ipamOption.IPAMAlibabaCloud {
-		ri := h.infraIPAllocator.GetHealthEndpointRouting()
+		ri, riv6 := h.infraIPAllocator.GetHealthEndpointRouting()
+		if healthIP.Is6() {
+			ri = riv6
+		}
 		if ri == nil {
 			return nil, errors.New("failed to configure health endpoint routing - no IP allocated")
 		}
-		// ENI mode does not support IPv6.
 		if err := ri.Configure(
 			healthIP,
 			mtuConfig.GetDeviceMTU(),
