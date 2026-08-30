@@ -668,7 +668,6 @@ ipv6_forward_to_destination(struct __ctx_buff *ctx, struct ipv6hdr *ip6,
 			    struct trace_ctx *trace,
 			    __s8 *ext_err)
 {
-	union macaddr __maybe_unused router_mac = CONFIG(interface_mac);
 	int ret;
 
 #ifdef ENABLE_SRV6
@@ -1154,7 +1153,6 @@ ipv4_forward_to_destination(struct __ctx_buff *ctx, struct iphdr *ip4,
 			    struct trace_ctx *trace,
 			    __s8 *ext_err)
 {
-	union macaddr __maybe_unused router_mac = CONFIG(interface_mac);
 	struct remote_endpoint_info __maybe_unused fake_info = {0};
 	int ret;
 
@@ -1275,8 +1273,8 @@ ipv4_forward_to_destination(struct __ctx_buff *ctx, struct iphdr *ip4,
 		const struct vtep_value *vtep;
 
 		vtep = map_lookup_elem(&cilium_vtep_map, &vkey);
-		if (vtep && vtep->vtep_mac && vtep->tunnel_endpoint) {
-			if (eth_store_daddr(ctx, (__u8 *)&vtep->vtep_mac, 0) < 0)
+		if (vtep && !eth_is_zero(&vtep->vtep_mac) && vtep->tunnel_endpoint) {
+			if (eth_store_daddr(ctx, vtep->vtep_mac.addr, 0) < 0)
 				return DROP_WRITE_ERROR;
 			fake_info.tunnel_endpoint.ip4.be32 = vtep->tunnel_endpoint;
 			fake_info.flag_has_tunnel_ep = true;

@@ -917,9 +917,9 @@
      - int
      - ``30``
    * - :spelling:ignore:`clustermesh.apiserver.tls.authMode`
-     - Configure the clustermesh authentication mode. Supported values: - legacy:     All clusters access remote clustermesh instances with the same               username (i.e., remote). The "remote" certificate must be               generated with CN=remote if provided manually. - migration:  Intermediate mode required to upgrade from legacy to cluster               (and vice versa) with no disruption. Specifically, it enables               the creation of the per-cluster usernames, while still using               the common one for authentication. The "remote" certificate must               be generated with CN=remote if provided manually (same as legacy). - cluster:    Each cluster accesses remote etcd instances with a username               depending on the local cluster name (i.e., remote-\ :raw-html-m2r:`<cluster-name>`\ ).               The "remote" certificate must be generated with CN=remote-\ :raw-html-m2r:`<cluster-name>`               if provided manually. Cluster mode is meaningful only when the same               CA is shared across all clusters part of the mesh.
+     - Configure the clustermesh authentication mode. Supported values: - legacy:     All clusters access remote clustermesh instances with the same               username (i.e., remote). The "remote" certificate must be               generated with CN=remote if provided manually. - migration:  Intermediate mode required to upgrade from legacy to cluster               (and vice versa) with no disruption. Specifically, it enables               the creation of the per-cluster usernames, while still using               the common one for authentication. The "remote" certificate must               be generated with CN=remote if provided manually (same as legacy). - cluster:    Each cluster accesses remote etcd instances with a username               depending on the local cluster name (i.e., remote-\ :raw-html-m2r:`<cluster-name>`\ ).               The "remote" certificate must be generated with CN=remote-\ :raw-html-m2r:`<cluster-name>`               if provided manually. Cluster mode is meaningful only when the same               CA is shared across all clusters part of the mesh. - cluster-strict:               Same as cluster, but does not create the shared remote username.               Enable only after all clusters in the mesh use cluster mode.
      - string
-     - ``"migration"``
+     - ``"cluster"``
    * - :spelling:ignore:`clustermesh.apiserver.tls.auto`
      - Configure automatic TLS certificates generation. A Kubernetes CronJob is used the generate any certificates not provided by the user at installation time.
      - object
@@ -1331,7 +1331,7 @@
    * - :spelling:ignore:`enableIPv6Masquerade`
      - Enables masquerading of IPv6 traffic leaving the node from endpoints.
      - bool
-     - ``true``
+     - ``true`` unless ipam eni mode is active
    * - :spelling:ignore:`enableInternalTrafficPolicy`
      - Enable Internal Traffic Policy
      - bool
@@ -1699,7 +1699,7 @@
    * - :spelling:ignore:`envoy.image`
      - Envoy container image.
      - object
-     - ``{"digest":"sha256:41d4c20b0abcad3b82c0529ad783a99ff40cd73be5cd98637702e4d6bcf1efbf","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.38.3-1786847928-0512632eff02ed4971b16926ae6b82a3c0e07a70","useDigest":true}``
+     - ``{"digest":"sha256:9668b5929cef6b534978a88a35618616def2d470e324a6b1fbf4278251f37821","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.38.4-1787987575-140a56cf682197aba29b9d5cd5f786d376ee9286","useDigest":true}``
    * - :spelling:ignore:`envoy.initContainers`
      - Init containers added to the cilium Envoy DaemonSet.
      - list
@@ -3731,7 +3731,7 @@
    * - :spelling:ignore:`preflight.envoy.image`
      - Envoy pre-flight image.
      - object
-     - ``{"digest":"sha256:41d4c20b0abcad3b82c0529ad783a99ff40cd73be5cd98637702e4d6bcf1efbf","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.38.3-1786847928-0512632eff02ed4971b16926ae6b82a3c0e07a70","useDigest":true}``
+     - ``{"digest":"sha256:9668b5929cef6b534978a88a35618616def2d470e324a6b1fbf4278251f37821","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.38.4-1787987575-140a56cf682197aba29b9d5cd5f786d376ee9286","useDigest":true}``
    * - :spelling:ignore:`preflight.extraEnv`
      - Additional preflight environment variables.
      - list

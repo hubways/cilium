@@ -2513,8 +2513,12 @@ maglev: {}
 # -- (bool) Enables masquerading of IPv4 traffic leaving the node from endpoints.
 # @default -- `true` unless ipam eni mode is active
 enableIPv4Masquerade: ~
-# -- Enables masquerading of IPv6 traffic leaving the node from endpoints.
-enableIPv6Masquerade: true
+# @schema
+# type: [null, boolean]
+# @schema
+# -- (bool) Enables masquerading of IPv6 traffic leaving the node from endpoints.
+# @default -- `true` unless ipam eni mode is active
+enableIPv6Masquerade: ~
 # -- Enables masquerading to the source of the route for traffic leaving the node from endpoints.
 enableMasqueradeRouteSource: false
 # -- Enables IPv4 BIG TCP support which increases maximum IPv4 GSO/GRO limits for nodes and pods
@@ -2874,9 +2878,9 @@ envoy:
     # @schema
     override: ~
     repository: "quay.io/cilium/cilium-envoy"
-    tag: "v1.38.3-1786847928-0512632eff02ed4971b16926ae6b82a3c0e07a70"
+    tag: "v1.38.4-1787987575-140a56cf682197aba29b9d5cd5f786d376ee9286"
     pullPolicy: "Always"
-    digest: "sha256:41d4c20b0abcad3b82c0529ad783a99ff40cd73be5cd98637702e4d6bcf1efbf"
+    digest: "sha256:9668b5929cef6b534978a88a35618616def2d470e324a6b1fbf4278251f37821"
     useDigest: true
   # -- Init containers added to the cilium Envoy DaemonSet.
   initContainers: []
@@ -3636,9 +3640,9 @@ preflight:
       # @schema
       override: ~
       repository: "quay.io/cilium/cilium-envoy"
-      tag: "v1.38.3-1786847928-0512632eff02ed4971b16926ae6b82a3c0e07a70"
+      tag: "v1.38.4-1787987575-140a56cf682197aba29b9d5cd5f786d376ee9286"
       pullPolicy: "Always"
-      digest: "sha256:41d4c20b0abcad3b82c0529ad783a99ff40cd73be5cd98637702e4d6bcf1efbf"
+      digest: "sha256:9668b5929cef6b534978a88a35618616def2d470e324a6b1fbf4278251f37821"
       useDigest: true
   # -- The priority class to use for the preflight pod.
   priorityClassName: ""
@@ -4187,7 +4191,10 @@ clustermesh:
       #               The "remote" certificate must be generated with CN=remote-<cluster-name>
       #               if provided manually. Cluster mode is meaningful only when the same
       #               CA is shared across all clusters part of the mesh.
-      authMode: migration
+      # - cluster-strict:
+      #               Same as cluster, but does not create the shared remote username.
+      #               Enable only after all clusters in the mesh use cluster mode.
+      authMode: cluster
       # -- Configure automatic TLS certificates generation.
       # A Kubernetes CronJob is used the generate any
       # certificates not provided by the user at installation

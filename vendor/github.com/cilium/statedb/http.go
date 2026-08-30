@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/cilium/statedb/index"
@@ -89,6 +90,11 @@ func (h dbHandler) query(w http.ResponseWriter, r *http.Request) {
 		enc.Encode(QueryResponse{Err: fmt.Sprintf("Table %q not found", req.Table)})
 		return
 	}
+	if req.Index != "" && req.Index != RevisionIndex && !slices.Contains(table.Indexes(), req.Index) {
+		w.WriteHeader(http.StatusBadRequest)
+		enc.Encode(QueryResponse{Err: fmt.Sprintf("Index %q not found", req.Index)})
+		return
+	}
 
 	indexPos := table.indexPos(req.Index)
 
@@ -125,9 +131,9 @@ type QueryResponse struct {
 func runQuery(reader tableIndexReader, lowerbound bool, queryKey index.Key, onObject func(object) error) {
 	var iter tableIndexIterator
 	if lowerbound {
-		iter, _ = reader.lowerBound(queryKey)
+		iter = reader.lowerBoundNoWatch(queryKey)
 	} else {
-		iter, _ = reader.list(queryKey)
+		iter = reader.listNoWatch(queryKey)
 	}
 	for _, obj := range iter.All {
 		if err := onObject(obj); err != nil {
@@ -164,6 +170,7 @@ func (h dbHandler) changes(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	defer changeIter.Close()
 
 	w.WriteHeader(http.StatusOK)
 

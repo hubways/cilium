@@ -17,6 +17,8 @@
 #define ICMP6_ND_OPTS (sizeof(struct ipv6hdr) + sizeof(struct icmp6hdr) + sizeof(struct in6_addr))
 #define ICMP6_ND_OPT_LEN 8
 
+#define ICMP6_RS_MSG_TYPE		133
+#define ICMP6_RA_MSG_TYPE		134
 #define ICMP6_NS_MSG_TYPE		135
 #define ICMP6_NA_MSG_TYPE		136
 #define ICMP6_RR_MSG_TYPE		138
@@ -365,7 +367,7 @@ static __always_inline int __icmp6_handle_ns(struct __ctx_buff *ctx, int nh_off)
 	if (ipv6_addr_equals(&target, &service_loopback)) {
 		union macaddr source_mac;
 
-		if (ctx_load_bytes(ctx, ETH_ALEN, source_mac.addr, ETH_ALEN) < 0)
+		if (eth_load_saddr(ctx, source_mac.addr, 0) < 0)
 			return DROP_INVALID;
 		return icmp6_send_ndisc_adv(ctx, nh_off, &source_mac, false);
 	}

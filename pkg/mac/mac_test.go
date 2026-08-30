@@ -60,6 +60,26 @@ func TestParse(t *testing.T) {
 	}
 }
 
+func TestParseMACOrUnset(t *testing.T) {
+	t.Run("unset", func(t *testing.T) {
+		out, err := ParseMACOrUnset("")
+		require.NoError(t, err)
+		require.Empty(t, out)
+	})
+
+	t.Run("valid", func(t *testing.T) {
+		out, err := ParseMACOrUnset("00:00:5e:00:53:01")
+		require.NoError(t, err)
+		require.Equal(t, MAC{0x00, 0x00, 0x5e, 0x00, 0x53, 0x01}, out)
+	})
+
+	t.Run("malformed", func(t *testing.T) {
+		out, err := ParseMACOrUnset("01.02.03.04.05.06")
+		require.ErrorContains(t, err, "invalid MAC address")
+		require.Empty(t, out)
+	})
+}
+
 func TestIsValid(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -136,12 +156,6 @@ func TestHardwareAddr(t *testing.T) {
 	// An unset MAC maps to a nil net.HardwareAddr, not to six zero bytes, so
 	// that netlink leaves the address attribute out entirely.
 	require.Nil(t, MAC{}.HardwareAddr())
-}
-
-func TestUint64(t *testing.T) {
-	m := MAC{0x11, 0x12, 0x23, 0x34, 0x45, 0x56}
-	require.Equal(t, Uint64MAC(0x564534231211), m.Uint64())
-	require.Equal(t, Uint64MAC(0), MAC{}.Uint64())
 }
 
 func TestUnmarshalYAML(t *testing.T) {

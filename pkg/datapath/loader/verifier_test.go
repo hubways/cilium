@@ -268,8 +268,7 @@ func loadAndRecordComplexity(
 			break
 		}
 
-		var ve *ebpf.VerifierError
-		if errors.As(err, &ve) {
+		if ve, ok := errors.AsType[*ebpf.VerifierError](err); ok {
 			// Write full verifier log to a path on disk for offline analysis.
 			var buf bytes.Buffer
 			fmt.Fprintf(&buf, "%+v", ve)
@@ -378,6 +377,7 @@ func loadAndRecordComplexity(
 					t.Fatalf("Failed to parse stack depth for program %s: %v", n, err)
 				}
 				r.StackDepth = stackDepth
+				r.HasStackDepth = true
 			}
 
 			// Extract the third to last line, which looks like:
@@ -446,8 +446,9 @@ type verifierComplexityRecord struct {
 	PeakStates       int `json:"peak_states"`
 	MarkRead         int `json:"mark_read"`
 
-	VerificationTimeMicroseconds int `json:"verification_time_microseconds"`
-	StackDepth                   int `json:"stack_depth"`
+	VerificationTimeMicroseconds int  `json:"verification_time_microseconds"`
+	StackDepth                   int  `json:"stack_depth"`
+	HasStackDepth                bool `json:"has_stack_depth"`
 
 	MapCount int `json:"map_count"`
 }

@@ -235,7 +235,7 @@ handle_ipv6(struct __ctx_buff *ctx, __u32 secctx __maybe_unused,
 			need_hostfw = true;
 			is_host_id = secctx == HOST_ID;
 		}
-	} else if (!ctx_skip_host_fw(ctx)) {
+	} else {
 		/* Verifier workaround: R5 invalid mem access 'scalar'. */
 		if (!revalidate_data(ctx, &data, &data_end, &ip6))
 			return DROP_INVALID;
@@ -689,7 +689,7 @@ handle_ipv4(struct __ctx_buff *ctx, __u32 secctx __maybe_unused,
 			need_hostfw = true;
 			is_host_id = secctx == HOST_ID;
 		}
-	} else if (!ctx_skip_host_fw(ctx)) {
+	} else {
 		/* Verifier workaround: R5 invalid mem access 'scalar'. */
 		if (!revalidate_data(ctx, &data, &data_end, &ip4))
 			return DROP_INVALID;
@@ -838,8 +838,8 @@ handle_ipv4_cont(struct __ctx_buff *ctx, __u32 secctx, const bool from_host,
 		const struct vtep_value *vtep;
 
 		vtep = map_lookup_elem(&cilium_vtep_map, &vkey);
-		if (vtep && vtep->vtep_mac && vtep->tunnel_endpoint) {
-			if (eth_store_daddr(ctx, (__u8 *)&vtep->vtep_mac, 0) < 0)
+		if (vtep && !eth_is_zero(&vtep->vtep_mac) && vtep->tunnel_endpoint) {
+			if (eth_store_daddr(ctx, vtep->vtep_mac.addr, 0) < 0)
 				return DROP_WRITE_ERROR;
 			fake_info.tunnel_endpoint.ip4.be32 = vtep->tunnel_endpoint;
 			fake_info.flag_has_tunnel_ep = true;
