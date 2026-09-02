@@ -163,6 +163,7 @@ struct trace_notify {
 		union v6addr	orig_ip6;
 	};
 	__u64		ip_trace_id;
+
 	TRACE_EXTENSION
 } __align_stack_8;
 
@@ -219,8 +220,6 @@ __send_trace_notify(const struct __ctx_buff *ctx, enum trace_point obs_point,
 		    __be16 proto, __u16 line, __u8 file)
 {
 	struct trace_notify_vars *vars = AUX(trace_notify_vars);
-
-	memset(vars, 0, sizeof(*vars));
 
 	_update_trace_metrics(ctx, obs_point, reason, line, file);
 

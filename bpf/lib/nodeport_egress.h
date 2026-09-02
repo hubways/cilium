@@ -27,6 +27,7 @@ nodeport_has_nat_conflict_ipv6(const struct __ctx_buff *ctx __maybe_unused,
 {
 #if defined(TUNNEL_MODE) && defined(IS_BPF_OVERLAY)
 	union v6addr router_ip = CONFIG(router_ipv6);
+
 	if (ipv6_addr_equals((union v6addr *)&ip6->saddr, &router_ip)) {
 		ipv6_addr_copy(&target->addr, &router_ip);
 		target->needs_ct = true;
@@ -138,7 +139,6 @@ int tail_handle_snat_fwd_ipv6(struct __ctx_buff *ctx)
 	__s8 ext_err = 0;
 	struct snat_v6_args *args = AUX(snat_v6_args);
 
-	memset(args, 0, sizeof(*args));
 	args->trace = (struct trace_ctx){
 		.reason = TRACE_REASON_UNKNOWN,
 		.monitor = 0,
@@ -301,8 +301,8 @@ nodeport_has_nat_conflict_ipv4(const struct __ctx_buff *ctx __maybe_unused,
 			       struct ipv4_nat_target *target __maybe_unused)
 {
 #if defined(TUNNEL_MODE) && defined(IS_BPF_OVERLAY)
-	if (ip4->saddr == IPV4_GATEWAY) {
-		target->addr = IPV4_GATEWAY;
+	if (ip4->saddr == CONFIG(router_ipv4).be32) {
+		target->addr = ip4->saddr;
 		target->needs_ct = true;
 
 		return true;
@@ -347,7 +347,6 @@ static __always_inline int nodeport_snat_fwd_ipv4(struct __ctx_buff *ctx,
 	fraginfo = ipfrag_encode_ipv4(ip4);
 
 	args = AUX(snat_v4_args);
-	memset(args, 0, sizeof(*args));
 	select_nat_port_range_ipv4(&args->target);
 #if defined(ENABLE_CLUSTER_AWARE_ADDRESSING) && defined(ENABLE_INTER_CLUSTER_SNAT)
 	args->target.cluster_id = cluster_id,

@@ -205,7 +205,6 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 #endif /* ENABLE_NODEPORT */
 
 	if (svc) {
-		bool new_backend __maybe_unused = false;
 		const struct lb4_backend *backend;
 
 #if defined(ENABLE_L7_LB)
@@ -232,7 +231,7 @@ static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *
 
 		ret = lb4_local(get_ct_map4(&tuple), ctx, fraginfo,
 				l4_off, &key, &tuple, svc, &ct_state_new,
-				&backend, &new_backend, ext_err, NULL);
+				&backend, NULL, ext_err, NULL);
 
 		if (IS_ERR(ret)) {
 			if (ret == DROP_NO_SERVICE) {
@@ -384,7 +383,6 @@ static __always_inline int __per_packet_lb_svc_xlate_6(void *ctx, struct ipv6hdr
 #endif /* ENABLE_NODEPORT */
 
 	if (svc) {
-		bool new_backend __maybe_unused = false;
 		const struct lb6_backend *backend;
 
 #if defined(ENABLE_L7_LB)
@@ -403,7 +401,7 @@ static __always_inline int __per_packet_lb_svc_xlate_6(void *ctx, struct ipv6hdr
 
 		ret = lb6_local(get_ct_map6(&tuple), ctx, fraginfo,
 				l4_off, &key, &tuple, svc, &ct_state_new,
-				&backend, &new_backend, ext_err, NULL);
+				&backend, NULL, ext_err, NULL);
 
 		if (IS_ERR(ret)) {
 			if (ret == DROP_NO_SERVICE) {
@@ -795,7 +793,7 @@ ipv6_forward_to_destination(struct __ctx_buff *ctx, struct ipv6hdr *ip6,
 					  trace->reason, trace->monitor, bpf_htons(ETH_P_IPV6));
 			return ret;
 		case DROP_NO_FIB:
-			/* Error handling for local routes - just pass the packet to the kernel stack */
+			/* Error handling for local routes. Pass to stack. */
 			if (*ext_err == BPF_FIB_LKUP_RET_NOT_FWDED)
 				break;
 
@@ -1359,7 +1357,7 @@ ipv4_forward_to_destination(struct __ctx_buff *ctx, struct iphdr *ip4,
 					  trace->reason, trace->monitor, bpf_htons(ETH_P_IP));
 			return ret;
 		case DROP_NO_FIB:
-			/* Error handling for local routes - just pass the packet to the kernel stack */
+			/* Error handling for local routes. Pass to stack. */
 			if (*ext_err == BPF_FIB_LKUP_RET_NOT_FWDED)
 				break;
 
@@ -1735,7 +1733,7 @@ int tail_handle_ipv4(struct __ctx_buff *ctx)
 
 /*
  * ARP responder for ARP requests from container
- * Respond to IPV4_GATEWAY with CONFIG(interface_mac)
+ * Respond to router_ipv4 with interface_mac
  */
 __declare_tail(CILIUM_CALL_ARP)
 int tail_handle_arp(struct __ctx_buff *ctx)
@@ -1752,8 +1750,8 @@ int tail_handle_arp(struct __ctx_buff *ctx)
 
 	/*
 	 * The endpoint is expected to make ARP requests for its gateway IP.
-	 * Most of the time, the gateway IP configured on the endpoint is
-	 * IPV4_GATEWAY but it may not be the case if after cilium agent reload
+	 * Most of the time, the gateway IP configured on the endpoint is current
+	 * IPv4 router address but it may not be the case if after cilium agent reload
 	 * a different gateway is chosen. In such a case, existing endpoints
 	 * will have an old gateway configured. Since we don't know the IP of
 	 * previous gateways, we answer requests for all IPs with the exception
@@ -2103,7 +2101,7 @@ int tail_ipv6_to_endpoint(struct __ctx_buff *ctx)
 		const struct remote_endpoint_info *info;
 
 		info = lookup_ip6_remote_endpoint(src, 0);
-		if (info != NULL) {
+		if (info) {
 			__u32 sec_identity = info->sec_identity;
 
 			/* When SNAT is enabled on traffic ingressing
@@ -2430,7 +2428,7 @@ int tail_ipv4_to_endpoint(struct __ctx_buff *ctx)
 		const struct remote_endpoint_info *info;
 
 		info = lookup_ip4_remote_endpoint(ip4->saddr, 0);
-		if (info != NULL) {
+		if (info) {
 			__u32 sec_identity = info->sec_identity;
 
 			/* When SNAT is enabled on traffic ingressing
@@ -2671,7 +2669,6 @@ int cil_to_container(struct __ctx_buff *ctx)
 					DROP_HOST_NOT_READY, METRIC_INGRESS);
 	}
 #endif /* ENABLE_HOST_FIREWALL && !ENABLE_ROUTING */
-
 
 	ret = pull_l3_hdr(ctx, proto);
 	if (ret < 0)

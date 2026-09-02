@@ -424,6 +424,35 @@ static __always_inline bool lb_is_svc_proto(__u8 proto)
 	}
 }
 
+static __always_inline bool
+lb_need_dsr_info(const void *map, const void *tuple, __u8 nexthdr,
+		 const struct ct_state *ct_state, bool new_backend)
+{
+	if (ct_state->need_dsr_info)
+		return true;
+
+	if (nexthdr != IPPROTO_TCP)
+		return true;
+
+	/* For TCP we want to embed the DSR info only into the SYN,
+	 * to avoid MTU troubles.
+	 */
+	if (ct_state->syn)
+		return true;
+
+	/* If a non-SYN picked a new backend, we enter "forced DSR info" mode.
+	 * To avoid loss of the *one* TCP packet that would carry the
+	 * DSR info, we simply send it on all subsequent packets of the
+	 * connection.
+	 */
+	if (new_backend) {
+		ct_update_need_dsr_info(map, tuple, true);
+		return true;
+	}
+
+	return false;
+}
+
 static __always_inline
 bool lb4_svc_is_loadbalancer(const struct lb4_service *svc __maybe_unused)
 {
@@ -645,6 +674,32 @@ static __always_inline
 bool lb6_svc_is_itp_local(const struct lb6_service *svc)
 {
 	return svc->flags2 & SVC_FLAG_INT_LOCAL_SCOPE;
+}
+
+static __always_inline bool
+lb_svc_uses_dsr(bool flip __maybe_unused)
+{
+#ifdef ENABLE_DSR
+# ifdef ENABLE_DSR_BYUSER
+	return flip;
+# else
+	return true;
+# endif
+#else
+	return false;
+#endif
+}
+
+static __always_inline bool
+lb4_svc_uses_dsr(const struct lb4_service *svc)
+{
+	return lb_svc_uses_dsr(svc->flags2 & SVC_FLAG_FWD_MODE_DSR);
+}
+
+static __always_inline bool
+lb6_svc_uses_dsr(const struct lb6_service *svc)
+{
+	return lb_svc_uses_dsr(svc->flags2 & SVC_FLAG_FWD_MODE_DSR);
 }
 
 static __always_inline
@@ -1282,7 +1337,7 @@ __lb6_affinity_backend_id(const struct lb6_service *svc, bool netns_cookie,
 		ipv6_addr_copy_unaligned(&key.client_id.client_ip, &id->client_ip);
 
 	val = map_lookup_elem(&cilium_lb6_affinity, &key);
-	if (val != NULL) {
+	if (val) {
 		__u32 now = (__u32)bpf_mono_now();
 		struct lb_affinity_match match = {
 			.rev_nat_id	= svc->rev_nat_index,
@@ -1381,10 +1436,11 @@ static __always_inline int lb6_local(const void *map, struct __ctx_buff *ctx,
 				     const struct lb6_service *svc,
 				     struct ct_state *state,
 				     const struct lb6_backend **selected_backend,
-				     bool *new_backend,
+				     bool *need_dsr_info __maybe_unused,
 				     __s8 *ext_err,
 				     const struct lb6_backend *forced_backend)
 {
+	bool new_backend __maybe_unused = false;
 	__u32 monitor; /* Deliberately ignored; regular CT will determine monitoring. */
 	__u8 flags = tuple->flags;
 	const struct lb6_backend *backend;
@@ -1432,7 +1488,7 @@ static __always_inline int lb6_local(const void *map, struct __ctx_buff *ctx,
 			backend_id = lb6_affinity_backend_id_by_addr(svc, &client_id);
 			if (backend_id != 0) {
 				backend = lb6_lookup_backend(ctx, backend_id);
-				if (backend == NULL)
+				if (!backend)
 					backend_id = 0;
 			}
 		}
@@ -1440,10 +1496,10 @@ static __always_inline int lb6_local(const void *map, struct __ctx_buff *ctx,
 			/* No CT entry has been found, so select a svc endpoint */
 			backend_id = lb6_select_backend_id(ctx, key, tuple, svc);
 			backend = lb6_lookup_backend(ctx, backend_id);
-			if (backend == NULL)
+			if (!backend)
 				goto no_service;
 
-			*new_backend = true;
+			new_backend = true;
 		}
 
 		state->backend_id = backend_id;
@@ -1491,7 +1547,7 @@ static __always_inline int lb6_local(const void *map, struct __ctx_buff *ctx,
 			if (!backend)
 				goto no_service;
 
-			*new_backend = true;
+			new_backend = true;
 			state->rev_nat_index = svc->rev_nat_index;
 			ct_update_svc_entry(map, tuple, backend_id, svc->rev_nat_index);
 		}
@@ -1501,6 +1557,12 @@ static __always_inline int lb6_local(const void *map, struct __ctx_buff *ctx,
 		ret = DROP_UNKNOWN_CT;
 		goto drop_err;
 	}
+
+#if DSR_ENCAP_MODE == DSR_ENCAP_NONE || DSR_ENCAP_MODE == DSR_ENCAP_GENEVE
+	if (lb6_svc_uses_dsr(svc) && need_dsr_info)
+		*need_dsr_info = lb_need_dsr_info(map, tuple, tuple->nexthdr,
+						  state, new_backend);
+#endif
 
 	/* Restore flags so that SERVICE flag is only used in used when the
 	 * service lookup happens and future lookups use EGRESS or INGRESS.
@@ -2106,7 +2168,7 @@ __lb4_affinity_backend_id(const struct lb4_service *svc, bool netns_cookie,
 	struct lb_affinity_val *val;
 
 	val = map_lookup_elem(&cilium_lb4_affinity, &key);
-	if (val != NULL) {
+	if (val) {
 		__u32 now = (__u32)bpf_mono_now();
 		struct lb_affinity_match match = {
 			.rev_nat_id	= svc->rev_nat_index,
@@ -2208,10 +2270,11 @@ static __always_inline int lb4_local(const void *map, struct __ctx_buff *ctx,
 				     const struct lb4_service *svc,
 				     struct ct_state *state,
 				     const struct lb4_backend **selected_backend,
-				     bool *new_backend,
+				     bool *need_dsr_info __maybe_unused,
 				     __s8 *ext_err,
 				     const struct lb4_backend *forced_backend)
 {
+	bool new_backend __maybe_unused = false;
 	__u32 monitor; /* Deliberately ignored; regular CT will determine monitoring. */
 	__u8 flags = tuple->flags;
 	const struct lb4_backend *backend;
@@ -2263,7 +2326,7 @@ static __always_inline int lb4_local(const void *map, struct __ctx_buff *ctx,
 			backend_id = lb4_affinity_backend_id_by_addr(svc, &client_id);
 			if (backend_id != 0) {
 				backend = lb4_lookup_backend(ctx, backend_id);
-				if (backend == NULL)
+				if (!backend)
 					backend_id = 0;
 			}
 		}
@@ -2271,10 +2334,10 @@ static __always_inline int lb4_local(const void *map, struct __ctx_buff *ctx,
 			/* No CT entry has been found, so select a svc endpoint */
 			backend_id = lb4_select_backend_id(ctx, key, tuple, svc);
 			backend = lb4_lookup_backend(ctx, backend_id);
-			if (backend == NULL)
+			if (!backend)
 				goto no_service;
 
-			*new_backend = true;
+			new_backend = true;
 		}
 
 		state->backend_id = backend_id;
@@ -2322,7 +2385,7 @@ static __always_inline int lb4_local(const void *map, struct __ctx_buff *ctx,
 			if (!backend)
 				goto no_service;
 
-			*new_backend = true;
+			new_backend = true;
 			state->rev_nat_index = svc->rev_nat_index;
 			ct_update_svc_entry(map, tuple, backend_id, svc->rev_nat_index);
 		}
@@ -2332,6 +2395,12 @@ static __always_inline int lb4_local(const void *map, struct __ctx_buff *ctx,
 		ret = DROP_UNKNOWN_CT;
 		goto drop_err;
 	}
+
+#if DSR_ENCAP_MODE == DSR_ENCAP_NONE || DSR_ENCAP_MODE == DSR_ENCAP_GENEVE
+	if (lb4_svc_uses_dsr(svc) && need_dsr_info)
+		*need_dsr_info = lb_need_dsr_info(map, tuple, tuple->nexthdr,
+						  state, new_backend);
+#endif
 
 	/* Restore flags so that SERVICE flag is only used in used when the
 	 * service lookup happens and future lookups use EGRESS or INGRESS.
