@@ -36,7 +36,8 @@
 #define ACTION_UNKNOWN_ICMP6_NS DROP_UNKNOWN_TARGET
 #endif
 
-static __always_inline int icmp6_load_type(struct __ctx_buff *ctx, int l4_off, __u8 *type)
+static __always_inline int icmp6_load_type(const struct __ctx_buff *ctx, int l4_off,
+					   __u8 *type)
 {
 	return ctx_load_bytes(ctx, l4_off + ICMP6_TYPE_OFFSET, type, sizeof(*type));
 }
@@ -601,21 +602,9 @@ int generate_icmp6_reply(struct __ctx_buff *ctx, __u8 icmp_type, __u8 icmp_code,
 	struct ethhdr *ethhdr;
 	struct icmp6hdr *icmphdr;
 	struct ipv6_pseudo_header_t pseudo_header;
-	union macaddr smac = {};
-	union macaddr dmac = {};
 	__wsum csum;
 	int i;
 	int ret;
-
-	/* copy the incoming src and dest IPs and mac addresses to the stack.
-	 * the pointers will not be valid after adding headroom.
-	 */
-
-	if (eth_load_saddr(ctx, smac.addr, 0) < 0)
-		return DROP_INVALID;
-
-	if (eth_load_daddr(ctx, dmac.addr, 0) < 0)
-		return DROP_INVALID;
 
 	/* Trim down to sample size */
 	if (full_len < sizeof(struct ethhdr))
@@ -658,8 +647,7 @@ int generate_icmp6_reply(struct __ctx_buff *ctx, __u8 icmp_type, __u8 icmp_code,
 		return DROP_INVALID;
 
 	/* Write reversed eth header, ready for egress */
-	memcpy(ethhdr->h_dest, smac.addr, sizeof(smac.addr));
-	memcpy(ethhdr->h_source, dmac.addr, sizeof(dmac.addr));
+	eth_flip_addrs(ethhdr);
 	ethhdr->h_proto = bpf_htons(ETH_P_IPV6);
 
 	/* Write reversed ip header, ready for egress */

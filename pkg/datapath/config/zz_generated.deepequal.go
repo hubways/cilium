@@ -18,6 +18,9 @@ func (in *Config) deepEqual(other *Config) bool {
 	if in.ClusterID != other.ClusterID {
 		return false
 	}
+	if in.ClusterIDBits != other.ClusterIDBits {
+		return false
+	}
 	if in.CiliumHostIfIndex != other.CiliumHostIfIndex {
 		return false
 	}
@@ -30,22 +33,6 @@ func (in *Config) deepEqual(other *Config) bool {
 	}
 	if in.CiliumNetMAC != other.CiliumNetMAC {
 		return false
-	}
-
-	if (in.AllocCIDRIPv4 == nil) != (other.AllocCIDRIPv4 == nil) {
-		return false
-	} else if in.AllocCIDRIPv4 != nil {
-		if !in.AllocCIDRIPv4.DeepEqual(other.AllocCIDRIPv4) {
-			return false
-		}
-	}
-
-	if (in.AllocCIDRIPv6 == nil) != (other.AllocCIDRIPv6 == nil) {
-		return false
-	} else if in.AllocCIDRIPv6 != nil {
-		if !in.AllocCIDRIPv6.DeepEqual(other.AllocCIDRIPv6) {
-			return false
-		}
 	}
 
 	if ((in.Devices != nil) && (other.Devices != nil)) || ((in.Devices == nil) != (other.Devices == nil)) {
@@ -131,6 +118,12 @@ func (in *Config) deepEqual(other *Config) bool {
 	if in.EnableEncapsulation != other.EnableEncapsulation {
 		return false
 	}
+	if in.Encap4IfIndex != other.Encap4IfIndex {
+		return false
+	}
+	if in.Encap6IfIndex != other.Encap6IfIndex {
+		return false
+	}
 	if in.RequiresNativeRouting != other.RequiresNativeRouting {
 		return false
 	}
@@ -186,7 +179,7 @@ func (in *Config) deepEqual(other *Config) bool {
 			return false
 		} else {
 			for i, inElement := range *in {
-				if !inElement.DeepEqual((*other)[i]) {
+				if !inElement.DeepEqual(&(*other)[i]) {
 					return false
 				}
 			}
@@ -203,7 +196,7 @@ func (in *Config) deepEqual(other *Config) bool {
 			return false
 		} else {
 			for i, inElement := range *in {
-				if !inElement.DeepEqual((*other)[i]) {
+				if !inElement.DeepEqual(&(*other)[i]) {
 					return false
 				}
 			}

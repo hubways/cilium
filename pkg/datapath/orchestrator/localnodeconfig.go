@@ -7,14 +7,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/netip"
 	"strconv"
 	"strings"
 
 	"github.com/cilium/statedb"
-	"go4.org/netipx"
 
-	"github.com/cilium/cilium/pkg/cidr"
+	cmtypes "github.com/cilium/cilium/pkg/clustermesh/types"
 	"github.com/cilium/cilium/pkg/common"
 	"github.com/cilium/cilium/pkg/datapath/config"
 	"github.com/cilium/cilium/pkg/datapath/connector"
@@ -34,19 +32,10 @@ import (
 	"github.com/cilium/cilium/pkg/mtu"
 	"github.com/cilium/cilium/pkg/node"
 	"github.com/cilium/cilium/pkg/option"
+	cslices "github.com/cilium/cilium/pkg/slices"
 	"github.com/cilium/cilium/pkg/svcrouteconfig"
 	wgTypes "github.com/cilium/cilium/pkg/wireguard/types"
 )
-
-// prefixToCIDR converts a netip.Prefix to the legacy *cidr.CIDR representation,
-// returning nil for the zero/invalid prefix. It is a transitional boundary
-// helper: the datapath LocalNodeConfiguration still carries *cidr.CIDR fields.
-func prefixToCIDR(p netip.Prefix) *cidr.CIDR {
-	if !p.IsValid() {
-		return nil
-	}
-	return cidr.NewCIDR(netipx.PrefixIPNet(p))
-}
 
 // newLocalNodeConfig constructs LocalNodeConfiguration from the global agent
 // data sources.
@@ -64,6 +53,7 @@ func newLocalNodeConfig(
 	daemon *option.DaemonConfig,
 	localNode node.LocalNode,
 	sysctlOps sysctl.Sysctl,
+	clusterInfo cmtypes.ClusterInfo,
 	tunnelCfg tunnel.Config,
 	txn statedb.ReadTxn,
 	directRoutingDevTbl tables.DirectRoutingDevice,
@@ -153,8 +143,29 @@ func newLocalNodeConfig(
 		return config.Config{}, nil, fmt.Errorf("failed to parse hardware address of '%s': %w", defaults.SecondHostDevice, err)
 	}
 
+	var encap4IfIndex, encap6IfIndex uint32
+	if daemon.UnsafeDaemonConfigOption.EnableIPIPDevices {
+		if daemon.EnableIPv4 {
+			dev, _, watch, ok := devices.GetWatch(txn, tables.DeviceByName(defaults.IPIPv4Device))
+			if !ok {
+				return config.Config{}, watch, fmt.Errorf("failed to look up IPv4 IPIP device '%s'", defaults.IPIPv4Device)
+			}
+			watchChans = append(watchChans, watch)
+			encap4IfIndex = uint32(dev.Index)
+		}
+		if daemon.EnableIPv6 {
+			dev, _, watch, ok := devices.GetWatch(txn, tables.DeviceByName(defaults.IPIPv6Device))
+			if !ok {
+				return config.Config{}, watch, fmt.Errorf("failed to look up IPv6 IPIP device '%s'", defaults.IPIPv6Device)
+			}
+			watchChans = append(watchChans, watch)
+			encap6IfIndex = uint32(dev.Index)
+		}
+	}
+
 	return config.Config{
 		ClusterID:                    localNode.ClusterID,
+		ClusterIDBits:                clusterInfo.GetClusterIDBits(),
 		NodeIPv4:                     ip.AddrFromIP(localNode.GetNodeIP(false)),
 		NodeIPv6:                     ip.AddrFromIP(localNode.GetNodeIP(true)),
 		CiliumInternalIPv4:           ip.AddrFromIP(localNode.GetCiliumInternalIP(false)),
@@ -163,8 +174,6 @@ func newLocalNodeConfig(
 		CiliumNetMAC:                 ciliumNetMAC,
 		CiliumHostIfIndex:            uint32(ciliumHostDevice.Index),
 		CiliumHostMAC:                ciliumHostMAC,
-		AllocCIDRIPv4:                prefixToCIDR(localNode.IPv4AllocCIDR.Prefix.Prefix),
-		AllocCIDRIPv6:                prefixToCIDR(localNode.IPv6AllocCIDR.Prefix.Prefix),
 		NativeRoutingCIDRIPv4:        localNode.RemoteSNATDstAddrExclusionCIDRv4(),
 		NativeRoutingCIDRIPv6:        localNode.RemoteSNATDstAddrExclusionCIDRv6(),
 		ServiceLoopbackIPv4:          localNode.Local.ServiceLoopbackIPv4,
@@ -181,6 +190,8 @@ func newLocalNodeConfig(
 		EnableIPv4:                   daemon.EnableIPv4,
 		EnableIPv6:                   daemon.EnableIPv6,
 		EnableEncapsulation:          daemon.TunnelingEnabled(),
+		Encap4IfIndex:                encap4IfIndex,
+		Encap6IfIndex:                encap6IfIndex,
 		RequiresNativeRouting:        daemon.RequiresNativeRouting(),
 		TunnelProtocol:               tunnelCfg.EncapProtocol().ToDpID(),
 		TunnelPort:                   tunnelCfg.Port(),
@@ -194,8 +205,8 @@ func newLocalNodeConfig(
 		EnableIPSec:                  ipsecCfg.Enabled(),
 		EncryptNode:                  daemon.EncryptNode,
 		EnableConntrackAccounting:    daemon.BPFConntrackAccounting,
-		IPv4PodSubnets:               cidr.NewCIDRSlice(daemon.IPv4PodSubnets),
-		IPv6PodSubnets:               cidr.NewCIDRSlice(daemon.IPv6PodSubnets),
+		IPv4PodSubnets:               cslices.Map(daemon.IPv4PodSubnets, ip.PrefixFrom),
+		IPv6PodSubnets:               cslices.Map(daemon.IPv6PodSubnets, ip.PrefixFrom),
 		XDPConfig:                    xdpConfig,
 		LBConfig:                     lbConfig,
 		KPRConfig:                    kprCfg,

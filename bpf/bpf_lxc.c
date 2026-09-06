@@ -108,6 +108,11 @@ struct {
 } cilium_nodeport_nat_buffer __section_maps_btf;
 
 #ifdef ENABLE_IPV4
+/* lb4_ctx_restore_state() restores per packet load balancing state from the
+ * previous tail call.
+ * tuple->flags does not need to be restored, as it will be reinitialized from
+ * the packet.
+ */
 static __always_inline void
 lb4_ctx_restore_state(struct __ctx_buff *ctx, struct ct_state *state,
 		      __u16 *proxy_port, __u32 *cluster_id __maybe_unused,
@@ -144,11 +149,6 @@ lb4_ctx_store_state(struct __ctx_buff *ctx, const struct ct_state *state,
 	ctx_store_meta(ctx, CB_CLUSTER_ID_EGRESS, cluster_id);
 }
 
-/* lb4_ctx_restore_state() restores per packet load balancing state from the
- * previous tail call.
- * tuple->flags does not need to be restored, as it will be reinitialized from
- * the packet.
- */
 static __always_inline int __per_packet_lb_svc_xlate_4(void *ctx, struct iphdr *ip4,
 						       __s8 *ext_err)
 {
@@ -807,7 +807,7 @@ pass_to_stack: __maybe_unused
 #ifndef ENABLE_ROUTING
 	/* See IPv4 path for comments. */
 	if (from_l7lb && ctx_get_ifindex(ctx) != CONFIG(cilium_host_ifindex))
-		return ctx_redirect(ctx, ctx_get_ifindex(ctx), 0);
+		return redirect_self(ctx);
 #endif /* !ENABLE_ROUTING */
 
 	send_trace_notify(ctx, TRACE_TO_STACK, SECLABEL_IPV6, dst_sec_identity,
@@ -1379,7 +1379,7 @@ pass_to_stack: __maybe_unused
 	 * checked via tail call from bpf_host.
 	 */
 	if (from_l7lb && ctx_get_ifindex(ctx) != CONFIG(cilium_host_ifindex))
-		return ctx_redirect(ctx, ctx_get_ifindex(ctx), 0);
+		return redirect_self(ctx);
 #endif /* !ENABLE_ROUTING */
 
 	send_trace_notify(ctx, TRACE_TO_STACK, SECLABEL_IPV4, dst_sec_identity,
@@ -1761,7 +1761,7 @@ int tail_handle_arp(struct __ctx_buff *ctx)
 	if (tip == CONFIG(endpoint_ipv4).be32)
 		return CTX_ACT_OK;
 
-	ret = arp_respond(ctx, &mac, tip, &smac, sip, 0);
+	ret = arp_respond(ctx, &mac, tip, &smac, sip);
 	if (IS_ERR(ret))
 		return send_drop_notify_error(ctx, UNKNOWN_ID, ret, METRIC_EGRESS);
 

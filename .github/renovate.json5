@@ -156,6 +156,14 @@
       "minimumReleaseAgeBehaviour": "timestamp-optional",
     },
     {
+      // No cooldown for the Go toolchain. It is pinned twice, as the golang
+      // image and as the workflow go-version, and the rule above already exempts
+      // the image half, so a fresh Go patch would otherwise land in one half of
+      // the 'base-images' group and not the other.
+      "matchPackageNames": ["docker.io/library/golang", "go"],
+      "minimumReleaseAge": "0 days",
+    },
+    {
       // Do not pin or update digests for self-referenced cilium/cilium GitHub
       // Actions and reusable workflows (e.g.,
       // cilium/cilium/.github/actions/set-commit-status@<sha> # main or
@@ -547,6 +555,29 @@
         "main"
       ]
     },
+    // Toolchain ceilings for v1.20, which targets Go 1.26. golangci-lint is
+    // compiled with the Go toolchain the branch installs, so raising the branch's
+    // Go version means raising both entries of its bucket.
+    {
+      "matchPackageNames": [
+        "docker.io/library/golang",
+        "go"
+      ],
+      "allowedVersions": "<1.27",
+      "matchBaseBranches": [
+        "v1.20"
+      ]
+    },
+    {
+      "matchPackageNames": [
+        "golangci/golangci-lint"
+      ],
+      "allowedVersions": "<2.14",
+      "matchBaseBranches": [
+        "v1.20"
+      ]
+    },
+    // Toolchain ceilings for v1.19 and v1.18, which target Go 1.25.
     {
       "matchPackageNames": [
         "docker.io/library/golang",
@@ -554,7 +585,18 @@
       ],
       "allowedVersions": "<1.26",
       "matchBaseBranches": [
-        "v1.20",
+        "v1.19",
+        "v1.18",
+      ]
+    },
+    {
+      // v1.18 already sits past this, on a v2.13.1 that only works because the
+      // branch has no .custom-gcl.yaml plugin binary to build.
+      "matchPackageNames": [
+        "golangci/golangci-lint"
+      ],
+      "allowedVersions": "<2.13",
+      "matchBaseBranches": [
         "v1.19",
         "v1.18",
       ]

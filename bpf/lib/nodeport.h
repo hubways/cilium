@@ -400,17 +400,15 @@ static __always_inline int dsr_set_ipip6(struct __ctx_buff *ctx,
 	if (ctx_store_bytes(ctx, l3_off + offsetof(struct ipv6hdr, payload_len),
 			    &tp_new.payload_len, 4, 0) < 0)
 		return DROP_WRITE_ERROR;
-	if (ctx_store_bytes(ctx, l3_off + offsetof(struct ipv6hdr, daddr),
-			    backend_addr, sizeof(ip6->daddr), 0) < 0)
+	if (ipv6_store_daddr(ctx, backend_addr->addr, l3_off) < 0)
 		return DROP_WRITE_ERROR;
-	if (ctx_store_bytes(ctx, l3_off + offsetof(struct ipv6hdr, saddr),
-			    &saddr, sizeof(ip6->saddr), 0) < 0)
+	if (ipv6_store_saddr(ctx, saddr.addr, l3_off) < 0)
 		return DROP_WRITE_ERROR;
 	return 0;
 #  else /* __ctx_is == __ctx_xdp */
 	if (dsr_set_ipip6_dev(ctx, backend_addr, 0) < 0)
 		return DROP_NO_TUNNEL_KEY;
-	*oif = ENCAP6_IFINDEX;
+	*oif = CONFIG(encap6_ifindex);
 	return CTX_ACT_REDIRECT;
 #  endif /* __ctx_is == __ctx_xdp */
 }
@@ -1734,7 +1732,7 @@ static __always_inline int dsr_set_ipip4(struct __ctx_buff *ctx,
 #  else /* __ctx_is == __ctx_xdp */
 	if (dsr_set_ipip4_dev(ctx, backend_addr, 0) < 0)
 		return DROP_NO_TUNNEL_KEY;
-	*oif = ENCAP4_IFINDEX;
+	*oif = CONFIG(encap4_ifindex);
 	return CTX_ACT_REDIRECT;
 #  endif /* __ctx_is == __ctx_xdp */
 }

@@ -9,14 +9,13 @@ import (
 	"github.com/cilium/cilium/pkg/datapath/linux/probes"
 	"github.com/cilium/cilium/pkg/datapath/tables"
 	"github.com/cilium/cilium/pkg/datapath/types"
-	"github.com/cilium/cilium/pkg/identity"
 	"github.com/cilium/cilium/pkg/loadbalancer"
 	"github.com/cilium/cilium/pkg/option"
 )
 
 func NodeConfig(lnc *Config) Node {
 	node := *NewNode()
-	node.ClusterIDBits = identity.GetClusterIDBits()
+	node.ClusterIDBits = lnc.ClusterIDBits
 
 	node.CiliumHostIfIndex = lnc.CiliumHostIfIndex
 	node.CiliumHostMAC.Addr = lnc.CiliumHostMAC
@@ -140,6 +139,9 @@ func NodeConfig(lnc *Config) Node {
 			}
 		}
 	}
+
+	node.Encap4IfIndex = lnc.Encap4IfIndex
+	node.Encap6IfIndex = lnc.Encap6IfIndex
 
 	node.EnableJiffies = option.Config.ClockSource == option.ClockSourceJiffies
 	node.KernelHz = uint32(option.Config.KernelHz)

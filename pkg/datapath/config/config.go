@@ -4,10 +4,8 @@
 package config
 
 import (
-	"net"
 	"net/netip"
 
-	"github.com/cilium/cilium/pkg/cidr"
 	plugin "github.com/cilium/cilium/pkg/datapath/plugins/types"
 	"github.com/cilium/cilium/pkg/datapath/tables"
 	"github.com/cilium/cilium/pkg/datapath/tunnel"
@@ -17,6 +15,7 @@ import (
 	"github.com/cilium/cilium/pkg/loadbalancer"
 	"github.com/cilium/cilium/pkg/mac"
 	"github.com/cilium/cilium/pkg/maglev"
+	"github.com/cilium/cilium/pkg/slices"
 	"github.com/cilium/cilium/pkg/svcrouteconfig"
 )
 
@@ -37,6 +36,9 @@ type ChangeHandler interface {
 type Config struct {
 	// ClusterID is the immutable identifier of the local cluster.
 	ClusterID uint32
+
+	// Number of bits of the identity reserved for the Cluster ID.
+	ClusterIDBits uint32
 
 	// NodeIPv4 is the primary IPv4 address of this node.
 	// Mutable at runtime.
@@ -71,16 +73,6 @@ type Config struct {
 
 	// MAC address of the cilium_net device.
 	CiliumNetMAC mac.MAC
-
-	// AllocCIDRIPv4 is the IPv4 allocation CIDR from which IP addresses for
-	// endpoints are allocated from.
-	// Immutable at runtime.
-	AllocCIDRIPv4 *cidr.CIDR
-
-	// AllocCIDRIPv6 is the IPv6 allocation CIDR from which IP addresses for
-	// endpoints are allocated from.
-	// Immutable at runtime.
-	AllocCIDRIPv6 *cidr.CIDR
 
 	// NativeRoutingCIDRIPv4 is the v4 CIDR in which pod IPs are routable.
 	// +deepequal-gen=false
@@ -169,6 +161,12 @@ type Config struct {
 	// subsequent calls to NodeConfigurationChanged().
 	EnableEncapsulation bool
 
+	// Interface index of the IPv4 IPIP encapsulation device.
+	Encap4IfIndex uint32
+
+	// Interface index of the IPv6 IPIP encapsulation device.
+	Encap6IfIndex uint32
+
 	// RequiresNativeRouting returns true if the node requires native routing to setup.
 	RequiresNativeRouting bool
 
@@ -245,12 +243,12 @@ type Config struct {
 	// IPv4PodSubnets is a list of IPv4 subnets that pod IPs are assigned from
 	// these are then used when encryption is enabled to configure the node
 	// for encryption over these subnets at node initialization.
-	IPv4PodSubnets []*cidr.CIDR
+	IPv4PodSubnets []ip.Prefix
 
 	// IPv6PodSubnets is a list of IPv6 subnets that pod IPs are assigned from
 	// these are then used when encryption is enabled to configure the node
 	// for encryption over these subnets at node initialization.
-	IPv6PodSubnets []*cidr.CIDR
+	IPv6PodSubnets []ip.Prefix
 
 	// XDPConfig holds configuration options to determine how the node should
 	// handle XDP programs.
@@ -308,10 +306,10 @@ func (cfg *Config) DeviceNames() []string {
 	return tables.DeviceNames(cfg.Devices)
 }
 
-func (cfg *Config) GetIPv4PodSubnets() []*net.IPNet {
-	return cidr.CIDRsToIPNets(cfg.IPv4PodSubnets)
+func (cfg *Config) GetIPv4PodSubnets() []netip.Prefix {
+	return slices.Map(cfg.IPv4PodSubnets, ip.Prefix.Unwrap)
 }
 
-func (cfg *Config) GetIPv6PodSubnets() []*net.IPNet {
-	return cidr.CIDRsToIPNets(cfg.IPv6PodSubnets)
+func (cfg *Config) GetIPv6PodSubnets() []netip.Prefix {
+	return slices.Map(cfg.IPv6PodSubnets, ip.Prefix.Unwrap)
 }

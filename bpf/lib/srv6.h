@@ -145,11 +145,9 @@ srv6_encapsulation(struct __ctx_buff *ctx, int growth, __u16 new_payload_len,
 		return DROP_INVALID;
 	if (ctx_store_bytes(ctx, ETH_HLEN, &new_ip6, len, 0) < 0)
 		return DROP_WRITE_ERROR;
-	if (ctx_store_bytes(ctx, ETH_HLEN + offsetof(struct ipv6hdr, saddr),
-			    saddr, sizeof(union v6addr), 0) < 0)
+	if (ipv6_store_saddr(ctx, saddr->addr, ETH_HLEN) < 0)
 		return DROP_WRITE_ERROR;
-	if (ctx_store_bytes(ctx, ETH_HLEN + offsetof(struct ipv6hdr, daddr),
-			    sid, sizeof(struct in6_addr), 0) < 0)
+	if (ipv6_store_daddr(ctx, (const __u8 *)sid, ETH_HLEN) < 0)
 		return DROP_WRITE_ERROR;
 
 #ifdef ENABLE_SRV6_SRH_ENCAP
@@ -361,7 +359,6 @@ int tail_srv6_encap(struct __ctx_buff *ctx)
 {
 	struct in6_addr dst_sid;
 	int ret = 0;
-	int __maybe_unused ext_err = 0;
 
 	srv6_load_meta_sid(ctx, &dst_sid);
 	ret = srv6_handling(ctx, &dst_sid);

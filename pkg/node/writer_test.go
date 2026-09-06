@@ -6,6 +6,7 @@ package node
 import (
 	"context"
 	"errors"
+	"maps"
 	"net"
 	"net/netip"
 	"slices"
@@ -17,6 +18,7 @@ import (
 	"github.com/cilium/statedb/reconciler"
 	"github.com/stretchr/testify/require"
 
+	cmtypes "github.com/cilium/cilium/pkg/clustermesh/types"
 	iputil "github.com/cilium/cilium/pkg/ip"
 	"github.com/cilium/cilium/pkg/node/addressing"
 	"github.com/cilium/cilium/pkg/node/types"
@@ -106,7 +108,7 @@ func TestWriterReconcilerRegistration(t *testing.T) {
 		Name:   "existing",
 		Source: source.Kubernetes,
 	}))
-	require.Empty(t, get("existing").Statuses.All())
+	require.Empty(t, maps.Collect(get("existing").Statuses.All()))
 	existing := get("existing").DeepCopy()
 	existing.Statuses = existing.Statuses.Set("already-done", reconciler.StatusDone())
 	txn := db.WriteTxn(nodes)
@@ -120,18 +122,18 @@ func TestWriterReconcilerRegistration(t *testing.T) {
 		reconciler.StatusKindPending,
 		existing.Statuses.Get("wireguard").Kind,
 	)
-	require.Contains(t, existing.Statuses.All(), "wireguard")
+	require.Contains(t, maps.Collect(existing.Statuses.All()), "wireguard")
 	require.Equal(t,
 		reconciler.StatusKindDone,
 		existing.Statuses.Get("already-done").Kind,
 	)
-	require.Equal(t, []string{"wireguard"}, requiredReconcilers(db, nodes, w))
+	require.Equal(t, []NodeReconciler{"wireguard"}, requiredReconcilers(db, nodes, w))
 
 	// Required reconcilers are materialized on newly inserted nodes. Seeing one
 	// completed status therefore cannot hide another required pending status.
 	w.RegisterReconciler("ipset")
 	require.Equal(t,
-		[]string{"ipset", "wireguard"},
+		[]NodeReconciler{"ipset", "wireguard"},
 		requiredReconcilers(db, nodes, w),
 	)
 	require.True(t, upsert(&types.Node{
@@ -146,7 +148,7 @@ func TestWriterReconcilerRegistration(t *testing.T) {
 		})
 
 	newNode := get("new").DeepCopy()
-	require.Len(t, newNode.Statuses.All(), 2)
+	require.Len(t, maps.Collect(newNode.Statuses.All()), 2)
 	newNode.Statuses = newNode.Statuses.Set("ipset", reconciler.StatusDone())
 	txn = db.WriteTxn(nodes)
 	_, _, err = nodes.Insert(txn, newNode)
@@ -164,11 +166,11 @@ func TestWriterReconcilerRegistration(t *testing.T) {
 	)
 
 	w.UnregisterReconciler("wireguard")
-	require.Equal(t, []string{"ipset"}, requiredReconcilers(db, nodes, w))
+	require.Equal(t, []NodeReconciler{"ipset"}, requiredReconcilers(db, nodes, w))
 	existing = get("existing")
 	newNode = get("new")
-	require.NotContains(t, existing.Statuses.All(), "wireguard")
-	require.NotContains(t, newNode.Statuses.All(), "wireguard")
+	require.NotContains(t, maps.Collect(existing.Statuses.All()), "wireguard")
+	require.NotContains(t, maps.Collect(newNode.Statuses.All()), "wireguard")
 	require.Equal(t,
 		reconciler.StatusKindDone,
 		existing.Statuses.Get("already-done").Kind,
@@ -185,8 +187,8 @@ func TestWriterReconcilerRegistration(t *testing.T) {
 
 	// Re-registering materializes a fresh pending status on all nodes.
 	w.RegisterReconciler("wireguard")
-	require.Contains(t, get("existing").Statuses.All(), "wireguard")
-	require.Contains(t, get("new").Statuses.All(), "wireguard")
+	require.Contains(t, maps.Collect(get("existing").Statuses.All()), "wireguard")
+	require.Contains(t, maps.Collect(get("new").Statuses.All()), "wireguard")
 	require.Equal(t,
 		reconciler.StatusKindPending,
 		get("existing").Statuses.Get("wireguard").Kind,
@@ -201,7 +203,7 @@ func requiredReconcilers(
 	db *statedb.DB,
 	nodes statedb.RWTable[*Node],
 	w *Writer,
-) []string {
+) []NodeReconciler {
 	txn := db.WriteTxn(nodes)
 	defer txn.Abort()
 	return w.getRequiredReconcilers(txn)
@@ -431,6 +433,92 @@ func TestWriterAddressConflicts(t *testing.T) {
 	requireNoNode("mixed")
 }
 
+func TestWriterClusterAwareAddressConflicts(t *testing.T) {
+	db := statedb.New()
+	nodes, err := NewNodeTable(db)
+	require.NoError(t, err)
+	w := NewWriter(hivetest.Logger(t), db, nodes)
+
+	upsert := func(n *types.Node) bool {
+		txn := db.WriteTxn(nodes)
+		defer txn.Commit()
+		return w.Upsert(txn, n)
+	}
+	requireNode := func(name string) *Node {
+		n, _, found := nodes.Get(db.ReadTxn(), NodeByName(name))
+		require.True(t, found, name)
+		return n
+	}
+	requireNoNode := func(name string) {
+		_, _, found := nodes.Get(db.ReadTxn(), NodeByName(name))
+		require.False(t, found, name)
+	}
+	newNode := func(
+		name, cluster string,
+		addressType addressing.AddressType,
+		address string,
+	) *types.Node {
+		return &types.Node{
+			Name:      name,
+			Cluster:   cluster,
+			ClusterID: 99,
+			Source:    source.Kubernetes,
+			IPAddresses: []types.Address{{
+				Type: addressType,
+				IP:   net.ParseIP(address),
+			}},
+		}
+	}
+
+	// The hook is installed during Hive invoke time, before producers write to
+	// the table.
+	w.SetPrefixClusterMutatorFn(func(n *types.Node) []cmtypes.PrefixClusterOpts {
+		clusterIDs := map[string]uint32{"cluster-1": 1, "cluster-2": 2}
+		return []cmtypes.PrefixClusterOpts{cmtypes.WithClusterID(clusterIDs[n.Cluster])}
+	})
+
+	// The serialized ClusterID is deliberately unrelated to address-space
+	// qualification and must not affect the index.
+	require.True(t, upsert(newNode(
+		"node-1", "cluster-1", addressing.NodeCiliumInternalIP, "10.0.0.1",
+	)))
+	_, _, found := nodes.Get(
+		db.ReadTxn(),
+		NodeByAddress(cmtypes.AddrClusterFrom(netip.MustParseAddr("10.0.0.1"), 0)),
+	)
+	require.False(t, found)
+	_, _, found = nodes.Get(
+		db.ReadTxn(),
+		NodeByAddress(cmtypes.AddrClusterFrom(netip.MustParseAddr("10.0.0.1"), 1)),
+	)
+	require.True(t, found)
+
+	// Cluster-scoped Cilium internal addresses may overlap across clusters.
+	require.True(t, upsert(newNode(
+		"node-2", "cluster-2", addressing.NodeCiliumInternalIP, "10.0.0.1",
+	)))
+	requireNode("cluster-1/node-1")
+	requireNode("cluster-2/node-2")
+
+	// The same address in the same cluster still follows normal ownership rules.
+	require.True(t, upsert(newNode(
+		"latest", "cluster-1", addressing.NodeCiliumInternalIP, "10.0.0.1",
+	)))
+	requireNoNode("cluster-1/node-1")
+	requireNode("cluster-1/latest")
+	requireNode("cluster-2/node-2")
+
+	// Underlay addresses remain globally scoped and conflict across clusters.
+	require.True(t, upsert(newNode(
+		"underlay-1", "cluster-1", addressing.NodeInternalIP, "192.0.2.1",
+	)))
+	require.True(t, upsert(newNode(
+		"underlay-2", "cluster-2", addressing.NodeInternalIP, "192.0.2.1",
+	)))
+	requireNoNode("cluster-1/underlay-1")
+	requireNode("cluster-2/underlay-2")
+}
+
 func TestWriterAllowsSharedLocalRouterIP(t *testing.T) {
 	db := statedb.New()
 	nodes, err := NewNodeTable(db)
@@ -480,7 +568,8 @@ func TestWriterAllowsSharedLocalRouterIP(t *testing.T) {
 		netip.MustParseAddr("fe80::"),
 	} {
 		var owners []string
-		for n := range nodes.List(db.ReadTxn(), NodeByAddress(address)) {
+		addrCluster := cmtypes.AddrClusterFrom(address, 0)
+		for n := range nodes.List(db.ReadTxn(), NodeByAddress(addrCluster)) {
 			owners = append(owners, n.Name)
 		}
 		require.ElementsMatch(t, []string{"local", "remote-1", "remote-2"}, owners)
@@ -518,9 +607,55 @@ func TestWriterRefresh(t *testing.T) {
 	nodes, err := NewNodeTable(db)
 	require.NoError(t, err)
 	w := NewWriter(hivetest.Logger(t), db, nodes)
+	w.RegisterReconciler("other")
+	w.RegisterReconciler("test")
 
 	n := &Node{Node: types.Node{Name: "node-1", Source: source.Kubernetes}}
+	n.Statuses = n.Statuses.Set("other", reconciler.StatusPending())
 	n.Statuses = n.Statuses.Set("test", reconciler.StatusDone())
+	txn := db.WriteTxn(nodes)
+	_, _, err = nodes.Insert(txn, n)
+	require.NoError(t, err)
+	txn.Commit()
+
+	done := make(chan error, 1)
+	go func() { done <- w.Refresh(context.Background(), "test") }()
+
+	require.Eventually(t, func() bool {
+		n, _, found := nodes.Get(db.ReadTxn(), NodeByName("node-1"))
+		return found &&
+			n.Statuses.Get("test").Kind == reconciler.StatusKindPending &&
+			n.Statuses.Get("other").Kind == reconciler.StatusKindPending
+	}, time.Second, 10*time.Millisecond)
+
+	txn = db.WriteTxn(nodes)
+	n, _, found := nodes.Get(txn, NodeByName("node-1"))
+	require.True(t, found)
+	n = n.DeepCopy()
+	n.Statuses = n.Statuses.Set("test", reconciler.StatusDone())
+	_, _, err = nodes.Insert(txn, n)
+	require.NoError(t, err)
+	txn.Commit()
+	require.NoError(t, <-done)
+
+	require.ErrorContains(
+		t,
+		w.Refresh(context.Background(), "not-registered"),
+		`node reconciler "not-registered" is not registered`,
+	)
+}
+
+func TestWriterRefreshAll(t *testing.T) {
+	db := statedb.New()
+	nodes, err := NewNodeTable(db)
+	require.NoError(t, err)
+	w := NewWriter(hivetest.Logger(t), db, nodes)
+	w.RegisterReconciler("first")
+	w.RegisterReconciler("second")
+
+	n := &Node{Node: types.Node{Name: "node-1", Source: source.Kubernetes}}
+	n.Statuses = n.Statuses.Set("first", reconciler.StatusDone())
+	n.Statuses = n.Statuses.Set("second", reconciler.StatusDone())
 	txn := db.WriteTxn(nodes)
 	_, _, err = nodes.Insert(txn, n)
 	require.NoError(t, err)
@@ -531,14 +666,17 @@ func TestWriterRefresh(t *testing.T) {
 
 	require.Eventually(t, func() bool {
 		n, _, found := nodes.Get(db.ReadTxn(), NodeByName("node-1"))
-		return found && n.Statuses.Get("test").Kind == reconciler.StatusKindPending
+		return found &&
+			n.Statuses.Get("first").Kind == reconciler.StatusKindPending &&
+			n.Statuses.Get("second").Kind == reconciler.StatusKindPending
 	}, time.Second, 10*time.Millisecond)
 
 	txn = db.WriteTxn(nodes)
 	n, _, found := nodes.Get(txn, NodeByName("node-1"))
 	require.True(t, found)
 	n = n.DeepCopy()
-	n.Statuses = n.Statuses.Set("test", reconciler.StatusDone())
+	n.Statuses = n.Statuses.Set("first", reconciler.StatusDone())
+	n.Statuses = n.Statuses.Set("second", reconciler.StatusDone())
 	_, _, err = nodes.Insert(txn, n)
 	require.NoError(t, err)
 	txn.Commit()
