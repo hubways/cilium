@@ -5,6 +5,7 @@ package gateway_api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"testing"
@@ -29,6 +30,7 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/cilium/cilium/operator/pkg/gateway-api/helpers"
+	"github.com/cilium/cilium/operator/pkg/gateway-api/helpers/testhelpers"
 	"github.com/cilium/cilium/operator/pkg/gateway-api/indexers"
 	"github.com/cilium/cilium/operator/pkg/gateway-api/loading"
 	"github.com/cilium/cilium/operator/pkg/model/translation"
@@ -410,7 +412,7 @@ func Test_Conformance(t *testing.T) {
 				}
 				optionalKinds = append(optionalKinds, k)
 			}
-			scheme := helpers.TestScheme(optionalKinds)
+			scheme := testhelpers.TestScheme(optionalKinds, helpers.RegisterGatewayAPITypesToScheme)
 			clientBuilder := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(append(base, input...)...).
@@ -835,7 +837,7 @@ func Test_gatewayReconciler_Reconcile_cleansUpResourcesOnHandoff(t *testing.T) {
 
 			objects := append([]client.Object{gw, svc, cec}, tc.objects...)
 			c := fake.NewClientBuilder().
-				WithScheme(helpers.TestScheme(helpers.AllOptionalKinds)).
+				WithScheme(testhelpers.TestScheme(helpers.AllOptionalKinds, helpers.RegisterGatewayAPITypesToScheme)).
 				WithObjects(objects...).
 				Build()
 
@@ -871,6 +873,45 @@ func Test_gatewayReconciler_Reconcile_cleansUpResourcesOnHandoff(t *testing.T) {
 			require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(gw), actualGateway))
 		})
 	}
+}
+
+func Test_gatewayReconciler_Reconcile_failsOnGatewayClassGetError(t *testing.T) {
+	t.Parallel()
+
+	expectedErr := errors.New("client unavailable")
+	gw := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gateway",
+			Namespace: "default",
+		},
+		Spec: gatewayv1.GatewaySpec{
+			GatewayClassName: "cilium",
+		},
+	}
+
+	c := fake.NewClientBuilder().
+		WithScheme(testhelpers.TestScheme(helpers.AllOptionalKinds, helpers.RegisterGatewayAPITypesToScheme)).
+		WithObjects(gw).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				if _, ok := obj.(*gatewayv1.GatewayClass); ok {
+					return expectedErr
+				}
+				return c.Get(ctx, key, obj, opts...)
+			},
+		}).
+		Build()
+
+	r := &gatewayReconciler{
+		client:         c,
+		logger:         hivetest.Logger(t, hivetest.LogLevel(slog.LevelDebug)),
+		controllerName: defaultControllerName,
+	}
+
+	result, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(gw)})
+	require.ErrorIs(t, err, expectedErr)
+	require.ErrorContains(t, err, `failed to get GatewayClass "cilium"`)
+	require.Equal(t, ctrl.Result{}, result)
 }
 
 // Test_gatewayReconciler_ensureEnvoyConfig_deletesStaleCEC verifies that a
@@ -913,7 +954,7 @@ func Test_gatewayReconciler_ensureEnvoyConfig_deletesStaleCEC(t *testing.T) {
 
 	t.Run("deletes owned stale CEC when desired is nil", func(t *testing.T) {
 		c := fake.NewClientBuilder().
-			WithScheme(helpers.TestScheme(helpers.AllOptionalKinds)).
+			WithScheme(testhelpers.TestScheme(helpers.AllOptionalKinds, helpers.RegisterGatewayAPITypesToScheme)).
 			WithObjects(gw, ownedCEC()).
 			Build()
 		r := &gatewayReconciler{
@@ -932,7 +973,7 @@ func Test_gatewayReconciler_ensureEnvoyConfig_deletesStaleCEC(t *testing.T) {
 		foreign.OwnerReferences[0].UID = types.UID("other-uid")
 		foreign.OwnerReferences[0].Name = "other-gateway"
 		c := fake.NewClientBuilder().
-			WithScheme(helpers.TestScheme(helpers.AllOptionalKinds)).
+			WithScheme(testhelpers.TestScheme(helpers.AllOptionalKinds, helpers.RegisterGatewayAPITypesToScheme)).
 			WithObjects(gw, foreign).
 			Build()
 		r := &gatewayReconciler{
@@ -947,7 +988,7 @@ func Test_gatewayReconciler_ensureEnvoyConfig_deletesStaleCEC(t *testing.T) {
 
 	t.Run("no error when no CEC exists", func(t *testing.T) {
 		c := fake.NewClientBuilder().
-			WithScheme(helpers.TestScheme(helpers.AllOptionalKinds)).
+			WithScheme(testhelpers.TestScheme(helpers.AllOptionalKinds, helpers.RegisterGatewayAPITypesToScheme)).
 			WithObjects(gw).
 			Build()
 		r := &gatewayReconciler{
@@ -1093,7 +1134,10 @@ func Test_gatewayReconciler_setListenerStatus(t *testing.T) {
 			r := &gatewayReconciler{
 				client: func() client.WithWatch {
 					return fake.NewClientBuilder().
-						WithScheme(helpers.TestScheme(helpers.AllOptionalKinds)).
+						WithScheme(testhelpers.TestScheme(
+							helpers.AllOptionalKinds,
+							helpers.RegisterGatewayAPITypesToScheme,
+						)).
 						Build()
 				}(),
 			}
@@ -1170,7 +1214,7 @@ func Test_gatewayReconciler_setAddressStatus_updatesAcceptedListenerProgrammedCo
 	}
 
 	c := fake.NewClientBuilder().
-		WithScheme(helpers.TestScheme(helpers.AllOptionalKinds)).
+		WithScheme(testhelpers.TestScheme(helpers.AllOptionalKinds, helpers.RegisterGatewayAPITypesToScheme)).
 		WithObjects(svc).
 		Build()
 
@@ -1289,7 +1333,7 @@ func testReconciler(t *testing.T, obj ...client.Object) (*gatewayReconciler, cli
 	logger := hivetest.Logger(t, hivetest.LogLevel(slog.LevelDebug))
 
 	fakeClient := fake.NewClientBuilder().
-		WithScheme(helpers.TestScheme(helpers.AllOptionalKinds)).
+		WithScheme(testhelpers.TestScheme(helpers.AllOptionalKinds, helpers.RegisterGatewayAPITypesToScheme)).
 		WithObjects(obj...).
 		WithStatusSubresource(&gatewayv1.HTTPRoute{}, &gatewayv1.GRPCRoute{}).
 		Build()
@@ -1588,7 +1632,7 @@ func Test_gatewayAddressStatusManager_SetStaticAddressStatus(t *testing.T) {
 			gw := gateway(tc.specAddr)
 			setGatewayProgrammed(gw, metav1.ConditionTrue, "Gateway Programmed", gatewayv1.GatewayReasonProgrammed)
 			c := fake.NewClientBuilder().
-				WithScheme(helpers.TestScheme(helpers.AllOptionalKinds)).
+				WithScheme(testhelpers.TestScheme(helpers.AllOptionalKinds, helpers.RegisterGatewayAPITypesToScheme)).
 				WithObjects(gw, service(tc.ingress...)).
 				Build()
 			err := NewGatewayAddressStatusManager(c, hivetest.Logger(t, hivetest.LogLevel(slog.LevelDebug))).SetStaticAddressStatus(t.Context(), gw)
