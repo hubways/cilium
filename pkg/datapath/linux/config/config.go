@@ -196,10 +196,6 @@ func (h *HeaderfileWriter) WriteNodeConfig(w io.Writer, cfg *config.Config) erro
 		cDefinesMap["ENABLE_SCTP"] = "1"
 	}
 
-	if option.Config.ServiceNoBackendResponse == option.ServiceNoBackendResponseReject {
-		cDefinesMap["SERVICE_NO_BACKEND_RESPONSE"] = "1"
-	}
-
 	// --- WARNING: THIS CONFIGURATION METHOD IS DEPRECATED, SEE FUNCTION DOC ---
 
 	if option.Config.EnableEnvoyConfig {
@@ -312,10 +308,6 @@ func (h *HeaderfileWriter) WriteNodeConfig(w io.Writer, cfg *config.Config) erro
 	fmt.Fprintf(fw, "#define CT_MAP_SIZE_TCP %d\n", cmp.Or(option.Config.CTMapEntriesGlobalTCP, option.CTMapEntriesGlobalTCPDefault))
 	fmt.Fprintf(fw, "#define CT_MAP_SIZE_ANY %d\n", cmp.Or(option.Config.CTMapEntriesGlobalAny, option.CTMapEntriesGlobalAnyDefault))
 
-	if option.Config.IPv4Enabled() && option.Config.EnableVTEP {
-		cDefinesMap["ENABLE_VTEP"] = "1"
-	}
-
 	cDefinesMap["VTEP_MAP_SIZE"] = fmt.Sprintf("%d", vtep.MaxEntries)
 
 	vlanFilter, err := vlanFilterMacros(nativeDevices)
@@ -323,10 +315,6 @@ func (h *HeaderfileWriter) WriteNodeConfig(w io.Writer, cfg *config.Config) erro
 		return fmt.Errorf("rendering vlan filter macros: %w", err)
 	}
 	cDefinesMap["VLAN_FILTER(ifindex, vlan_id)"] = vlanFilter
-
-	if option.Config.DisableExternalIPMitigation {
-		cDefinesMap["DISABLE_EXTERNAL_IP_MITIGATION"] = "1"
-	}
 
 	if option.Config.TunnelingEnabled() {
 		cDefinesMap["TUNNEL_MODE"] = "1"

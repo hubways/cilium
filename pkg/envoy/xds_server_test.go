@@ -65,7 +65,9 @@ func (m *listenerProxyUpdaterMock) PolicyDebug(string, ...any) {}
 
 func (m *listenerProxyUpdaterMock) IsHost() bool { return false }
 
-func (m *listenerProxyUpdaterMock) PreviousMapState() *policy.MapState { return nil }
+func (m *listenerProxyUpdaterMock) PreviousMapStateSizes() policy.MapStateSizes {
+	return policy.MapStateSizes{}
+}
 
 func (m *listenerProxyUpdaterMock) RegenerateIfAlive(*regeneration.ExternalRegenerationMetadata) <-chan bool {
 	ch := make(chan bool)
@@ -243,15 +245,15 @@ var (
 		1001: labels.LabelArray{
 			labels.NewLabel("app", "etcd", labels.LabelSourceK8s),
 			labels.NewLabel("version", "v1", labels.LabelSourceK8s),
-		},
+		}.Labels(),
 		1002: labels.LabelArray{
 			labels.NewLabel("app", "etcd", labels.LabelSourceK8s),
 			labels.NewLabel("version", "v2", labels.LabelSourceK8s),
-		},
+		}.Labels(),
 		1003: labels.LabelArray{
 			labels.NewLabel("app", "cassandra", labels.LabelSourceK8s),
 			labels.NewLabel("version", "v1", labels.LabelSourceK8s),
-		},
+		}.Labels(),
 	}
 	// slogloggercheck: the default logger is enough for tests.
 	testSelectorCache = policy.NewSelectorCache(logging.DefaultSlogLogger, IdentityCache)
@@ -1454,7 +1456,7 @@ func TestCNPWildcardPortListenerRedirectToEnvoy(t *testing.T) {
 	repo := policy.NewPolicyRepository(
 		logger,
 		cmtypes.DefaultClusterInfo,
-		identity.IdentityMap{localIdentity.ID: localIdentity.LabelArray},
+		identity.IdentityMap{localIdentity.ID: localIdentity.Labels},
 		nil,
 		envoypolicy.NewEnvoyL7RulesTranslator(logger, certificatemanager.NewMockSecretManagerInline()),
 		idMgr,
@@ -2583,7 +2585,7 @@ func newTestEndpointPolicy(t *testing.T, ep *listenerProxyUpdaterMock) (*policy.
 	repo := policy.NewPolicyRepository(
 		logger,
 		cmtypes.DefaultClusterInfo,
-		identity.IdentityMap{localIdentity.ID: localIdentity.LabelArray},
+		identity.IdentityMap{localIdentity.ID: localIdentity.Labels},
 		nil,
 		envoypolicy.NewEnvoyL7RulesTranslator(logger, certificatemanager.NewMockSecretManagerInline()),
 		idMgr,
