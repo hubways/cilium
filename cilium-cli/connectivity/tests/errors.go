@@ -100,9 +100,9 @@ func NoErrorsInLogs(ciliumVersion semver.Version, checkLevels []string, extraExc
 	// error cannot be fixed in Cilium or in the test.
 	errorLogExceptions := []logMatcher{
 		stringMatcher("Error in delegate stream, restarting"),
-		failedToUpdateLock, failedToReleaseLock, failedToRetrieveLock, leaderElectionReadTimeout,
-		failedToListCRDs, knownIssueWireguardCollision, gobgpFailedCloseTCP,
-		vendoredLeaderElectionLeaseLockError}
+		failedToUpdateLock, failedToReleaseLock, failedToRetrieveLock, failedToRetrieveResourceLock,
+		readingResponseBodyError, failedToListCRDs, knownIssueWireguardCollision, gobgpFailedCloseTCP,
+		vendoredLeaderElectionLeaseLockError, getProgInfoCannotAllocateMemory}
 
 	envoyExternalTargetTLSWarning := regexMatcher{regexp.MustCompile(fmt.Sprintf(envoyTLSWarningTemplate, externalTarget))}
 	envoyExternalOtherTargetTLSWarning := regexMatcher{regexp.MustCompile(fmt.Sprintf(envoyTLSWarningTemplate, externalOtherTarget))}
@@ -532,24 +532,25 @@ const (
 	// the reason why this exception is needed.
 
 	// errors
-	panicMessage                       = "panic:"
-	deadLockHeader                     = "POTENTIAL DEADLOCK:"                        // from github.com/sasha-s/go-deadlock/deadlock.go:header
-	RunInitFailed                      = "JoinEP: "                                   // from https://github.com/cilium/cilium/pull/5052
-	RemovingMapMsg                     = "Removing map to allow for property upgrade" // from https://github.com/cilium/cilium/pull/10626
-	symbolSubstitution                 = "Skipping symbol substitution"               //
-	uninitializedRegen                 = "Uninitialized regeneration level"           // from https://github.com/cilium/cilium/pull/10949
-	unstableStat                       = "BUG: stat() has unstable behavior"          // from https://github.com/cilium/cilium/pull/11028
-	missingIptablesWait                = "Missing iptables wait arg (-w):"
-	localIDRestoreFail                 = "Could not restore all CIDR identities" // from https://github.com/cilium/cilium/pull/19556
-	routerIPMismatch                   = "Mismatch of router IPs found during restoration"
-	emptyIPNodeIDAlloc                 = "Attempt to allocate a node ID for an empty node IP address"
-	failedToListCRDs     stringMatcher = "the server could not find the requested resource" // cf. https://github.com/cilium/cilium/issues/16425
-	failedToUpdateLock   stringMatcher = "Failed to update lock:"
-	failedToReleaseLock  stringMatcher = "Failed to release lock:"
-	failedToRetrieveLock stringMatcher = "Error retrieving lease lock"                          // cf. https://github.com/cilium/cilium/issues/45426
-	nilDetailsForService stringMatcher = "retrieved nil details for Service"                    // from: https://github.com/cilium/cilium/issues/35595
-	removeInexistentID   stringMatcher = "removing identity not added to the identity manager!" // from https://github.com/cilium/cilium/issues/16419
-	gobgpFailedCloseTCP  stringMatcher = "failed to close existing tcp connection"              // Benign error during BGP peer teardown in ACTIVE state
+	panicMessage                               = "panic:"
+	deadLockHeader                             = "POTENTIAL DEADLOCK:"                        // from github.com/sasha-s/go-deadlock/deadlock.go:header
+	RunInitFailed                              = "JoinEP: "                                   // from https://github.com/cilium/cilium/pull/5052
+	RemovingMapMsg                             = "Removing map to allow for property upgrade" // from https://github.com/cilium/cilium/pull/10626
+	symbolSubstitution                         = "Skipping symbol substitution"               //
+	uninitializedRegen                         = "Uninitialized regeneration level"           // from https://github.com/cilium/cilium/pull/10949
+	unstableStat                               = "BUG: stat() has unstable behavior"          // from https://github.com/cilium/cilium/pull/11028
+	missingIptablesWait                        = "Missing iptables wait arg (-w):"
+	localIDRestoreFail                         = "Could not restore all CIDR identities" // from https://github.com/cilium/cilium/pull/19556
+	routerIPMismatch                           = "Mismatch of router IPs found during restoration"
+	emptyIPNodeIDAlloc                         = "Attempt to allocate a node ID for an empty node IP address"
+	failedToListCRDs             stringMatcher = "the server could not find the requested resource" // cf. https://github.com/cilium/cilium/issues/16425
+	failedToUpdateLock           stringMatcher = "Failed to update lock:"
+	failedToReleaseLock          stringMatcher = "Failed to release lock:"
+	failedToRetrieveLock         stringMatcher = "Error retrieving lease lock"                                              // cf. https://github.com/cilium/cilium/issues/45426
+	failedToRetrieveResourceLock stringMatcher = "error retrieving resource lock kube-system/cilium-operator-resource-lock" // cf. https://github.com/cilium/cilium/issues/47808
+	nilDetailsForService         stringMatcher = "retrieved nil details for Service"                                        // from: https://github.com/cilium/cilium/issues/35595
+	removeInexistentID           stringMatcher = "removing identity not added to the identity manager!"                     // from https://github.com/cilium/cilium/issues/16419
+	gobgpFailedCloseTCP          stringMatcher = "failed to close existing tcp connection"                                  // Benign error during BGP peer teardown in ACTIVE state
 
 	// warnings
 	cantEnableJIT                    stringMatcher = "bpf_jit_enable: no such file or directory"                               // Because we run tests in Kind.
@@ -633,8 +634,10 @@ var (
 	gobgpFailedToSend = regexMatcher{regexp.MustCompile(`osrg/gobgp/v4/pkg/server.*msg="failed to send".*(use of closed network connection|broken pipe)`)}
 	// For https://github.com/cilium/cilium/issues/39370: Fixed only in cilium version >= 1.18
 	linkNotFound = regexMatcher{regexp.MustCompile(`retrieving device .+\: Link not found`)}
-	// Client-go counterpart of failedToRetrieveLock, scoped to the cancelled read. cf. https://github.com/cilium/cilium/issues/45426
-	leaderElectionReadTimeout = regexMatcher{regexp.MustCompile(`Unexpected error when reading response body.*(request canceled|context deadline exceeded) \(Client\.Timeout or context cancellation while reading body\)`)}
+	// This error originates from vendored client-go code, and it happens when the request is canceled, e.g., in the context of leader election.
+	readingResponseBodyError = regexMatcher{regexp.MustCompile(`Unexpected error when reading response body.*(request canceled|context deadline exceeded|context canceled)`)}
 	// it can happen under memory pressure if the Kernel cannot allocate a new chunk of memory at that point in time, and it is automatically retried.
 	lbMapCannotAllocateMemory = regexMatcher{regexp.MustCompile(`Updating frontend failed.*update: cannot allocate memory`)}
+	// Similarly to the toleration above, it can happen under memory pressure if the Kernel cannot allocate a new chunk of memory at that point in time.
+	getProgInfoCannotAllocateMemory = regexMatcher{regexp.MustCompile(`retrieving BPF maps & programs usage.*get program info: cannot allocate memory`)}
 )

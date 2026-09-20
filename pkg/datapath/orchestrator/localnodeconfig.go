@@ -81,9 +81,18 @@ func newLocalNodeConfig(
 		auxPrefixes = append(auxPrefixes, ip.PrefixFrom(daemon.IPv6ServiceRange))
 	}
 
-	nativeDevices, devsWatch := tables.SelectedDevices(devices, txn)
+	nativeDevices, _ := tables.SelectedDevices(devices, txn)
+	// Explicitly bypassed VLANs may be represented by VLAN devices that are not
+	// selected for datapath attachment. Watch all devices so adding or removing
+	// such a VLAN causes the filter configuration to be recalculated.
+	_, devsWatch := devices.AllWatch(txn)
 	nodeAddrsIter, addrsWatch := nodeAddresses.AllWatch(txn)
 	mtuRoute, _, mtuWatch, _ := mtuTbl.GetWatch(txn, mtu.MTURouteByPrefix(mtu.DefaultPrefixV4))
+
+	vlanFilter, err := resolveVLANFilters(nativeDevices, daemon.VLANBPFBypass)
+	if err != nil {
+		return config.Config{}, devsWatch, fmt.Errorf("resolving VLAN filters: %w", err)
+	}
 
 	watchChans := []<-chan struct{}{devsWatch, addrsWatch, mtuWatch}
 	var directRoutingDevice *tables.Device
@@ -227,8 +236,8 @@ func newLocalNodeConfig(
 		EnableIPSec:                  ipsecCfg.Enabled(),
 		EncryptNode:                  daemon.EncryptNode,
 		EnableConntrackAccounting:    daemon.BPFConntrackAccounting,
-		IPv4PodSubnets:               cslices.Map(daemon.IPv4PodSubnets, ip.PrefixFrom),
-		IPv6PodSubnets:               cslices.Map(daemon.IPv6PodSubnets, ip.PrefixFrom),
+		IPv4PodSubnets:               podSubnets(cslices.Map(daemon.IPv4PodSubnets, ip.PrefixFrom), localNode.Local.IPv4PodSubnets),
+		IPv6PodSubnets:               podSubnets(cslices.Map(daemon.IPv6PodSubnets, ip.PrefixFrom), localNode.Local.IPv6PodSubnets),
 		XDPConfig:                    xdpConfig,
 		LBConfig:                     lbConfig,
 		KPRConfig:                    kprCfg,
@@ -236,8 +245,20 @@ func newLocalNodeConfig(
 		MaglevConfig:                 maglevConfig,
 		DatapathIsLayer2:             connectorConfig.GetOperationalMode().IsLayer2(),
 		DatapathIsNetkit:             connectorConfig.GetOperationalMode().IsNetkit(),
+		VLANFilter:                   vlanFilter,
 		Plugins:                      plugins,
 	}, common.MergeChannels(watchChans...), nil
+}
+
+// podSubnets returns the explicitly configured pod subnets, falling back to
+// the ones derived from the cloud provider. The derived subnets are empty for
+// every IPAM mode that does not allocate pod IPs out of cloud provider
+// subnets, so no mode check is needed here.
+func podSubnets(configured, derived []ip.Prefix) []ip.Prefix {
+	if len(configured) > 0 {
+		return configured
+	}
+	return derived
 }
 
 // getEphemeralPortRangeMin returns the minimum ephemeral port from
