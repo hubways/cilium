@@ -8,16 +8,16 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.23.1
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.14.1
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute/v8 v8.3.0
-	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork/v11 v11.0.0
+	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork/v12 v12.0.0
 	github.com/aliyun/alibaba-cloud-sdk-go v1.63.107
 	github.com/aws/aws-sdk-go-v2 v1.47.0
 	github.com/aws/aws-sdk-go-v2/config v1.33.5
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.20.0
-	github.com/aws/aws-sdk-go-v2/service/ec2 v1.332.0
-	github.com/aws/smithy-go v1.28.1
+	github.com/aws/aws-sdk-go-v2/service/ec2 v1.335.0
+	github.com/aws/smithy-go v1.28.2
 	github.com/blang/semver/v4 v4.0.0
 	github.com/cespare/xxhash/v2 v2.3.0
-	github.com/cilium/charts v0.0.0-20260818100304-fca0bb45200a
+	github.com/cilium/charts v0.0.0-20260917212735-5239069e5970
 	github.com/cilium/coverbee v0.3.3-0.20240723084546-664438750fce
 	github.com/cilium/dns v1.1.51-0.20240603182237-af788769786a
 	github.com/cilium/ebpf v0.22.0
@@ -25,7 +25,7 @@ require (
 	github.com/cilium/fake v0.7.0
 	github.com/cilium/hive v1.0.5
 	github.com/cilium/lumberjack/v2 v2.4.2
-	github.com/cilium/proxy v0.0.0-20260701124752-9c14fdc485a1
+	github.com/cilium/proxy v0.0.0-20260918112658-e3b99dbc580d
 	github.com/cilium/statedb v0.9.2
 	github.com/cilium/stream v0.0.1
 	github.com/cilium/workerpool v1.4.0
@@ -96,7 +96,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	github.com/spf13/viper v1.21.0
-	github.com/spiffe/go-spiffe/v2 v2.8.1
+	github.com/spiffe/go-spiffe/v2 v2.8.2
 	github.com/spiffe/spire-api-sdk v1.15.3
 	github.com/stretchr/testify v1.12.1
 	github.com/tidwall/gjson v1.19.0
@@ -123,8 +123,8 @@ require (
 	golang.org/x/time v0.16.0
 	golang.org/x/tools v0.50.0
 	golang.zx2c4.com/wireguard/wgctrl v0.0.0-20241231184526-a9ab2273dd10
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260810153831-ec0a7760b754
-	google.golang.org/grpc v1.83.2
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260921155816-b14227669459
+	google.golang.org/grpc v1.84.0
 	google.golang.org/protobuf v1.36.12
 	helm.sh/helm/v4 v4.3.0
 	k8s.io/api v0.37.0
@@ -203,7 +203,7 @@ require (
 	github.com/gaissmai/bart v0.26.1 // indirect
 	github.com/go-errors/errors v1.5.1 // indirect
 	github.com/go-gorp/gorp/v3 v3.1.0 // indirect
-	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
+	github.com/go-jose/go-jose/v4 v4.1.5 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-logr/zapr v1.3.0 // indirect
 	github.com/go-openapi/analysis v1.0.0 // indirect
@@ -308,7 +308,7 @@ require (
 	golang.org/x/telemetry v0.0.0-20260908163034-4bcc4b2ee518 // indirect
 	golang.zx2c4.com/wireguard v0.0.0-20231211153847-12269c276173 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20260526163538-3dc84a4a5aaa // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20260831171406-18b4a7587f8a // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect

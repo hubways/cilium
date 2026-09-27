@@ -47,7 +47,7 @@ type Cache interface {
 
 	GetVersion(resources *xds.Resources) string
 	GenerateSnapshot(resources *xds.Resources, logger *slog.Logger) (cache.ResourceSnapshot, error)
-	UpdateSnapshot(ctx context.Context, nodeID string, newSnapshot cache.ResourceSnapshot, wg *completion.WaitGroup, updatedTypeURLS map[string]func(err error), revertFunc func()) error
+	UpdateSnapshot(ctx context.Context, nodeID string, newSnapshot cache.ResourceSnapshot, wg *completion.WaitGroup, updatedTypeURLS map[string]func(err error), revertFuncs map[string]func()) error
 	SetResources(nodeID string, resources *xds.Resources)
 	GetAllResources(nodeID string) *xds.Resources
 	AreDifferentSnapshots(left, right cache.ResourceSnapshot) bool
@@ -210,14 +210,18 @@ func snapshotCacheLogger(logger *slog.Logger) controlplanelog.Logger {
 		logger = slog.Default()
 	}
 	logger = logger.With(logFieldComponent, "go-control-plane-snapshot-cache")
-	return controlplanelog.LoggerFuncs{
-		DebugFunc: func(format string, args ...any) {
+
+	// Empty logger for disabled debug level
+	debugLogger := func(string, ...any) {}
+	if logger.Enabled(context.Background(), slog.LevelDebug) {
+		debugLogger = func(format string, args ...any) {
 			logger.Debug(fmt.Sprintf(format, args...))
-		},
-		InfoFunc: func(format string, args ...any) {
-			// Consider using Debug here if Info is too chatty
-			logger.Info(fmt.Sprintf(format, args...))
-		},
+		}
+	}
+
+	return controlplanelog.LoggerFuncs{
+		DebugFunc: debugLogger,
+		InfoFunc:  debugLogger, // Punt info to debug to calm the logs
 		WarnFunc: func(format string, args ...any) {
 			logger.Warn(fmt.Sprintf(format, args...))
 		},
@@ -627,7 +631,7 @@ func (c *cacheImpl) SetResources(nodeID string, resources *xds.Resources) {
 	c.resourcesInSnapshot[nodeID] = resources
 }
 
-func (c *cacheImpl) UpdateSnapshot(ctx context.Context, nodeID string, newSnapshot cache.ResourceSnapshot, wg *completion.WaitGroup, updatedTypeURLS map[string]func(err error), revertFunc func()) error {
+func (c *cacheImpl) UpdateSnapshot(ctx context.Context, nodeID string, newSnapshot cache.ResourceSnapshot, wg *completion.WaitGroup, updatedTypeURLS map[string]func(err error), revertFuncs map[string]func()) error {
 	type immediateCompletion struct {
 		comp                      *completion.Completion
 		typeURL                   string
@@ -654,7 +658,7 @@ func (c *cacheImpl) UpdateSnapshot(ctx context.Context, nodeID string, newSnapsh
 				continue
 			}
 			versionChanged := oldSnapshot == nil || oldSnapshot.GetVersion(typeURL) != version
-			registered, err := c.completionCbs.AddTypeVersionCompletion(comp, version, typeURL, nodeID, versionChanged, revertFunc)
+			registered, err := c.completionCbs.AddTypeVersionCompletion(comp, version, typeURL, nodeID, versionChanged, revertFuncs[typeURL])
 			if !registered {
 				immediateCompletions = append(immediateCompletions, immediateCompletion{
 					comp:                      comp,
@@ -685,7 +689,7 @@ func (c *cacheImpl) UpdateSnapshot(ctx context.Context, nodeID string, newSnapsh
 		}
 		version := newSnapshot.GetVersion(typeURL)
 		versionChanged := oldSnapshot == nil || oldSnapshot.GetVersion(typeURL) != version
-		marker, completeUnsent := c.completionCbs.AddTypeVersionMarker(version, typeURL, nodeID, versionChanged, revertFunc)
+		marker, completeUnsent := c.completionCbs.AddTypeVersionMarker(version, typeURL, nodeID, versionChanged, revertFuncs[typeURL])
 		if marker != nil {
 			markers = append(markers, marker)
 		}
