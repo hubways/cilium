@@ -23,6 +23,7 @@
 #include "lib/sock.h"
 #include "lib/trace_sock.h"
 #include "lib/health_check.h"
+#include "lib/socket_lb.h"
 
 #define SYS_REJECT	0
 #define SYS_PROCEED	1
@@ -327,7 +328,7 @@ static __always_inline int __sock4_xlate_fwd(struct bpf_sock_addr *ctx,
 	struct lb4_backend l7backend;
 #endif
 
-	if (is_defined(ENABLE_SOCKET_LB_HOST_ONLY) && !in_hostns)
+	if (CONFIG(socket_lb).hostns_only && !in_hostns)
 		return -ENXIO;
 
 	if (!udp_only && !sock_proto_enabled(protocol))
@@ -658,14 +659,12 @@ int cil_sock4_recvmsg(struct bpf_sock_addr *ctx)
 	return SYS_PROCEED;
 }
 
-#ifdef ENABLE_SOCKET_LB_PEER
 __section("cgroup/getpeername4")
 int cil_sock4_getpeername(struct bpf_sock_addr *ctx)
 {
 	__sock4_xlate_rev(ctx, ctx);
 	return SYS_PROCEED;
 }
-#endif /* ENABLE_SOCKET_LB_PEER */
 
 #endif /* ENABLE_IPV4 */
 
@@ -1068,7 +1067,7 @@ static __always_inline int __sock6_xlate_fwd(struct bpf_sock_addr *ctx,
 	struct lb6_backend l7backend;
 #endif
 
-	if (is_defined(ENABLE_SOCKET_LB_HOST_ONLY) && !in_hostns)
+	if (CONFIG(socket_lb).hostns_only && !in_hostns)
 		return -ENXIO;
 
 	if (!udp_only && !sock_proto_enabled(protocol))
@@ -1295,14 +1294,12 @@ int cil_sock6_recvmsg(struct bpf_sock_addr *ctx)
 	return SYS_PROCEED;
 }
 
-#ifdef ENABLE_SOCKET_LB_PEER
 __section("cgroup/getpeername6")
 int cil_sock6_getpeername(struct bpf_sock_addr *ctx)
 {
 	__sock6_xlate_rev(ctx);
 	return SYS_PROCEED;
 }
-#endif /* ENABLE_SOCKET_LB_PEER */
 
 __section("cgroup/sock_release")
 int cil_sock_release(struct bpf_sock *ctx __maybe_unused)

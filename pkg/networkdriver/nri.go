@@ -13,10 +13,12 @@ import (
 	"github.com/cilium/hive/job"
 	"github.com/containerd/nri/pkg/api"
 	"github.com/containerd/nri/pkg/stub"
+	"github.com/spf13/afero"
 	"github.com/vishvananda/netlink"
 	kube_types "k8s.io/apimachinery/pkg/types"
 
 	"github.com/cilium/cilium/pkg/datapath/linux/safenetlink"
+	"github.com/cilium/cilium/pkg/datapath/linux/sysctl"
 	"github.com/cilium/cilium/pkg/defaults"
 	"github.com/cilium/cilium/pkg/logging/logfields"
 	"github.com/cilium/cilium/pkg/netns"
@@ -52,7 +54,8 @@ func (driver *Driver) startNRI(ctx context.Context) error {
 
 	driver.nriPlugin = nriStub
 
-	driver.jg.Add(job.OneShot("networkdriver-nri-plugin-run", func(ctx context.Context, health cell.Health) error {
+	driver.jg.Add(job.OneShot("network-driver-nri-plugin-run", func(ctx context.Context, health cell.Health) error {
+		driver.logger.InfoContext(ctx, "starting NRI plugin")
 		for {
 			if err := driver.nriPlugin.Run(ctx); err != nil {
 				driver.logger.ErrorContext(
@@ -63,7 +66,7 @@ func (driver *Driver) startNRI(ctx context.Context) error {
 
 				health.Degraded("Network Driver NRI plugin failed", err)
 			} else {
-				health.OK("Network Driver NRI plugin registraction successful")
+				health.OK("Network Driver NRI plugin registration successful")
 			}
 			select {
 			case <-ctx.Done():
@@ -85,7 +88,7 @@ func (driver *Driver) startNRI(ctx context.Context) error {
 // reconstructed from a durable source rather than persisted to disk. We request no
 // container updates.
 func (driver *Driver) Synchronize(ctx context.Context, pods []*api.PodSandbox, _ []*api.Container) ([]*api.ContainerUpdate, error) {
-	err := driver.withLock(func() error {
+	driver.withLockNoErr(func() {
 		n := 0
 		for _, pod := range pods {
 			if driver.rememberNetworkNamespace(pod) != "" {
@@ -95,10 +98,8 @@ func (driver *Driver) Synchronize(ctx context.Context, pods []*api.PodSandbox, _
 		driver.logger.DebugContext(ctx, "NRI Synchronize: cached pod network namespaces",
 			logfields.Count, n,
 		)
-		return nil
 	})
-
-	return nil, err
+	return nil, nil
 }
 
 // RunPodSandbox is called by the container runtime when a pod sandbox is started.
@@ -202,6 +203,10 @@ func (driver *Driver) RunPodSandbox(ctx context.Context, podSandbox *api.PodSand
 
 				if err := netlink.LinkSetUp(l); err != nil {
 					return err
+				}
+
+				if err := driver.configureSysctl(l, a.Config); err != nil {
+					return fmt.Errorf("failed to configure sysctl for device %s: %w", l.Attrs().Name, err)
 				}
 
 				return nil
@@ -380,6 +385,18 @@ func configureIfName(l netlink.Link, newIfName string) (netlink.Link, error) {
 	}
 
 	return l, nil
+}
+
+// configureSysctl applies the device config's interface-scoped sysctl
+// settings inside the current (pod) netns. Must run after the interface has
+// its final pod-facing name. Per-netns sysctls are torn down with the
+// namespace, so StopPodSandbox has no corresponding revert.
+func (driver *Driver) configureSysctl(l netlink.Link, cfg types.DeviceConfig) error {
+	settings := buildSysctlSettings(cfg, l.Attrs().Name)
+	if len(settings) == 0 {
+		return nil
+	}
+	return sysctl.NewDirectSysctl(afero.NewOsFs(), driver.hostProcPath).ApplySettings(settings)
 }
 
 // validateInterfaceNames checks if a pod's set of allocated devices

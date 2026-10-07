@@ -33,7 +33,7 @@
 #endif
 
 #if defined(ENABLE_EGRESS_GATEWAY)
-#define ENABLE_EGRESS_GATEWAY_COMMON
+#define ENABLE_EGRESS_GATEWAY_COMMON 1
 #endif
 
 /* TUNNEL_MODE needs the encapsulation helpers guarded by HAVE_ENCAP. */
@@ -354,21 +354,6 @@ struct lb4_reverse_nat {
 	__be32 address;
 	__be16 port;
 } __packed;
-
-struct lpm_v4_key {
-	struct bpf_lpm_trie_key lpm;
-	__u8 addr[4];
-};
-
-struct lpm_v6_key {
-	struct bpf_lpm_trie_key lpm;
-	__u8 addr[16];
-};
-
-struct lpm_val {
-	/* Just dummy for now. */
-	__u8 flags;
-};
 
 /* Older kernels don't support the larger tunnel key structure and we don't
  * need it since we only want to retrieve the tunnel ID anyway.

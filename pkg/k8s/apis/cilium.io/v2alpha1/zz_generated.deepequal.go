@@ -1756,6 +1756,13 @@ func (in *CoreCiliumEndpoint) DeepEqual(other *CoreCiliumEndpoint) bool {
 	if in.ServiceAccount != other.ServiceAccount {
 		return false
 	}
+	if (in.Workload == nil) != (other.Workload == nil) {
+		return false
+	} else if in.Workload != nil {
+		if !in.Workload.DeepEqual(other.Workload) {
+			return false
+		}
+	}
 
 	return true
 }
@@ -2075,6 +2082,13 @@ func (in *ResourceIPPoolSpec) DeepEqual(other *ResourceIPPoolSpec) bool {
 		if !in.IPv6.DeepEqual(other.IPv6) {
 			return false
 		}
+	}
+
+	if in.AllowFirstIP != other.AllowFirstIP {
+		return false
+	}
+	if in.AllowLastIP != other.AllowLastIP {
+		return false
 	}
 
 	return true

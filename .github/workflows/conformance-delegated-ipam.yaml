@@ -93,6 +93,10 @@ jobs:
         ipFamily: ["ipv4", "dual"]
     steps:
       - name: Set commit status to pending
+        # commit-status-start does not re-run, so this is only needed on a re-run. It's ok
+        # to continue on error since the check is reported at the end of the test.
+        if: ${{ github.run_attempt != '1' }}
+        continue-on-error: true
         uses: cilium/actions/set-commit-status@687b48a0547e534dd7270d5069a5ab7967c0e907 # main
         with:
           sha: ${{ inputs.SHA || github.sha }}
@@ -255,6 +259,10 @@ jobs:
             ipFamily: "$ipFamily"
             podSubnet: "$podSubnet"
             serviceSubnet: "$serviceSubnet"
+          containerdConfigPatches:
+            - |
+              [plugins."io.containerd.grpc.v1.cri"]
+                image_pull_progress_timeout = "60s"
           EOF
 
       # Warning: since this is a privileged workflow, subsequent workflow job

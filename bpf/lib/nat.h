@@ -23,6 +23,7 @@
 #include "eps.h"
 #include "icmp.h"
 #include "icmp6.h"
+#include "lpm.h"
 #include "nat_46x64.h"
 #include "signal.h"
 #include "subnet.h"
@@ -579,11 +580,9 @@ snat_v4_nat_can_skip(const struct ipv4_nat_target *target,
 		     const struct ipv4_ct_tuple *tuple)
 {
 	__u16 sport = bpf_ntohs(tuple->sport);
-
-#if defined(ENABLE_EGRESS_GATEWAY_COMMON) && defined(IS_BPF_HOST)
-	if (target->egress_gateway)
+	if (is_defined(ENABLE_EGRESS_GATEWAY_COMMON) && is_defined(IS_BPF_HOST) &&
+	    target->egress_gateway)
 		return false;
-#endif
 
 	return (!target->from_local_endpoint && !is_port_in_nat_range(sport));
 }
@@ -687,10 +686,9 @@ __snat_v4_needs_masquerade(struct __ctx_buff *ctx, struct ipv4_ct_tuple *tuple,
 	 * The destination may be in the SNAT exclusion CIDR but regardless of
 	 * that we always want to SNAT a packet if it's matched by an egress NAT policy.
 	 */
-#if defined(ENABLE_EGRESS_GATEWAY_COMMON)
-	if (egress_gw_snat_needed_hook(ctx, tuple->saddr, tuple->daddr,
-				       &target->addr, &target->ifindex,
-				       from_host)) {
+	if (is_defined(ENABLE_EGRESS_GATEWAY_COMMON) &&
+	    egress_gw_snat_needed_hook(ctx, tuple->saddr, tuple->daddr, &target->addr,
+				       &target->ifindex, from_host)) {
 		if (target->addr == EGRESS_GATEWAY_NO_EGRESS_IP)
 			return DROP_NO_EGRESS_IP;
 
@@ -704,7 +702,6 @@ __snat_v4_needs_masquerade(struct __ctx_buff *ctx, struct ipv4_ct_tuple *tuple,
 
 		return NAT_NEEDED;
 	}
-#endif
 
 	/* To prevent aliasing with masqueraded connections,
 	 * we need to track all host connections that use config
@@ -737,16 +734,15 @@ __snat_v4_needs_masquerade(struct __ctx_buff *ctx, struct ipv4_ct_tuple *tuple,
 		return NAT_PUNT_TO_STACK;
 
 	/* Do not SNAT if dst belongs to any ip-masq-agent subnet. */
-#ifdef ENABLE_IP_MASQ_AGENT_IPV4
-	{
+	if (CONFIG(enable_ip_masq_agent_ipv4)) {
 		struct lpm_v4_key pfx;
 
 		pfx.lpm.prefixlen = 32;
-		memcpy(pfx.lpm.data, &tuple->daddr, sizeof(pfx.addr));
+		pfx.addr = tuple->daddr;
+
 		if (map_lookup_elem(&cilium_ipmasq_v4, &pfx))
 			return NAT_PUNT_TO_STACK;
 	}
-#endif
 
 	/* Masquerading for pod-to-remote-node traffic depends on the
 	 * datapath configuration (native vs overlay routing):
@@ -1687,10 +1683,9 @@ snat_v6_nat_can_skip(const struct ipv6_nat_target *target,
 {
 	__u16 sport = bpf_ntohs(tuple->sport);
 
-#if defined(ENABLE_EGRESS_GATEWAY_COMMON) && defined(IS_BPF_HOST)
-	if (target->egress_gateway)
+	if (is_defined(ENABLE_EGRESS_GATEWAY_COMMON) && is_defined(IS_BPF_HOST) &&
+	    target->egress_gateway)
 		return false;
-#endif
 
 	return (!target->from_local_endpoint && !is_port_in_nat_range(sport));
 }
@@ -1761,8 +1756,8 @@ __snat_v6_needs_masquerade(struct __ctx_buff *ctx, struct ipv6_ct_tuple *tuple,
 	}
 
 /* Check if the packet matches an egress NAT policy and so needs to be SNAT'ed. */
-#if defined(ENABLE_EGRESS_GATEWAY_COMMON)
-	if (egress_gw_snat_needed_hook_v6(&tuple->saddr, &tuple->daddr, &target->addr,
+	if (is_defined(ENABLE_EGRESS_GATEWAY_COMMON) &&
+	    egress_gw_snat_needed_hook_v6(&tuple->saddr, &tuple->daddr, &target->addr,
 					  &target->ifindex)) {
 		if (ipv6_addr_equals(&target->addr, &EGRESS_GATEWAY_NO_EGRESS_IP_V6))
 			return DROP_NO_EGRESS_IP;
@@ -1777,7 +1772,6 @@ __snat_v6_needs_masquerade(struct __ctx_buff *ctx, struct ipv6_ct_tuple *tuple,
 
 		return NAT_NEEDED;
 	}
-#endif
 
 	if (CONFIG(ipv6_snat_exclusion).enabled) {
 		union v6addr excl_cidr = CONFIG(ipv6_snat_exclusion).dst_addr;
@@ -1798,14 +1792,8 @@ __snat_v6_needs_masquerade(struct __ctx_buff *ctx, struct ipv6_ct_tuple *tuple,
 		struct lpm_v6_key pfx __align_stack_8;
 
 		pfx.lpm.prefixlen = sizeof(pfx.addr) * 8;
-		/* pfx.lpm is aligned on 8 bytes on the stack, but pfx.lpm.data
-		 * is on 4 (after pfx.lpm.prefixlen). As the CT tuple is on the
-		 * stack as well, we need to copy piece-by-piece.
-		 */
-		memcpy(pfx.lpm.data, &tuple->daddr.p1, 4);
-		memcpy(pfx.lpm.data + 4, &tuple->daddr.p2, 4);
-		memcpy(pfx.lpm.data + 8, &tuple->daddr.p3, 4);
-		memcpy(pfx.lpm.data + 12, &tuple->daddr.p4, 4);
+		ipv6_addr_copy_unaligned((union v6addr *)&pfx.addr, &tuple->daddr);
+
 		if (map_lookup_elem(&cilium_ipmasq_v6, &pfx))
 			return NAT_PUNT_TO_STACK;
 	}

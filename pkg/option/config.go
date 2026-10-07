@@ -374,11 +374,6 @@ const (
 	// previously active connections with expired DNS lookups are still considered alive
 	ToFQDNsIdleConnectionGracePeriod = "tofqdns-idle-connection-grace-period"
 
-	// ToFQDNsPreCache is a path to a file with DNS cache data to insert into the
-	// global cache on startup.
-	// The file is not re-read after agent start.
-	ToFQDNsPreCache = "tofqdns-pre-cache"
-
 	// DNSProxyConcurrencyLimit limits parallel processing of DNS messages in
 	// DNS proxy at any given point in time.
 	DNSProxyConcurrencyLimit = "dnsproxy-concurrency-limit"
@@ -882,11 +877,6 @@ const (
 
 	// EnableICMPRules enables ICMP-based rule support for Cilium Network Policies.
 	EnableICMPRules = "enable-icmp-rules"
-
-	// BypassIPAvailabilityUponRestore bypasses the IP availability error
-	// within IPAM upon endpoint restore and allows the use of the restored IP
-	// regardless of whether it's available in the pool.
-	BypassIPAvailabilityUponRestore = "bypass-ip-availability-upon-restore"
 
 	// EnableVTEP enables cilium VXLAN VTEP integration
 	EnableVTEP = "enable-vtep"
@@ -1481,9 +1471,6 @@ type DaemonConfig struct {
 	// Useful for heavy but repeated FQDN MatchName or MatchPattern use.
 	FQDNRegexCompileLRUSize uint
 
-	// Path to a file with DNS cache data to preload on startup
-	ToFQDNsPreCache string
-
 	// DNSProxyConcurrencyLimit limits parallel processing of DNS messages in
 	// DNS proxy at any given point in time.
 	DNSProxyConcurrencyLimit int
@@ -1730,11 +1717,6 @@ type DaemonConfig struct {
 
 	// EnableICMPRules enables ICMP-based rule support for Cilium Network Policies.
 	EnableICMPRules bool
-
-	// BypassIPAvailabilityUponRestore bypasses the IP availability error
-	// within IPAM upon endpoint restore and allows the use of the restored IP
-	// regardless of whether it's available in the pool.
-	BypassIPAvailabilityUponRestore bool
 
 	// EnableVTEP enable Cilium VXLAN VTEP integration
 	EnableVTEP bool
@@ -2664,7 +2646,6 @@ func (c *DaemonConfig) Populate(logger *slog.Logger, vp *viper.Viper) {
 		c.ToFQDNsMinTTL = defaults.ToFQDNsMinTTL
 	}
 	c.ToFQDNsProxyPort = vp.GetInt(ToFQDNsProxyPort)
-	c.ToFQDNsPreCache = vp.GetString(ToFQDNsPreCache)
 	c.ToFQDNsIdleConnectionGracePeriod = vp.GetDuration(ToFQDNsIdleConnectionGracePeriod)
 	c.FQDNProxyResponseMaxDelay = vp.GetDuration(FQDNProxyResponseMaxDelay)
 	c.DNSProxyConcurrencyLimit = vp.GetInt(DNSProxyConcurrencyLimit)
@@ -2821,7 +2802,6 @@ func (c *DaemonConfig) Populate(logger *slog.Logger, vp *viper.Viper) {
 	c.MaxControllerInterval = vp.GetUint(MaxCtrlIntervalName)
 	c.EndpointQueueSize = sanitizeIntParam(logger, vp, EndpointQueueSize, defaults.EndpointQueueSize)
 	c.EnableICMPRules = vp.GetBool(EnableICMPRules)
-	c.BypassIPAvailabilityUponRestore = vp.GetBool(BypassIPAvailabilityUponRestore)
 
 	// VTEP integration enable option
 	c.EnableVTEP = vp.GetBool(EnableVTEP)

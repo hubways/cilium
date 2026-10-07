@@ -2250,6 +2250,11 @@ func (in *CoreCiliumEndpoint) DeepCopyInto(out *CoreCiliumEndpoint) {
 			}
 		}
 	}
+	if in.Workload != nil {
+		in, out := &in.Workload, &out.Workload
+		*out = new(v2.EndpointWorkload)
+		**out = **in
+	}
 	return
 }
 
@@ -2524,12 +2529,12 @@ func (in *ResourceIPPoolSpec) DeepCopyInto(out *ResourceIPPoolSpec) {
 	*out = *in
 	if in.IPv4 != nil {
 		in, out := &in.IPv4, &out.IPv4
-		*out = new(IPv4PoolSpec)
+		*out = new(v2.IPv4PoolSpec)
 		(*in).DeepCopyInto(*out)
 	}
 	if in.IPv6 != nil {
 		in, out := &in.IPv6, &out.IPv6
-		*out = new(IPv6PoolSpec)
+		*out = new(v2.IPv6PoolSpec)
 		(*in).DeepCopyInto(*out)
 	}
 	return

@@ -1268,10 +1268,6 @@
      - Pre-allocate ToFQDN identities. This reduces DNS proxy tail latency, at the potential cost of some unnecessary policymap entries. Disable this if you have a large (200+) number of unique ToFQDN selectors.
      - bool
      - ``true``
-   * - :spelling:ignore:`dnsProxy.preCache`
-     - DNS cache data at this path is preloaded on agent startup. (deprecated: will be removed in v1.21)
-     - string
-     - ``""``
    * - :spelling:ignore:`dnsProxy.proxyPort`
      - Global port on which the in-agent DNS proxy should listen. Default 0 is a OS-assigned port.
      - int
@@ -2573,7 +2569,7 @@
      - string
      - ``"helm"``
    * - :spelling:ignore:`hubble.tls.auto.privateKey`
-     - Private key options. These include the key algorithm and size, the used encoding and the rotation policy used when hubble.tls.auto.method=certmanager. https://cert-manager.io/docs/reference/api-docs/#cert-manager.io/v1.CertificatePrivateKey
+     - Private key options. These include the key algorithm and size, the used encoding and the rotation policy used when hubble.tls.auto.method=certmanager. ``rotationPolicy`` defaults to ``Always`` unless set here. https://cert-manager.io/docs/reference/api-docs/#cert-manager.io/v1.CertificatePrivateKey
      - object
      - ``{}``
    * - :spelling:ignore:`hubble.tls.auto.schedule`
@@ -3367,7 +3363,7 @@
    * - :spelling:ignore:`nodeinit.image`
      - node-init image.
      - object
-     - ``{"digest":"sha256:f99e2beda7324e93ba04d6240d9626a6b9ab023d7d56e3b029d3d9c823ce63ef","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/startup-script","tag":"1782916218-36ae25f","useDigest":true}``
+     - ``{"digest":"sha256:e6d4d88b5958069f4528b02f0168740cfd074850b383ad1b617c1347e6a889ea","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/startup-script","tag":"1790907923-29f9511","useDigest":true}``
    * - :spelling:ignore:`nodeinit.minReadySeconds`
      - Minimum number of seconds for which a newly created node-init pod should be ready before it is considered available.
      - int
