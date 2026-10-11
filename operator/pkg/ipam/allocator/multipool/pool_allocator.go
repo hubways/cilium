@@ -242,7 +242,7 @@ func (p *PoolAllocator) updateCIDRSets(isV6 bool, cidrSets []cidralloc.CIDRAlloc
 		if oldCIDR == nil {
 			continue
 		}
-		if exists := slices.ContainsFunc(newCIDRs, oldCIDR.IsClusterCIDR); exists {
+		if slices.ContainsFunc(newCIDRs, oldCIDR.IsClusterCIDR) {
 			continue
 		}
 
@@ -297,20 +297,49 @@ func cidrPrefixes(cidrs []poolCIDRConfig) []netip.Prefix {
 	return prefixes
 }
 
-func setReservedRanges(allocators []cidralloc.CIDRAllocator, cidrs []poolCIDRConfig) error {
+type rangesReservation struct {
+	allocator cidralloc.CIDRAllocator
+	ranges    cidralloc.RangesToReserve
+}
+
+// computeRangesToReserve computes, for each allocator, the ranges that must be reserved.
+func computeRangesToReserve(allocators []cidralloc.CIDRAllocator, cidrs []poolCIDRConfig) ([]rangesReservation, error) {
 	reservedRanges := make(map[netip.Prefix][]netipx.IPRange, len(cidrs))
 	for i := range cidrs {
 		cidrConfig := &cidrs[i]
 		reservedRanges[cidrConfig.cidr] = cidrConfig.reservedRanges
 	}
 
+	allocatorsRangesToReserve := make([]rangesReservation, 0, len(reservedRanges))
 	for i := range allocators {
 		prefix := allocators[i].Prefix()
-		if err := allocators[i].SetReservedRanges(reservedRanges[prefix]); err != nil {
-			return fmt.Errorf("failed to set reserved ranges for CIDR %s: %w", prefix, err)
+		rangesToReserve, err := allocators[i].ComputeRangesToReserve(reservedRanges[prefix])
+		if err != nil {
+			return nil, fmt.Errorf("failed to compute ranges to reserve for CIDR %s: %w", prefix, err)
 		}
+
+		allocatorsRangesToReserve = append(allocatorsRangesToReserve, rangesReservation{
+			allocator: allocators[i],
+			ranges:    rangesToReserve,
+		})
 	}
 
+	return allocatorsRangesToReserve, nil
+}
+
+func validateExistingPool(pool cidrPool, ipv4MaskSize, ipv6MaskSize int, options poolOptions) error {
+	if pool.v4MaskSize != ipv4MaskSize {
+		return fmt.Errorf("cannot change IPv4 mask size")
+	}
+	if pool.v6MaskSize != ipv6MaskSize {
+		return fmt.Errorf("cannot change IPv6 mask size")
+	}
+	if pool.allowFirstIP != options.allowFirstIP {
+		return fmt.Errorf("cannot change allowFirstIP")
+	}
+	if pool.allowLastIP != options.allowLastIP {
+		return fmt.Errorf("cannot change allowLastIP")
+	}
 	return nil
 }
 
@@ -323,46 +352,45 @@ func (p *PoolAllocator) UpsertPool(poolName string, ipv4CIDRs []poolCIDRConfig, 
 		opt(&options)
 	}
 
+	var v4Prev []cidralloc.CIDRAllocator
+	var v6Prev []cidralloc.CIDRAllocator
+
 	pool, exists := p.pools[poolName]
-	if exists && ipv4MaskSize != pool.v4MaskSize {
-		return fmt.Errorf("cannot change IPv4 mask size in existing pool %q", poolName)
-	}
-	if exists && ipv6MaskSize != pool.v6MaskSize {
-		return fmt.Errorf("cannot change IPv6 mask size in existing pool %q", poolName)
-	}
-	if exists && options.allowFirstIP != pool.allowFirstIP {
-		return fmt.Errorf("cannot change allowFirstIP in existing pool %q", poolName)
-	}
-	if exists && options.allowLastIP != pool.allowLastIP {
-		return fmt.Errorf("cannot change allowLastIP in existing pool %q", poolName)
+	if exists {
+		if err := validateExistingPool(pool, ipv4MaskSize, ipv6MaskSize, options); err != nil {
+			return fmt.Errorf("validation failed for existing pool %q: %w", poolName, err)
+		}
+		v4Prev = pool.v4
+		v6Prev = pool.v6
 	}
 
 	ipv4Prefixes := cidrPrefixes(ipv4CIDRs)
 	ipv6Prefixes := cidrPrefixes(ipv6CIDRs)
 
-	var v4Prev []cidralloc.CIDRAllocator
-	if exists {
-		v4Prev = pool.v4
-	}
 	v4, err := p.updateCIDRSets(false, v4Prev, ipv4Prefixes, ipv4MaskSize)
 	if err != nil {
 		return err
 	}
 
-	var v6Prev []cidralloc.CIDRAllocator
-	if exists {
-		v6Prev = pool.v6
-	}
 	v6, err := p.updateCIDRSets(true, v6Prev, ipv6Prefixes, ipv6MaskSize)
 	if err != nil {
 		return err
 	}
 
-	if err := setReservedRanges(v4, ipv4CIDRs); err != nil {
+	v4RangesToReserve, err := computeRangesToReserve(v4, ipv4CIDRs)
+	if err != nil {
 		return err
 	}
-	if err := setReservedRanges(v6, ipv6CIDRs); err != nil {
+	v6RangesToReserve, err := computeRangesToReserve(v6, ipv6CIDRs)
+	if err != nil {
 		return err
+	}
+
+	for _, rangesToReserve := range v4RangesToReserve {
+		rangesToReserve.allocator.SetReservedRanges(rangesToReserve.ranges)
+	}
+	for _, rangesToReserve := range v6RangesToReserve {
+		rangesToReserve.allocator.SetReservedRanges(rangesToReserve.ranges)
 	}
 
 	p.pools[poolName] = cidrPool{

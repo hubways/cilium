@@ -23,7 +23,6 @@ const (
 
 var (
 	specDebug = Option{
-		Define:      "DEBUG",
 		Description: "Enable debugging trace statements",
 	}
 
@@ -32,7 +31,6 @@ var (
 	}
 
 	specDebugPolicy = Option{
-		Define:      "POLICY_DEBUG",
 		Description: "Enable debugging trace statements for policy enforcement",
 	}
 

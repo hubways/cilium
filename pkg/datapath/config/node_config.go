@@ -26,6 +26,8 @@ type Node struct {
 	ClusterID uint32 `config:"cluster_id"`
 	// Number of bits of the identity reserved for the Cluster ID.
 	ClusterIDBits uint32 `config:"cluster_id_bits"`
+	// Enable debugging trace statements.
+	Debug bool `config:"debug"`
 	// Enable debugging trace statements for load balancer.
 	DebugLB bool `config:"debug_lb"`
 	// Index of the interface used to connect nodes in the cluster.
@@ -43,6 +45,8 @@ type Node struct {
 	EnableIPIPTermination bool `config:"enable_ipip_termination"`
 	// Enable ip-masq-agent for IPv4 traffic.
 	EnableIPMasqAgentIPv4 bool `config:"enable_ip_masq_agent_ipv4"`
+	// Enable ip-masq-agent for IPv6 traffic.
+	EnableIPMasqAgentIPv6 bool `config:"enable_ip_masq_agent_ipv6"`
 	// Enable setting identity mark for local traffic.
 	EnableIdentityMark bool `config:"enable_identity_mark"`
 	// Use jiffies (count of timer ticks since boot).
@@ -130,9 +134,9 @@ func NewNode() *Node {
 		cast[types.MACAddr]([]byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}),
 		0x0,
 		cast[types.MACAddr]([]byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}),
-		0x0, 0x8, false, 0x0, false, false, false, false, false, false,
-		false, false, false, false, false, false, 0x0, 0x0, false,
-		0x0, 0x0, 0x0, 0x0, cast[types.V4Addr]([]byte{0x0, 0x0, 0x0, 0x0}),
+		0x0, 0x8, false, false, 0x0, false, false, false, false, false,
+		false, false, false, false, false, false, false, false, 0x0,
+		0x0, false, 0x0, 0x0, 0x0, 0x0, cast[types.V4Addr]([]byte{0x0, 0x0, 0x0, 0x0}),
 		cast[types.V4Addr]([]byte{0x0, 0x0, 0x0, 0x0}),
 		cast[types.IPv4SNATExclusionPrefix]([]byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}),
 		cast[types.V6Addr]([]byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}),
