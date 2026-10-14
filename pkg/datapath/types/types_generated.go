@@ -121,6 +121,14 @@ type DropNotify struct {
 	IPTraceID  uint64
 }
 
+// DSRConfig is generated from the BPF C type dsr_config.
+type DSRConfig struct {
+	_                structs.HostLayout
+	Enable           bool
+	EnableICMPErrors bool
+	EnableByUser     bool
+}
+
 // EDTID is generated from the BPF C type edt_id.
 type EDTID struct {
 	_         structs.HostLayout

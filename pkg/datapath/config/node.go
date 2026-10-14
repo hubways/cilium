@@ -175,5 +175,14 @@ func NodeConfig(lnc *Config) Node {
 
 	node.EnableSCTP = option.Config.EnableSCTP
 
+	node.DSRCfg = types.DSRConfig{
+		Enable:           lnc.LBConfig.DSRConfig.Enable,
+		EnableICMPErrors: lnc.LBConfig.DSRConfig.EnableICMPErrors,
+		EnableByUser:     lnc.LBConfig.DSRConfig.EnableByUser,
+	}
+
+	node.EnableIPSec = lnc.EnableIPSec
+	node.EnableWireguard = lnc.EnableWireguard
+
 	return node
 }

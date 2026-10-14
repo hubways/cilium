@@ -63,11 +63,11 @@ concurrency:
 
 env:
   # renovate: datasource=github-releases depName=eksctl-io/eksctl
-  eksctl_version: v0.230.0
+  eksctl_version: v0.231.0
   # renovate: datasource=github-releases depName=kubernetes/kubernetes
   kubectl_version: v1.37.1
   # renovate: datasource=docker depName=google/cloud-sdk
-  gcloud_version: 587.0.0
+  gcloud_version: 588.0.0
 
   test_name: l7-perf
   cluster_name: ${{ github.run_id }}-${{ github.run_attempt }}
@@ -77,7 +77,7 @@ jobs:
   echo-inputs:
     if: ${{ github.event_name == 'workflow_dispatch' }}
     name: Echo Workflow Dispatch Inputs
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - name: Echo Workflow Dispatch Inputs
         run: |
@@ -85,7 +85,7 @@ jobs:
 
   commit-status-start:
     name: Commit Status Start
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - name: Set initial commit status
         uses: cilium/actions/set-commit-status@687b48a0547e534dd7270d5069a5ab7967c0e907 # main
@@ -104,7 +104,7 @@ jobs:
       pull-requests: read
       # To be able to set commit status
       statuses: write
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     name: Install and Perf Test
     timeout-minutes: 60
     strategy:
@@ -251,7 +251,7 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           # renovate: datasource=golang-version depName=go
-          go-version: 1.27.1
+          go-version: 1.27.2
 
       - name: Setup gcloud credentials
         uses: google-github-actions/auth@12060449e87204eca501a11f2f7f1483024afff0 # v3.0.0 + google-github-actions/auth#532
@@ -507,7 +507,7 @@ jobs:
 
       - name: Upload sysdump
         if: ${{ !success() && steps.install-cilium.outcome != 'skipped' && steps.install-cilium.outcome != 'cancelled' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: cilium-sysdump-${{ matrix.test_type }}-${{ github.run_attempt }}
           path: cilium-sysdump-final.zip

@@ -212,13 +212,6 @@ func (h *HeaderfileWriter) WriteNodeConfig(w io.Writer, cfg *config.Config) erro
 		cDefinesMap["DSR_ENCAP_GENEVE"] = fmt.Sprintf("%d", dsrEncapGeneve)
 		cDefinesMap["DSR_ENCAP_NONE"] = fmt.Sprintf("%d", dsrEncapNone)
 		if cfg.LBConfig.LoadBalancerUsesDSR() {
-			cDefinesMap["ENABLE_DSR"] = "1"
-			if option.Config.EnablePMTUDiscovery {
-				cDefinesMap["ENABLE_DSR_ICMP_ERRORS"] = "1"
-			}
-			if cfg.LBConfig.LBMode == loadbalancer.LBModeHybrid || cfg.LBConfig.LBModeAnnotation {
-				cDefinesMap["ENABLE_DSR_BYUSER"] = "1"
-			}
 			if cfg.LBConfig.DSRDispatch == loadbalancer.DSRDispatchOption {
 				cDefinesMap["DSR_ENCAP_MODE"] = fmt.Sprintf("%d", dsrEncapNone)
 			} else if cfg.LBConfig.DSRDispatch == loadbalancer.DSRDispatchIPIP {

@@ -405,9 +405,6 @@ func InitGlobalFlags(logger *slog.Logger, cmd *cobra.Command, vp *viper.Viper) {
 	flags.MarkHidden(option.AddressScopeMax)
 	option.BindEnv(vp, option.AddressScopeMax)
 
-	flags.Bool(option.EnableLocalRedirectPolicy, false, "Enable Local Redirect Policy")
-	option.BindEnv(vp, option.EnableLocalRedirectPolicy)
-
 	flags.Bool(option.EnableMKE, false, "Enable BPF kube-proxy replacement for MKE environments")
 	flags.MarkHidden(option.EnableMKE)
 	option.BindEnv(vp, option.EnableMKE)
@@ -1028,9 +1025,8 @@ func initEnv(logger *slog.Logger, vp *viper.Viper) {
 		logging.Fatal(logger, "Option "+option.EnableRemoteNodeMasquerade+" requires BPF masquerade to be enabled ("+option.EnableBPFMasquerade+")")
 	}
 
-	if option.Config.TunnelingEnabled() &&
-		option.Config.EnableAutoDirectRouting {
-		logging.Fatal(logger, fmt.Sprintf("%s requires native routing mode.", option.EnableAutoDirectRoutingName))
+	if !option.Config.RequiresNativeRouting() && option.Config.EnableAutoDirectRouting {
+		logging.Fatal(logger, fmt.Sprintf("%s requires native or hybrid routing mode.", option.EnableAutoDirectRoutingName))
 	}
 
 	initClockSourceOption(logger)

@@ -236,11 +236,8 @@ nodeport_l7_lb_redirect(struct __ctx_buff *ctx __maybe_unused,
 
 static __always_inline bool dsr_fail_needs_reply(int code __maybe_unused)
 {
-#ifdef ENABLE_DSR_ICMP_ERRORS
-	if (code == DROP_FRAG_NEEDED)
-		return true;
-#endif
-	return false;
+	return CONFIG(dsr_cfg).enable_icmp_errors &&
+		code == DROP_FRAG_NEEDED;
 }
 
 static __always_inline __maybe_unused __u32
@@ -289,11 +286,8 @@ dsr_wire_len6(struct __ctx_buff *ctx, const struct ipv6hdr *ip6,
 static __always_inline bool dsr_is_too_big(struct __ctx_buff *ctx __maybe_unused,
 					   __u32 expanded_len __maybe_unused)
 {
-#ifdef ENABLE_DSR_ICMP_ERRORS
-	if (expanded_len > CONFIG(device_mtu))
-		return true;
-#endif
-	return false;
+	return CONFIG(dsr_cfg).enable_icmp_errors &&
+		expanded_len > CONFIG(device_mtu);
 }
 
 static __always_inline int
@@ -699,7 +693,9 @@ static __always_inline int dsr_reply_icmp6(struct __ctx_buff *ctx,
 					   __be16 dport __maybe_unused,
 					   int code, int ohead __maybe_unused)
 {
-#ifdef ENABLE_DSR_ICMP_ERRORS
+	if (!CONFIG(dsr_cfg).enable_icmp_errors)
+		goto drop_err;
+
 	__u8 reason = (__u8)-code;
 # if DSR_ENCAP_MODE == DSR_ENCAP_NONE || DSR_ENCAP_MODE == DSR_ENCAP_GENEVE
 	struct ipv6_ct_tuple tuple __align_stack_8 = {};
@@ -734,8 +730,8 @@ static __always_inline int dsr_reply_icmp6(struct __ctx_buff *ctx,
 		goto drop_err;
 
 	return redirect_self(ctx);
+
 drop_err:
-#endif
 	return send_drop_notify_error(ctx, UNKNOWN_ID, code, METRIC_EGRESS);
 }
 
@@ -781,8 +777,15 @@ int tail_nodeport_ipv6_dsr(struct __ctx_buff *ctx)
 		if (ret == CTX_ACT_REDIRECT && oif)
 			return ctx_redirect(ctx, oif, 0);
 	} else {
-		if (dsr_fail_needs_reply(ret))
+		if (dsr_fail_needs_reply(ret)) {
+#if DSR_ENCAP_MODE == DSR_ENCAP_NONE || DSR_ENCAP_MODE == DSR_ENCAP_GENEVE
+			if (!revalidate_data(ctx, &data, &data_end, &ip6)) {
+				ret = DROP_INVALID;
+				goto drop_err;
+			}
+#endif
 			return dsr_reply_icmp6(ctx, ip6, &addr, port, ret, ohead);
+		}
 		goto drop_err;
 	}
 
@@ -889,7 +892,7 @@ nodeport_rev_dnat_get_info_ipv6(struct __ctx_buff *ctx,
 		return false;
 	}
 
-	if (is_defined(ENABLE_DSR) && entry->dsr_internal) {
+	if (CONFIG(dsr_cfg).enable && entry->dsr_internal) {
 		struct ipv6_nat_entry *dsr_entry;
 		struct ipv6_ct_tuple dsr_tuple;
 
@@ -1217,7 +1220,7 @@ int tail_nodeport_nat_ingress_ipv6(struct __ctx_buff *ctx)
 
 	ctx_snat_done_set(ctx);
 
-	if (!is_defined(ENABLE_DSR) || (is_defined(ENABLE_DSR) && is_defined(ENABLE_DSR_BYUSER)) ||
+	if (!CONFIG(dsr_cfg).enable || CONFIG(dsr_cfg).enable_by_user ||
 	    (is_defined(ENABLE_EGRESS_GATEWAY_COMMON) &&
 	     (is_defined(IS_BPF_XDP) || is_defined(IS_BPF_HOST)))) {
 		if ((is_defined(ENABLE_HOST_FIREWALL) && is_defined(IS_BPF_HOST)) ||
@@ -1630,11 +1633,10 @@ skip_service_lookup:
 #endif
 	ctx_set_xfer(ctx, XFER_PKT_NO_SVC);
 
-#ifdef ENABLE_DSR
 #if (defined(IS_BPF_OVERLAY) && DSR_ENCAP_MODE == DSR_ENCAP_GENEVE) || \
     ((defined(IS_BPF_XDP) || defined(IS_BPF_HOST) || defined(IS_BPF_WIREGUARD)) && \
      (DSR_ENCAP_MODE == DSR_ENCAP_NONE))
-	if (is_svc_proto) {
+	if (CONFIG(dsr_cfg).enable && is_svc_proto) {
 		ret = nodeport_extract_dsr_v6(ctx, ip6, &tuple, l4_off,
 					      fraginfo, &key.address,
 					      &key.dport, dsr);
@@ -1646,7 +1648,6 @@ skip_service_lookup:
 							 ext_err);
 	}
 #endif
-#endif /* ENABLE_DSR */
 
 	if (is_defined(ENABLE_MASQUERADE_IPV6) || is_svc_proto) {
 		ctx_store_meta(ctx, CB_NAT_46X64, 0);
@@ -2032,7 +2033,9 @@ static __always_inline int dsr_reply_icmp4(struct __ctx_buff *ctx,
 					   __be16 dport __maybe_unused,
 					   int code, __be16 ohead __maybe_unused)
 {
-#ifdef ENABLE_DSR_ICMP_ERRORS
+	if (!CONFIG(dsr_cfg).enable_icmp_errors)
+		goto drop_err;
+
 	__u8 reason = (__u8)-code;
 # if DSR_ENCAP_MODE == DSR_ENCAP_NONE || DSR_ENCAP_MODE == DSR_ENCAP_GENEVE
 	struct ipv4_ct_tuple tuple = {};
@@ -2063,8 +2066,8 @@ static __always_inline int dsr_reply_icmp4(struct __ctx_buff *ctx,
 		goto drop_err;
 
 	return redirect_self(ctx);
+
 drop_err:
-#endif
 	return send_drop_notify_error(ctx, UNKNOWN_ID, code, METRIC_EGRESS);
 }
 
@@ -2103,8 +2106,15 @@ int tail_nodeport_ipv4_dsr(struct __ctx_buff *ctx)
 		if (ret == CTX_ACT_REDIRECT && oif)
 			return ctx_redirect(ctx, oif, 0);
 	} else {
-		if (dsr_fail_needs_reply(ret))
+		if (dsr_fail_needs_reply(ret)) {
+#if DSR_ENCAP_MODE == DSR_ENCAP_NONE || DSR_ENCAP_MODE == DSR_ENCAP_GENEVE
+			if (!revalidate_data(ctx, &data, &data_end, &ip4)) {
+				ret = DROP_INVALID;
+				goto drop_err;
+			}
+#endif
 			return dsr_reply_icmp4(ctx, ip4, addr, port, ret, ohead);
+		}
 		goto drop_err;
 	}
 	if (!revalidate_data(ctx, &data, &data_end, &ip4)) {
@@ -2203,7 +2213,7 @@ nodeport_rev_dnat_get_info_ipv4(struct __ctx_buff *ctx,
 		return false;
 	}
 
-	if (is_defined(ENABLE_DSR) && entry->dsr_internal) {
+	if (CONFIG(dsr_cfg).enable && entry->dsr_internal) {
 		struct ipv4_nat_entry *dsr_entry;
 		struct ipv4_ct_tuple dsr_tuple;
 
@@ -2477,7 +2487,7 @@ int tail_nodeport_nat_ingress_ipv4(struct __ctx_buff *ctx)
 	 * Otherwise, we would have tail-called back to
 	 * CALL_IPV4_FROM_NETDEV in the code above.
 	 */
-	if (!is_defined(ENABLE_DSR) || (is_defined(ENABLE_DSR) && is_defined(ENABLE_DSR_BYUSER)) ||
+	if (!CONFIG(dsr_cfg).enable || CONFIG(dsr_cfg).enable_by_user ||
 	    (is_defined(ENABLE_EGRESS_GATEWAY_COMMON) &&
 	     (is_defined(IS_BPF_XDP) || is_defined(IS_BPF_HOST)))) {
 		/* If we're not in full DSR mode, reply traffic from remote backends
@@ -2918,11 +2928,10 @@ skip_service_lookup:
 	 */
 	ctx_set_xfer(ctx, XFER_PKT_NO_SVC);
 
-#ifdef ENABLE_DSR
 #if (defined(IS_BPF_OVERLAY) && DSR_ENCAP_MODE == DSR_ENCAP_GENEVE) || \
     ((defined(IS_BPF_XDP) || defined(IS_BPF_HOST) || defined(IS_BPF_WIREGUARD)) && \
      (DSR_ENCAP_MODE == DSR_ENCAP_NONE))
-	if (is_svc_proto) {
+	if (CONFIG(dsr_cfg).enable && is_svc_proto) {
 		/* Check if packet has embedded DSR info, or belongs to
 		 * an established DSR connection:
 		 */
@@ -2938,7 +2947,6 @@ skip_service_lookup:
 							 ext_err);
 	}
 #endif
-#endif /* ENABLE_DSR */
 
 	ctx_store_meta(ctx, CB_SRC_LABEL, src_sec_identity);
 	/* For NAT64 we might see an IPv4 reply from the backend to

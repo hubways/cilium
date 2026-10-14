@@ -26,6 +26,8 @@ type Node struct {
 	ClusterID uint32 `config:"cluster_id"`
 	// Number of bits of the identity reserved for the Cluster ID.
 	ClusterIDBits uint32 `config:"cluster_id_bits"`
+	// DSR-specific configuration.
+	DSRCfg types.DSRConfig `config:"dsr_cfg"`
 	// Enable debugging trace statements.
 	Debug bool `config:"debug"`
 	// Enable debugging trace statements for load balancer.
@@ -47,6 +49,8 @@ type Node struct {
 	EnableIPMasqAgentIPv4 bool `config:"enable_ip_masq_agent_ipv4"`
 	// Enable ip-masq-agent for IPv6 traffic.
 	EnableIPMasqAgentIPv6 bool `config:"enable_ip_masq_agent_ipv6"`
+	// Enable IPSec support.
+	EnableIPSec bool `config:"enable_ipsec"`
 	// Enable setting identity mark for local traffic.
 	EnableIdentityMark bool `config:"enable_identity_mark"`
 	// Use jiffies (count of timer ticks since boot).
@@ -59,6 +63,8 @@ type Node struct {
 	EnableTproxy bool `config:"enable_tproxy"`
 	// Enable trace notifications.
 	EnableTraceNotify bool `config:"enable_trace_notify"`
+	// Enable Wireguard support.
+	EnableWireguard bool `config:"enable_wireguard"`
 	// Interface index of the IPv4 IPIP encapsulation device.
 	Encap4IfIndex uint32 `config:"encap4_ifindex"`
 	// Interface index of the IPv6 IPIP encapsulation device.
@@ -134,7 +140,8 @@ func NewNode() *Node {
 		cast[types.MACAddr]([]byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}),
 		0x0,
 		cast[types.MACAddr]([]byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}),
-		0x0, 0x8, false, false, 0x0, false, false, false, false, false,
+		0x0, 0x8, cast[types.DSRConfig]([]byte{0x0, 0x0, 0x0}), false,
+		false, 0x0, false, false, false, false, false, false, false,
 		false, false, false, false, false, false, false, false, 0x0,
 		0x0, false, 0x0, 0x0, 0x0, 0x0, cast[types.V4Addr]([]byte{0x0, 0x0, 0x0, 0x0}),
 		cast[types.V4Addr]([]byte{0x0, 0x0, 0x0, 0x0}),

@@ -190,3 +190,18 @@ NODE_CONFIG(bool, enable_ip_masq_agent_ipv4, "Enable ip-masq-agent for IPv4 traf
 NODE_CONFIG(bool, enable_ip_masq_agent_ipv6, "Enable ip-masq-agent for IPv6 traffic")
 
 NODE_CONFIG(bool, debug, "Enable debugging trace statements")
+
+struct dsr_config {
+	/* Enable DSR load balancing. */
+	bool enable;
+	/* Enable sending ICMP fragmentation-needed replies to the client. */
+	bool enable_icmp_errors;
+	/* Enable the common datapath for Hybrid-DSR+SNAT and Annotation-based+DSR+SNAT modes. */
+	bool enable_by_user;
+};
+
+NODE_CONFIG(struct dsr_config, dsr_cfg, "DSR-specific configuration")
+
+NODE_CONFIG(bool, enable_ipsec, "Enable IPSec support")
+
+NODE_CONFIG(bool, enable_wireguard, "Enable Wireguard support")

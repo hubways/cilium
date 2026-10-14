@@ -40,6 +40,13 @@ func setBasePermutations(t *config.Node) {
 	t.EnableDropNotify = true
 	t.EnableIPMasqAgentIPv4 = true
 	t.EnableIPMasqAgentIPv6 = true
+	t.DSRCfg = types.DSRConfig{
+		Enable:           true,
+		EnableICMPErrors: true,
+		EnableByUser:     true,
+	}
+	t.EnableIPSec = true
+	t.EnableWireguard = true
 }
 
 func baseLXCPermutations() *loadPermutationBuilder {

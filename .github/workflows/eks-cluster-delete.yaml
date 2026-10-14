@@ -18,12 +18,12 @@ permissions:
 
 env:
   # renovate: datasource=github-releases depName=eksctl-io/eksctl
-  eksctl_version: v0.230.0
+  eksctl_version: v0.231.0
 
 jobs:
   delete-cluster:
     name: Delete EKS Cluster
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     continue-on-error: true
     steps:
