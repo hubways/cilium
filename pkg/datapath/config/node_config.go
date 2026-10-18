@@ -55,6 +55,14 @@ type Node struct {
 	EnableIdentityMark bool `config:"enable_identity_mark"`
 	// Use jiffies (count of timer ticks since boot).
 	EnableJiffies bool `config:"enable_jiffies"`
+	// Enable L7 load-balancing support.
+	EnableL7LB bool `config:"enable_l7_lb"`
+	// Enable BPF masquerading for IPv4 traffic.
+	EnableMasqueradeIPv4 bool `config:"enable_masquerade_ipv4"`
+	// Masquerade IPv6 traffic.
+	EnableMasqueradeIPv6 bool `config:"enable_masquerade_ipv6"`
+	// Enable NodePort acceleration via XDP.
+	EnableNodeportAcceleration bool `config:"enable_nodeport_acceleration"`
 	// Enable dynamic source IP resolution for SNAT via linux's routing table.
 	EnableNodeportSourceLookup bool `config:"enable_nodeport_source_lookup"`
 	// Enable SCTP support.
@@ -118,6 +126,8 @@ type Node struct {
 	RouterIPv4 types.V4Addr `config:"router_ipv4"`
 	// Internal IPv6 router address assigned to the cilium_host interface.
 	RouterIPv6 types.V6Addr `config:"router_ipv6"`
+	// SRv6-specific configuration.
+	SRv6Cfg types.SRv6Config `config:"srv6_cfg"`
 	// IPv4 source address used for SNAT when a Pod talks to itself over a Service.
 	ServiceLoopbackIPv4 types.V4Addr `config:"service_loopback_ipv4"`
 	// IPv6 source address used for SNAT when a Pod talks to itself over a Service.
@@ -142,8 +152,8 @@ func NewNode() *Node {
 		cast[types.MACAddr]([]byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}),
 		0x0, 0x8, cast[types.DSRConfig]([]byte{0x0, 0x0, 0x0}), false,
 		false, 0x0, false, false, false, false, false, false, false,
-		false, false, false, false, false, false, false, false, 0x0,
-		0x0, false, 0x0, 0x0, 0x0, 0x0, cast[types.V4Addr]([]byte{0x0, 0x0, 0x0, 0x0}),
+		false, false, false, false, false, false, false, false, false,
+		false, false, false, 0x0, 0x0, false, 0x0, 0x0, 0x0, 0x0, cast[types.V4Addr]([]byte{0x0, 0x0, 0x0, 0x0}),
 		cast[types.V4Addr]([]byte{0x0, 0x0, 0x0, 0x0}),
 		cast[types.IPv4SNATExclusionPrefix]([]byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}),
 		cast[types.V6Addr]([]byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}),
@@ -151,7 +161,7 @@ func NewNode() *Node {
 		0x0, 0x1, false, 0x0, 0xff, 0x5, cast[types.V4Addr]([]byte{0x0, 0x0, 0x0, 0x0}),
 		0x0, 0x0, 0x0, 0x0, false, cast[types.V4Addr]([]byte{0x0, 0x0, 0x0, 0x0}),
 		cast[types.V6Addr]([]byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}),
-		cast[types.V4Addr]([]byte{0x0, 0x0, 0x0, 0x0}),
+		cast[types.SRv6Config]([]byte{0x0}), cast[types.V4Addr]([]byte{0x0, 0x0, 0x0, 0x0}),
 		cast[types.V6Addr]([]byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}),
 		false, false, 0x0, 0x0, 0x0}
 }

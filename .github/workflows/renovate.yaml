@@ -43,6 +43,7 @@ jobs:
         env:
           # default to DEBUG log level, this is always useful
           LOG_LEVEL: ${{ github.event.inputs.renovate_log_level_debug == 'false' && 'INFO' || 'DEBUG' }}
+          RENOVATE_BASE_DIR: /var/tmp/renovate
         with:
           # renovate: datasource=github-releases depName=renovatebot/renovate
           renovate-version: 44.155.1
@@ -51,3 +52,5 @@ jobs:
           configurationFile: .github/renovate.json5
           token: '${{ steps.get_token.outputs.token }}'
           mount-docker-socket: true
+          # builder.sh bind-mounts paths under it through the runner's daemon.
+          docker-volumes: /var/tmp/renovate:/var/tmp/renovate

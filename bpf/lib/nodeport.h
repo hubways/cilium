@@ -984,7 +984,7 @@ drop_err:
 #endif /* ENABLE_NAT_46X64_GATEWAY */
 
 static __always_inline int
-nodeport_rev_dnat_ipv6(struct __ctx_buff *ctx, enum ct_dir dir,
+nodeport_rev_dnat_ipv6(struct __ctx_buff *ctx, enum ct_dir dir __maybe_unused,
 		       struct trace_ctx *trace, __s8 *ext_err)
 {
 	struct bpf_fib_lookup_padded fib_params = {
@@ -1040,8 +1040,7 @@ nodeport_rev_dnat_ipv6(struct __ctx_buff *ctx, enum ct_dir dir,
 
 		ret = lb6_rev_nat(ctx, l4_off,
 				  ct_state.rev_nat_index, NULL, 0,
-				  false, &tuple, ipfrag_has_l4_header(fraginfo),
-				  dir);
+				  false, &tuple, ipfrag_has_l4_header(fraginfo));
 		if (IS_ERR(ret))
 			return ret;
 		if (!revalidate_data(ctx, &data, &data_end, &ip6))
@@ -1444,13 +1443,12 @@ static __always_inline int nodeport_svc_lb6(struct __ctx_buff *ctx,
 	if (lb_punt_etp_local() && lb6_svc_is_etp_local(svc))
 		return CTX_ACT_OK;
 
-#if defined(ENABLE_L7_LB)
-	if (lb6_svc_is_l7_loadbalancer(svc))
+	if (CONFIG(enable_l7_lb) && lb6_svc_is_l7_loadbalancer(svc))
 		return nodeport_l7_lb_redirect(ctx, NULL,
 					       (__be16)svc->l7_lb_proxy_port,
 					       src_sec_identity,
 					       punt_to_stack);
-#endif
+
 	if (CONFIG(enable_ipip_termination)) {
 		union v6addr forced_addr = {};
 		const union v6addr zero = {};
@@ -1649,7 +1647,7 @@ skip_service_lookup:
 	}
 #endif
 
-	if (is_defined(ENABLE_MASQUERADE_IPV6) || is_svc_proto) {
+	if (CONFIG(enable_masquerade_ipv6) || is_svc_proto) {
 		ctx_store_meta(ctx, CB_NAT_46X64, 0);
 		ctx_store_meta(ctx, CB_SRC_LABEL, src_sec_identity);
 		return tail_call_internal(ctx, CILIUM_CALL_IPV6_NODEPORT_NAT_INGRESS,
@@ -2712,13 +2710,12 @@ static __always_inline int nodeport_svc_lb4(struct __ctx_buff *ctx,
 	if (lb_punt_etp_local() && lb4_svc_is_etp_local(svc))
 		return CTX_ACT_OK;
 
-#if defined(ENABLE_L7_LB)
-	if (lb4_svc_is_l7_loadbalancer(svc))
+	if (CONFIG(enable_l7_lb) && lb4_svc_is_l7_loadbalancer(svc))
 		return nodeport_l7_lb_redirect(ctx, ip4,
 					       (__be16)svc->l7_lb_proxy_port,
 					       src_sec_identity,
 					       punt_to_stack);
-#endif
+
 	if (lb4_to_lb6_service(svc)) {
 		if (!is_defined(ENABLE_IPV6) || !is_defined(NODEPORT_USE_NAT_46x64))
 			return DROP_NO_SERVICE;
@@ -2974,7 +2971,7 @@ skip_service_lookup:
 	/* Check for RevSNAT. When BPF-Masquerading is off, we only need to
 	 * handle SVC replies:
 	 */
-	if (is_defined(ENABLE_MASQUERADE_IPV4) || is_svc_proto)
+	if (CONFIG(enable_masquerade_ipv4) || is_svc_proto)
 		return tail_call_internal(ctx, CILIUM_CALL_IPV4_NODEPORT_NAT_INGRESS, ext_err);
 
 	return CTX_ACT_OK;

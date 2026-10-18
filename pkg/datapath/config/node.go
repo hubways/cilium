@@ -83,8 +83,14 @@ func NodeConfig(lnc *Config) Node {
 	// host-side listener that depended on SO_BINDTODEVICE against
 	// cilium_ipip{4,6} will no longer match decapped traffic.
 	node.EnableIPIPTermination = option.Config.EnableIPIPTermination
+	node.SRv6Cfg = types.SRv6Config{
+		EnableSRHEncap: option.Config.EnableSRv6 && option.Config.SRv6EncapMode != "reduced",
+	}
 
 	node.EnableNodeportSourceLookup = lnc.LBConfig.NodePortEnableDynamicSourceLookup
+
+	node.EnableNodeportAcceleration = lnc.KPRConfig.KubeProxyReplacement &&
+		option.Config.NodePortAcceleration != option.NodePortAccelerationDisabled
 
 	node.LBDefaultAlg = uint8(loadbalancer.SVCLoadBalancingAlgorithmRandom)
 	if lnc.LBConfig.LBAlgorithm == loadbalancer.LBAlgorithmMaglev {
@@ -106,7 +112,10 @@ func NodeConfig(lnc *Config) Node {
 	node.NodeportPortMaxNATExt = lnc.LBConfig.NodePortMaxNATExt
 
 	if option.Config.EnableNat46X64Gateway {
-		node.NAT46X64Prefix.Addr = option.Config.IPv6NAT46x64CIDRBase.As4()
+		// The datapath only stores the leading 32 bits of the RFC6052
+		// prefix, see nat46x64_prefix_copy_v6().
+		prefix := option.Config.IPv6NAT46x64CIDRBase.As16()
+		node.NAT46X64Prefix.Addr = [4]byte(prefix[:4])
 	}
 
 	if lnc.NodeIPv4.Is4() {
@@ -115,6 +124,7 @@ func NodeConfig(lnc *Config) Node {
 
 	if option.Config.EnableBPFMasquerade {
 		if option.Config.EnableIPv4Masquerade {
+			node.EnableMasqueradeIPv4 = true
 			excludeCIDR := lnc.NativeRoutingCIDRIPv4
 			if option.Config.EnableIPMasqAgent {
 				excludeCIDR = option.Config.IPv4NativeRoutingCIDR
@@ -169,6 +179,8 @@ func NodeConfig(lnc *Config) Node {
 
 	node.EnableIdentityMark = option.Config.EnableIdentityMark
 
+	node.EnableMasqueradeIPv6 = option.Config.EnableBPFMasquerade && option.Config.EnableIPv6Masquerade
+
 	node.EnableBPFHostRouting = !option.Config.UnsafeDaemonConfigOption.EnableHostLegacyRouting
 
 	node.EncryptionStrictIngress = option.Config.EnableEncryptionStrictModeIngress
@@ -183,6 +195,8 @@ func NodeConfig(lnc *Config) Node {
 
 	node.EnableIPSec = lnc.EnableIPSec
 	node.EnableWireguard = lnc.EnableWireguard
+
+	node.EnableL7LB = option.Config.EnableEnvoyConfig
 
 	return node
 }

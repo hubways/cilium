@@ -787,7 +787,7 @@ type NodeValue struct {
 	_   structs.HostLayout
 	ID  uint16
 	SPI uint8
-	Pad uint8
+	_   [1]byte
 }
 
 // PolicyEntry is generated from the BPF C type policy_entry.
@@ -931,6 +931,12 @@ type SocketLBConfig struct {
 	EnableFull    bool
 	HostNSOnly    bool
 	EnableTracing bool
+}
+
+// SRv6Config is generated from the BPF C type srv6_config.
+type SRv6Config struct {
+	_              structs.HostLayout
+	EnableSRHEncap bool
 }
 
 // SRv6PolicyKey4 is generated from the BPF C type srv6_policy_key4.

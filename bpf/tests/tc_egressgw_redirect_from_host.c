@@ -10,8 +10,6 @@
 #define ENABLE_IPV6			1
 #define ENABLE_NODEPORT			1
 #define ENABLE_EGRESS_GATEWAY		1
-#define ENABLE_MASQUERADE_IPV4		1
-#define ENABLE_MASQUERADE_IPV6		1
 #define ENABLE_HOST_FIREWALL		1
 #define ENCAP_IFINDEX 0
 
@@ -28,9 +26,12 @@ mock_fib_lookup(void *ctx __maybe_unused,
 
 #include "lib/bpf_host.h"
 
+ASSIGN_CONFIG(bool, enable_masquerade_ipv6, true)
+
 #include "lib/egressgw.h"
 #include "lib/endpoint.h"
 #include "lib/ipcache.h"
+ASSIGN_CONFIG(bool, enable_masquerade_ipv4, true)
 #include "lib/metrics.h"
 
 ASSIGN_CONFIG(__u32, interface_ifindex, PRIMARY_IFACE)

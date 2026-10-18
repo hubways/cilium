@@ -1305,14 +1305,15 @@ int cil_from_netdev(struct __ctx_buff *ctx)
 {
 	__u32 src_id = UNKNOWN_ID;
 	__be16 proto = 0;
+	__u32 flags;
 
 	bpf_clear_meta(ctx);
 
 	check_and_store_ip_trace_id(ctx);
 
-#ifdef ENABLE_NODEPORT_ACCELERATION
-	__u32 flags = ctx_get_xfer(ctx, XFER_FLAGS);
-#endif
+	if (CONFIG(enable_nodeport_acceleration))
+		flags = ctx_get_xfer(ctx, XFER_FLAGS);
+
 	int ret;
 
 	/* Filter allowed vlan id's and pass them back to kernel.
@@ -1332,15 +1333,15 @@ int cil_from_netdev(struct __ctx_buff *ctx)
 
 	ctx_skip_nodeport_clear(ctx);
 
-#ifdef ENABLE_NODEPORT_ACCELERATION
-	if (flags & XFER_PKT_NO_SVC)
-		ctx_skip_nodeport_set(ctx);
+	if (CONFIG(enable_nodeport_acceleration)) {
+		if (flags & XFER_PKT_NO_SVC)
+			ctx_skip_nodeport_set(ctx);
 
 #ifdef HAVE_ENCAP
-	if (flags & XFER_PKT_SNAT_DONE)
-		ctx_snat_done_set(ctx);
+		if (flags & XFER_PKT_SNAT_DONE)
+			ctx_snat_done_set(ctx);
 #endif
-#endif
+	}
 
 	if (!validate_ethertype(ctx, &proto)) {
 #ifdef ENABLE_HOST_FIREWALL
@@ -1418,8 +1419,8 @@ int cil_from_host(struct __ctx_buff *ctx)
 #endif /* ENABLE_HOST_FIREWALL */
 	}
 
-#if defined(ENABLE_L7_LB)
-	if ((ctx->mark & MARK_MAGIC_HOST_MASK) == MARK_MAGIC_PROXY_EGRESS_EPID) {
+	if (CONFIG(enable_l7_lb) &&
+	    (ctx->mark & MARK_MAGIC_HOST_MASK) == MARK_MAGIC_PROXY_EGRESS_EPID) {
 		__u16 lxc_id = get_epid(ctx);
 		int ret;
 
@@ -1427,7 +1428,6 @@ int cil_from_host(struct __ctx_buff *ctx)
 		ret = tail_call_egress_policy(ctx, lxc_id);
 		return send_drop_notify_error(ctx, UNKNOWN_ID, ret, METRIC_EGRESS);
 	}
-#endif
 
 	magic = inherit_identity_from_host(ctx, &identity);
 	if (magic == MARK_MAGIC_PROXY_INGRESS ||  magic == MARK_MAGIC_PROXY_EGRESS)
@@ -1490,15 +1490,13 @@ int cil_to_netdev(struct __ctx_buff *ctx)
 		}
 	}
 
-#if defined(ENABLE_L7_LB)
-	if (magic == MARK_MAGIC_PROXY_EGRESS_EPID) {
+	if (CONFIG(enable_l7_lb) && magic == MARK_MAGIC_PROXY_EGRESS_EPID) {
 		__u32 lxc_id = get_epid(ctx);
 
 		ctx->mark = 0;
 		ret = tail_call_egress_policy(ctx, (__u16)lxc_id);
 		goto drop_err;
 	}
-#endif
 
 #ifdef ENABLE_HOST_FIREWALL
 	/* This was initially added for Egress GW. There it's no longer needed,

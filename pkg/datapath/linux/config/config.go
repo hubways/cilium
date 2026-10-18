@@ -106,7 +106,7 @@ func (h *HeaderfileWriter) WriteNodeConfig(w io.Writer, cfg *config.Config) erro
 
 	fw := bufio.NewWriter(w)
 
-	writeIncludes(w)
+	writeIncludes(fw)
 
 	var ipv4NodePortAddrs, ipv6NodePortAddrs []netip.Addr
 	for _, addr := range cfg.NodeAddresses {
@@ -179,16 +179,9 @@ func (h *HeaderfileWriter) WriteNodeConfig(w io.Writer, cfg *config.Config) erro
 
 	if option.Config.EnableSRv6 {
 		cDefinesMap["ENABLE_SRV6"] = "1"
-		if option.Config.SRv6EncapMode != "reduced" {
-			cDefinesMap["ENABLE_SRV6_SRH_ENCAP"] = "1"
-		}
 	}
 
 	// --- WARNING: THIS CONFIGURATION METHOD IS DEPRECATED, SEE FUNCTION DOC ---
-
-	if option.Config.EnableEnvoyConfig {
-		cDefinesMap["ENABLE_L7_LB"] = "1"
-	}
 
 	cDefinesMap["NODEPORT_NEIGH6_SIZE"] = fmt.Sprintf("%d", option.Config.NeighMapEntriesGlobal)
 	cDefinesMap["NODEPORT_NEIGH4_SIZE"] = fmt.Sprintf("%d", option.Config.NeighMapEntriesGlobal)
@@ -222,10 +215,6 @@ func (h *HeaderfileWriter) WriteNodeConfig(w io.Writer, cfg *config.Config) erro
 		} else {
 			cDefinesMap["DSR_ENCAP_MODE"] = fmt.Sprintf("%d", dsrEncapInv)
 		}
-
-		if option.Config.NodePortAcceleration != option.NodePortAccelerationDisabled {
-			cDefinesMap["ENABLE_NODEPORT_ACCELERATION"] = "1"
-		}
 	}
 
 	cDefinesMap["LB4_SRC_RANGE_MAP_SIZE"] = fmt.Sprintf("%d", cfg.LBConfig.LBSourceRangeMapEntries)
@@ -249,13 +238,6 @@ func (h *HeaderfileWriter) WriteNodeConfig(w io.Writer, cfg *config.Config) erro
 
 	if option.Config.EnableBPFMasquerade {
 		cDefinesMap["ENABLE_NODEPORT"] = "1"
-
-		if option.Config.EnableIPv4Masquerade {
-			cDefinesMap["ENABLE_MASQUERADE_IPV4"] = "1"
-		}
-		if option.Config.EnableIPv6Masquerade {
-			cDefinesMap["ENABLE_MASQUERADE_IPV6"] = "1"
-		}
 	}
 
 	// --- WARNING: THIS CONFIGURATION METHOD IS DEPRECATED, SEE FUNCTION DOC ---

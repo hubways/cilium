@@ -82,9 +82,8 @@ static __always_inline int nodeport_snat_fwd_ipv6(struct __ctx_buff *ctx,
 	    nodeport_has_nat_conflict_ipv6(ctx, ip6, &args->target))
 		goto apply_snat;
 
-#if defined(ENABLE_MASQUERADE_IPV6) && defined(IS_BPF_HOST)
-	ret = snat_v6_needs_masquerade(ctx, fraginfo, l4_off);
-#endif /* ENABLE_MASQUERADE_IPV6 && IS_BPF_HOST */
+	if (is_defined(IS_BPF_HOST) && CONFIG(enable_masquerade_ipv6))
+		ret = snat_v6_needs_masquerade(ctx, fraginfo, l4_off);
 	if (IS_ERR(ret))
 		goto out;
 
@@ -221,7 +220,7 @@ skip_fib:
 		trace->monitor = monitor;
 
 		ret = __lb6_rev_nat(ctx, l4_off, &tuple, &nat_info,
-				    ipfrag_has_l4_header(fraginfo), CT_EGRESS, false);
+				    ipfrag_has_l4_header(fraginfo), false);
 		if (IS_ERR(ret))
 			return ret;
 
@@ -243,7 +242,7 @@ __handle_nat_fwd_ipv6(struct __ctx_buff *ctx, __u32 src_id __maybe_unused,
 		return ret;
 
 	if (!CONFIG(dsr_cfg).enable || CONFIG(dsr_cfg).enable_by_user ||
-	    is_defined(ENABLE_MASQUERADE_IPV6)) {
+	    CONFIG(enable_masquerade_ipv6)) {
 		if (!snat_done) {
 			ctx_store_meta(ctx, CB_SRC_LABEL, src_id);
 			ret = tail_call_internal(ctx,
@@ -354,7 +353,7 @@ static __always_inline int nodeport_snat_fwd_ipv4(struct __ctx_buff *ctx,
 	snat_v4_init_tuple(ip4, NAT_DIR_EGRESS, &args->tuple);
 	l4_off = ETH_HLEN + ipv4_hdrlen(ip4);
 
-	if (is_defined(IS_BPF_HOST) && is_defined(ENABLE_MASQUERADE_IPV4)) {
+	if (is_defined(IS_BPF_HOST) && CONFIG(enable_masquerade_ipv4)) {
 		const struct endpoint_info *ep;
 
 		ep = __lookup_ip4_endpoint(ip4->saddr);
@@ -392,9 +391,10 @@ static __always_inline int nodeport_snat_fwd_ipv4(struct __ctx_buff *ctx,
 # endif
 #endif /* TUNNEL_MODE && IS_BPF_OVERLAY */
 
-#if defined(ENABLE_MASQUERADE_IPV4) && defined(IS_BPF_HOST)
-	ret = snat_v4_needs_masquerade(ctx, fraginfo, l4_off);
-#endif /*ENABLE_MASQUERADE_IPV4 && IS_BPF_HOST */
+#if defined(IS_BPF_HOST)
+	if (CONFIG(enable_masquerade_ipv4))
+		ret = snat_v4_needs_masquerade(ctx, fraginfo, l4_off);
+#endif /* IS_BPF_HOST */
 	if (IS_ERR(ret))
 		goto out;
 
@@ -568,7 +568,7 @@ __handle_nat_fwd_ipv4(struct __ctx_buff *ctx, __u32 cluster_id __maybe_unused,
 		return ret;
 
 	if ((!CONFIG(dsr_cfg).enable || CONFIG(dsr_cfg).enable_by_user ||
-	     is_defined(ENABLE_MASQUERADE_IPV4) ||
+	     CONFIG(enable_masquerade_ipv4) ||
 	     (is_defined(ENABLE_CLUSTER_AWARE_ADDRESSING) &&
 	      is_defined(ENABLE_INTER_CLUSTER_SNAT))) && !snat_done) {
 		ctx_store_meta(ctx, CB_CLUSTER_ID_EGRESS, cluster_id);

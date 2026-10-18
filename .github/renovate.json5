@@ -145,13 +145,13 @@
   // replaces the value the manager sets itself.
   // See https://github.com/renovatebot/renovate/issues/21010
   // builder.sh derives the Go caches from 'go env' and bind-mounts them, but
-  // mount-docker-socket means the runner's daemon resolves the mount, and only
-  // /tmp is shared with the Renovate container. Point them at /tmp so the
-  // builder container gets a directory it can write to.
+  // mount-docker-socket means the runner's daemon resolves the mount, and the
+  // Renovate container only shares /var/tmp/renovate with the runner. Point
+  // them there so the builder container gets a directory it can write to.
   "customEnvVariables": {
     "GOFLAGS": "-modcacherw -mod=mod",
-    "BUILDER_GOCACHE_DIR": "/tmp/.cache/go/.cache/go-build",
-    "BUILDER_GOMODCACHE_DIR": "/tmp/.cache/go/pkg"
+    "BUILDER_GOCACHE_DIR": "/var/tmp/renovate/.cache/go/.cache/go-build",
+    "BUILDER_GOMODCACHE_DIR": "/var/tmp/renovate/.cache/go/pkg"
   },
   "assignAutomerge": true,
   "packageRules": [
@@ -565,17 +565,37 @@
         "!quay.io/cilium/cilium-envoy"
       ]
     },
+    // GitHub-hosted runners follow the Ubuntu release of the cilium images.
     {
       "matchPackageNames": [
-        "docker.io/library/ubuntu"
+        "docker.io/library/ubuntu",
+        "ubuntu"
       ],
-      "allowedVersions": "24.04",
+      "allowedVersions": "24.04"
+    },
+    // Overrides the rule above so that main and v1.20 receive 26.04.
+    {
+      "matchPackageNames": [
+        "docker.io/library/ubuntu",
+        "ubuntu"
+      ],
+      "allowedVersions": "26.04",
       "matchBaseBranches": [
-        "v1.20",
-        "v1.19",
-        "v1.18",
-        "main"
+        "main",
+        "v1.20"
       ]
+    },
+    // Only allow 24.04 for the v1.19 and v1.18 branch-specific workflows.
+    {
+      "matchFileNames": [
+        ".github/workflows/*-v1.19.yaml",
+        ".github/workflows/*-v1.18.yaml"
+      ],
+      "matchPackageNames": [
+        "docker.io/library/ubuntu",
+        "ubuntu"
+      ],
+      "allowedVersions": "24.04"
     },
     // Toolchain ceilings for v1.20, which targets Go 1.26. golangci-lint is
     // compiled with the Go toolchain the branch installs, so raising the branch's
@@ -1072,6 +1092,19 @@
       "matchBaseBranches": [
         "!main",
       ]
+    },
+    {
+      // Open a single PR per branch for the trusted dependencies of these
+      // groups. The branch topic drops the "patch-" prefix that
+      // separateMinorPatch adds.
+      "matchJsonata": [
+        "groupName in ['auto-merge-trusted-deps', 'all-dependencies', 'base-images', 'cilium-envoy', 'all external docker images dependencies'] and 'ciliumbot' in reviewers"
+      ],
+      "groupName": "auto-merge-trusted-deps",
+      "groupSlug": "auto-merge-trusted-deps",
+      "group": {
+        "branchTopic": "{{{replace '^patch-' '' groupSlug}}}"
+      }
     },
   ],
   "kubernetes": {
