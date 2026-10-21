@@ -5,8 +5,8 @@
 #include "common.h"
 
 #define ENABLE_IPV4 1
-#define ENABLE_IPV6
-#define ENABLE_NODEPORT
+#define ENABLE_IPV6 1
+#define ENABLE_NODEPORT 1
 #define DSR_ENCAP_MODE DSR_ENCAP_IPIP
 #define DSR_ENCAP_IPIP 1
 
