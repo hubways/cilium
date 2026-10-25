@@ -14,6 +14,8 @@ import (
 	"strings"
 
 	resourceapi "k8s.io/api/resource/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	kube_types "k8s.io/apimachinery/pkg/types"
 	"k8s.io/dynamic-resource-allocation/deviceattribute"
 
 	"github.com/cilium/cilium/pkg/k8s/apis/cilium.io/v2alpha1"
@@ -170,8 +172,18 @@ type Device interface {
 	encoding.BinaryUnmarshaler
 
 	GetAttrs() map[resourceapi.QualifiedName]resourceapi.DeviceAttribute
-	Setup(cfg DeviceConfig) error
-	Free(cfg DeviceConfig) error
+	GetCapacity() map[resourceapi.QualifiedName]resourceapi.DeviceCapacity
+	AllowMultipleAllocations() bool
+	// Setup prepares one allocation and returns the device representing it.
+	// For a shared allocation, this may be an allocation-specific child, such as a
+	// netdev that leases one RX queue, rather than the device published in the
+	// ResourceSlice.
+	Setup(allocation DeviceAllocation) (Device, error)
+	// Recover re-creates missing kernel state for an allocation restored from
+	// ResourceClaim status. The returned device must represent the same logical
+	// allocation because recovery does not rewrite that status.
+	Recover(allocation DeviceAllocation) (Device, error)
+	Free(allocation DeviceAllocation) error
 	Match(filter v2alpha1.CiliumNetworkDriverDeviceFilter) bool
 	IfName() string
 	KernelIfName() string
@@ -222,6 +234,17 @@ func (d *DeviceConfig) HasPool() bool {
 	return d.IPPool != ""
 }
 
+// DeviceAllocation contains scheduler and driver parameters for one allocation.
+type DeviceAllocation struct {
+	Config DeviceConfig
+	// ShareID identifies a shared allocation and is empty for a dedicated one.
+	// It reflects the scheduler's allocation-time decision, which may differ
+	// from the device's current sharing mode.
+	ShareID kube_types.UID
+	// ConsumedCapacity contains the capacity assigned by the scheduler.
+	ConsumedCapacity map[resourceapi.QualifiedName]resource.Quantity
+}
+
 type SerializedDevice struct {
 	Manager DeviceManagerType
 	Dev     json.RawMessage
@@ -229,5 +252,6 @@ type SerializedDevice struct {
 	// LogicalPool is the Cilium pool the device was matched against when
 	// this allocation was prepared. Persisted so restore can keep the pool
 	// pinned even if pool config changes while the driver is down.
-	LogicalPool string `json:"logicalPool,omitempty"`
+	LogicalPool      string                                          `json:"logicalPool,omitempty"`
+	ConsumedCapacity map[resourceapi.QualifiedName]resource.Quantity `json:",omitempty"`
 }

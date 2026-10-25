@@ -1020,7 +1020,6 @@ func ParseEndpoint(p EndpointParams,
 	if ep.SecurityIdentity == nil {
 		ep.SecurityIdentity = identity.LookupReservedIdentity(identity.ReservedIdentityInit)
 	}
-	ep.SecurityIdentity.Sanitize()
 
 	ep.UpdateLogger(nil)
 
@@ -1046,7 +1045,7 @@ func NewDatapathConfiguration() models.EndpointDatapathConfiguration {
 		// Delegate routing to the Linux stack rather than tail-calling
 		// between BPF programs.
 		disabled := false
-		config.RequireRouting = &disabled
+		config.RequireBPFRouting = &disabled
 	}
 	return config
 }

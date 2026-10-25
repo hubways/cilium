@@ -35,6 +35,8 @@ import (
 	"github.com/cilium/cilium/pkg/controller"
 	"github.com/cilium/cilium/pkg/crypto/certificatemanager"
 	"github.com/cilium/cilium/pkg/datapath"
+	"github.com/cilium/cilium/pkg/datapath/devicestats"
+	routingreconciler "github.com/cilium/cilium/pkg/datapath/linux/routing/reconciler"
 	loadertypes "github.com/cilium/cilium/pkg/datapath/loader/types"
 	debugapi "github.com/cilium/cilium/pkg/debug/api"
 	"github.com/cilium/cilium/pkg/defaults"
@@ -156,6 +158,9 @@ var (
 
 		// Provides cilium_datapath_drop/forward Prometheus metrics.
 		metricsmap.Cell,
+
+		// Provides cilium_device_stat Prometheus metric.
+		devicestats.Cell,
 
 		// Provides the IP trace map.
 		iptrace.Cell,
@@ -320,6 +325,9 @@ var (
 
 		// Provides the Azure customization of the multi-pool IPAM allocator.
 		azureAgent.Cell,
+
+		// Reconciles desired cloud endpoint routing rules and removes orphan rules.
+		routingreconciler.Cell,
 
 		// Egress Gateway allows originating traffic from specific IPv4 addresses.
 		egressgateway.Cell,
