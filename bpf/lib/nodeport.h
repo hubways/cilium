@@ -560,7 +560,7 @@ static __always_inline int encap_geneve_dsr_opt6(struct __ctx_buff *ctx,
 						     CONFIG(ipv4_direct_routing).be32,
 						     src_port,
 						     info,
-						     WORLD_IPV6_ID,
+						     world_ipv6_id(),
 						     &gopt,
 						     sizeof(gopt),
 						     (enum trace_reason)CT_NEW,
@@ -572,7 +572,7 @@ static __always_inline int encap_geneve_dsr_opt6(struct __ctx_buff *ctx,
 					 CONFIG(ipv4_direct_routing).be32,
 					 src_port,
 					 info,
-					 WORLD_IPV6_ID,
+					 world_ipv6_id(),
 					 (enum trace_reason)CT_NEW,
 					 TRACE_PAYLOAD_LEN,
 					 ifindex,
@@ -840,7 +840,7 @@ create_ct:
 
 		ipv6_addr_copy(&ct_state_new.nat_addr, addr);
 		ct_state_new.nat_port = port;
-		ct_state_new.src_sec_id = WORLD_IPV6_ID;
+		ct_state_new.src_sec_id = world_ipv6_id();
 		ct_state_new.dsr_internal = 1;
 
 		ret = ct_create6(get_ct_map6(tuple), NULL, tuple, ctx,
@@ -1093,7 +1093,7 @@ int __nodeport_rev_dnat_ipv6(struct __ctx_buff *ctx, enum ct_dir dir)
 	return ret;
 drop:
 	return send_drop_notify_error_ext(ctx, UNKNOWN_ID, ret, ext_err,
-					  METRIC_EGRESS);
+					  is_defined(IS_BPF_XDP) ? METRIC_INGRESS : METRIC_EGRESS);
 }
 
 __declare_tail(CILIUM_CALL_IPV6_NODEPORT_REVNAT_INGRESS)
@@ -1164,7 +1164,7 @@ int tail_nodeport_nat_ingress_ipv6(struct __ctx_buff *ctx)
 	    (is_defined(ENABLE_EGRESS_GATEWAY_COMMON) &&
 	     (is_defined(IS_BPF_XDP) || is_defined(IS_BPF_HOST)))) {
 		if ((is_defined(ENABLE_HOST_FIREWALL) && is_defined(IS_BPF_HOST)) ||
-		    (CONFIG(enable_ipv6_fragments) && is_defined(IS_BPF_XDP)))
+		    is_defined(IS_BPF_XDP))
 			ret = tail_call_internal(ctx, CILIUM_CALL_IPV6_NODEPORT_REVNAT_INGRESS,
 						 &ext_err);
 		else
@@ -1294,7 +1294,7 @@ skip_source_lookup:
 						CONFIG(ipv4_direct_routing).be32,
 						src_port,
 						info,
-						WORLD_IPV6_ID,
+						world_ipv6_id(),
 						trace.reason,
 						trace.monitor,
 						&oif,
@@ -1455,7 +1455,7 @@ static __always_inline int nodeport_svc_lb6(struct __ctx_buff *ctx,
 
 		switch (ret) {
 		case CT_NEW:
-			ct_state.src_sec_id = WORLD_IPV6_ID;
+			ct_state.src_sec_id = world_ipv6_id();
 			ct_state.node_port = 1;
 
 			ret = ct_create6(get_ct_map6(tuple), NULL, tuple, ctx,
@@ -1874,7 +1874,7 @@ static __always_inline int encap_geneve_dsr_opt4(struct __ctx_buff *ctx, struct 
 	__u16 encap_len = sizeof(struct iphdr) + sizeof(struct udphdr) +
 		sizeof(struct genevehdr) + ETH_HLEN;
 	__u16 total_len = bpf_ntohs(ip4->tot_len);
-	__u32 src_sec_identity = WORLD_IPV4_ID;
+	__u32 src_sec_identity = world_ipv4_id();
 	__be16 src_port = 0;
 #  if __ctx_is == __ctx_xdp
 	fraginfo_t fraginfo = ipfrag_encode_ipv4(ip4);
@@ -2153,7 +2153,7 @@ create_ct:
 
 		ct_state_new.nat_addr.p4 = addr;
 		ct_state_new.nat_port = port;
-		ct_state_new.src_sec_id = WORLD_IPV4_ID;
+		ct_state_new.src_sec_id = world_ipv4_id();
 		ct_state_new.dsr_internal = 1;
 
 		ret = ct_create4(get_ct_map4(tuple), NULL, tuple, ctx,
@@ -2440,7 +2440,7 @@ int tail_nodeport_rev_dnat_ipv4(struct __ctx_buff *ctx)
 
 drop_err:
 	return send_drop_notify_error_ext(ctx, UNKNOWN_ID, ret, ext_err,
-					  METRIC_EGRESS);
+					  is_defined(IS_BPF_XDP) ? METRIC_INGRESS : METRIC_EGRESS);
 }
 
 __declare_tail(CILIUM_CALL_IPV4_NODEPORT_NAT_INGRESS)
@@ -2499,7 +2499,8 @@ int tail_nodeport_nat_ingress_ipv4(struct __ctx_buff *ctx)
 		 * Also let nodeport_rev_dnat_ipv4() redirect EgressGW
 		 * reply traffic into tunnel (see there for details).
 		 */
-		if (is_defined(ENABLE_HOST_FIREWALL) && is_defined(IS_BPF_HOST))
+		if ((is_defined(ENABLE_HOST_FIREWALL) && is_defined(IS_BPF_HOST)) ||
+		    is_defined(IS_BPF_XDP))
 			ret = tail_call_internal(ctx, CILIUM_CALL_IPV4_NODEPORT_REVNAT, &ext_err);
 		else
 			ret = nodeport_rev_dnat_ipv4(ctx, &trace, &ext_err);
@@ -2795,7 +2796,7 @@ static __always_inline int nodeport_svc_lb4(struct __ctx_buff *ctx,
 
 #if (defined(ENABLE_CLUSTER_AWARE_ADDRESSING) && defined(ENABLE_INTER_CLUSTER_SNAT))
 		if (src_sec_identity == UNKNOWN_ID)
-			src_sec_identity = WORLD_IPV4_ID;
+			src_sec_identity = world_ipv4_id();
 
 		 /* Before forwarding the identity, make sure it's not local,
 		  * as in that case the next hop would't understand it.
@@ -2806,7 +2807,7 @@ static __always_inline int nodeport_svc_lb4(struct __ctx_buff *ctx,
 		if (identity_is_host(src_sec_identity))
 			return DROP_INVALID_IDENTITY;
 #else
-		src_sec_identity = WORLD_IPV4_ID;
+		src_sec_identity = world_ipv4_id();
 #endif
 
 		/* lookup with SCOPE_FORWARD: */

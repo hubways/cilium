@@ -736,6 +736,10 @@
      - Annotations to add to ServiceMonitor clustermesh-apiserver
      - object
      - ``{}``
+   * - :spelling:ignore:`clustermesh.apiserver.metrics.serviceMonitor.attachMetadata`
+     - Attach node metadata to the targets discovered by ServiceMonitor clustermesh-apiserver. ref: https://prometheus-operator.dev/docs/api-reference/api/#monitoring.coreos.com/v1.AttachMetadata
+     - object
+     - ``{}``
    * - :spelling:ignore:`clustermesh.apiserver.metrics.serviceMonitor.enabled`
      - Enable service monitor. This requires the prometheus CRDs to be available (see https://github.com/prometheus-operator/prometheus-operator/blob/main/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml)
      - bool
@@ -1395,7 +1399,7 @@
    * - :spelling:ignore:`encryption.ztunnel`
      - ztunnel encryption configuration. ztunnel is Istio's purpose-built, per-node proxy for handling L4 traffic in ambient mesh mode. These settings only apply when encryption.type is set to "ztunnel".
      - object
-     - ``{"affinity":{},"annotations":{},"ca":{"type":"internal"},"caAddress":"https://localhost:15012","extraEnv":[],"extraVolumeMounts":[],"extraVolumes":[],"healthPort":15021,"image":{"digest":"sha256:884de5adde400e39f58e36c7a729f7690466ca4a8eb4c2a8daa9c1c025115b24","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/ztunnel","tag":"v1.0.0","useDigest":true},"minReadySeconds":0,"nodeSelector":{"kubernetes.io/os":"linux"},"podAnnotations":{},"podLabels":{},"priorityClassName":null,"readinessProbe":{"failureThreshold":3,"initialDelaySeconds":0,"periodSeconds":10},"resources":{"requests":{"cpu":"200m","memory":"512Mi"}},"secrets":{"bootstrapRootCert":null},"terminationGracePeriodSeconds":30,"tolerations":[{"effect":"NoSchedule","operator":"Exists"},{"key":"CriticalAddonsOnly","operator":"Exists"},{"effect":"NoExecute","operator":"Exists"}],"updateStrategy":{"rollingUpdate":{"maxSurge":1,"maxUnavailable":0},"type":"RollingUpdate"}}``
+     - ``{"affinity":{},"annotations":{},"ca":{"type":"internal"},"caAddress":"https://localhost:15012","extraEnv":[],"extraVolumeMounts":[],"extraVolumes":[],"healthPort":15021,"image":{"digest":"sha256:f712b1b809b9888b410629bd6b4c36f5e91978771de8991d82d8792840f477d5","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/ztunnel","tag":"v1.1.0","useDigest":true},"minReadySeconds":0,"nodeSelector":{"kubernetes.io/os":"linux"},"podAnnotations":{},"podLabels":{},"priorityClassName":null,"readinessProbe":{"failureThreshold":3,"initialDelaySeconds":0,"periodSeconds":10},"resources":{"requests":{"cpu":"200m","memory":"512Mi"}},"secrets":{"bootstrapRootCert":null},"terminationGracePeriodSeconds":30,"tolerations":[{"effect":"NoSchedule","operator":"Exists"},{"key":"CriticalAddonsOnly","operator":"Exists"},{"effect":"NoExecute","operator":"Exists"}],"updateStrategy":{"rollingUpdate":{"maxSurge":1,"maxUnavailable":0},"type":"RollingUpdate"}}``
    * - :spelling:ignore:`encryption.ztunnel.affinity`
      - Affinity for ztunnel pods.
      - object
@@ -1435,7 +1439,7 @@
    * - :spelling:ignore:`encryption.ztunnel.image`
      - ztunnel container image.
      - object
-     - ``{"digest":"sha256:884de5adde400e39f58e36c7a729f7690466ca4a8eb4c2a8daa9c1c025115b24","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/ztunnel","tag":"v1.0.0","useDigest":true}``
+     - ``{"digest":"sha256:f712b1b809b9888b410629bd6b4c36f5e91978771de8991d82d8792840f477d5","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/ztunnel","tag":"v1.1.0","useDigest":true}``
    * - :spelling:ignore:`encryption.ztunnel.minReadySeconds`
      - Minimum number of seconds for which a newly created ztunnel pod should be ready before it is considered available.
      - int
@@ -1679,7 +1683,7 @@
    * - :spelling:ignore:`envoy.image`
      - Envoy container image.
      - object
-     - ``{"digest":"sha256:abbbe3c68d5f83970af87d89a2b831f52a6a865fec9da8210b5455e7bff9cf24","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.40.0-1792539146-8cc5db890b41fe2417751ce28c23babe4b28e8b3","useDigest":true}``
+     - ``{"digest":"sha256:38d2fb65b6d93be7a4ebfd236652a498aa0f7e42c495dd1f884ae69c880b620b","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.40.1-1792728304-8839ed339cf4446d66a4f7083d8ea2fe7b21b182","useDigest":true}``
    * - :spelling:ignore:`envoy.initContainers`
      - Init containers added to the cilium Envoy DaemonSet.
      - list
@@ -1787,7 +1791,7 @@
    * - :spelling:ignore:`envoy.prometheus`
      - Configure Cilium Envoy Prometheus options. Note that some of these apply to either cilium-agent or cilium-envoy.
      - object
-     - ``{"enabled":true,"port":"9964","portName":"envoy-metrics","serviceMonitor":{"annotations":{},"enabled":false,"interval":"10s","labels":{},"metricRelabelings":null,"relabelings":[{"action":"replace","replacement":"${1}","sourceLabels":["__meta_kubernetes_pod_node_name"],"targetLabel":"node"}],"scrapeTimeout":null}}``
+     - ``{"enabled":true,"port":"9964","portName":"envoy-metrics","serviceMonitor":{"annotations":{},"attachMetadata":{},"enabled":false,"interval":"10s","labels":{},"metricRelabelings":null,"relabelings":[{"action":"replace","replacement":"${1}","sourceLabels":["__meta_kubernetes_pod_node_name"],"targetLabel":"node"}],"scrapeTimeout":null}}``
    * - :spelling:ignore:`envoy.prometheus.enabled`
      - Enable prometheus metrics for cilium-envoy
      - bool
@@ -1802,6 +1806,10 @@
      - ``"envoy-metrics"``
    * - :spelling:ignore:`envoy.prometheus.serviceMonitor.annotations`
      - Annotations to add to ServiceMonitor cilium-envoy
+     - object
+     - ``{}``
+   * - :spelling:ignore:`envoy.prometheus.serviceMonitor.attachMetadata`
+     - Attach node metadata to the targets discovered by ServiceMonitor cilium-envoy. ref: https://prometheus-operator.dev/docs/api-reference/api/#monitoring.coreos.com/v1.AttachMetadata
      - object
      - ``{}``
    * - :spelling:ignore:`envoy.prometheus.serviceMonitor.enabled`
@@ -2147,7 +2155,7 @@
    * - :spelling:ignore:`hubble.metrics`
      - Hubble metrics configuration. See https://docs.cilium.io/en/stable/observability/metrics/#hubble-metrics for more comprehensive documentation about Hubble metrics.
      - object
-     - ``{"dashboards":{"annotations":{},"enabled":false,"label":"grafana_dashboard","labelValue":"1","namespace":null},"dynamic":{"config":{"configMapName":"cilium-dynamic-metrics-config","content":[],"createConfigMap":true},"enabled":false},"enableOpenMetrics":false,"enabled":null,"port":9965,"portName":"hubble-metrics","serviceAnnotations":{},"serviceMonitor":{"annotations":{},"enabled":false,"interval":"10s","jobLabel":"","labels":{},"metricRelabelings":null,"relabelings":[{"action":"replace","replacement":"${1}","sourceLabels":["__meta_kubernetes_pod_node_name"],"targetLabel":"node"}],"scrapeTimeout":null,"tlsConfig":{}},"tls":{"enabled":false,"server":{"cert":"","existingSecret":"","extraDnsNames":[],"extraIpAddresses":[],"key":"","mtls":{"enabled":false,"key":"ca.crt","name":null,"useSecret":false}}}}``
+     - ``{"dashboards":{"annotations":{},"enabled":false,"label":"grafana_dashboard","labelValue":"1","namespace":null},"dynamic":{"config":{"configMapName":"cilium-dynamic-metrics-config","content":[],"createConfigMap":true},"enabled":false},"enableOpenMetrics":false,"enabled":null,"port":9965,"portName":"hubble-metrics","serviceAnnotations":{},"serviceMonitor":{"annotations":{},"attachMetadata":{},"enabled":false,"interval":"10s","jobLabel":"","labels":{},"metricRelabelings":null,"relabelings":[{"action":"replace","replacement":"${1}","sourceLabels":["__meta_kubernetes_pod_node_name"],"targetLabel":"node"}],"scrapeTimeout":null,"tlsConfig":{}},"tls":{"enabled":false,"server":{"cert":"","existingSecret":"","extraDnsNames":[],"extraIpAddresses":[],"key":"","mtls":{"enabled":false,"key":"ca.crt","name":null,"useSecret":false}}}}``
    * - :spelling:ignore:`hubble.metrics.dashboards`
      - Grafana dashboards for hubble grafana can import dashboards based on the label and value ref: https://github.com/grafana/helm-charts/tree/main/charts/grafana#sidecar-for-dashboards
      - object
@@ -2186,6 +2194,10 @@
      - ``{}``
    * - :spelling:ignore:`hubble.metrics.serviceMonitor.annotations`
      - Annotations to add to ServiceMonitor hubble
+     - object
+     - ``{}``
+   * - :spelling:ignore:`hubble.metrics.serviceMonitor.attachMetadata`
+     - Attach node metadata to the targets discovered by ServiceMonitor hubble. ref: https://prometheus-operator.dev/docs/api-reference/api/#monitoring.coreos.com/v1.AttachMetadata
      - object
      - ``{}``
    * - :spelling:ignore:`hubble.metrics.serviceMonitor.enabled`
@@ -2403,13 +2415,17 @@
    * - :spelling:ignore:`hubble.relay.prometheus`
      - Enable prometheus metrics for hubble-relay on the configured port at /metrics
      - object
-     - ``{"enabled":false,"port":9966,"portName":"prometheus","serviceMonitor":{"annotations":{},"enabled":false,"interval":"10s","labels":{},"metricRelabelings":null,"relabelings":null,"scrapeTimeout":null}}``
+     - ``{"enabled":false,"port":9966,"portName":"prometheus","serviceMonitor":{"annotations":{},"attachMetadata":{},"enabled":false,"interval":"10s","labels":{},"metricRelabelings":null,"relabelings":null,"scrapeTimeout":null}}``
    * - :spelling:ignore:`hubble.relay.prometheus.portName`
      - Name of the hubble-relay Prometheus container port.
      - string
      - ``"prometheus"``
    * - :spelling:ignore:`hubble.relay.prometheus.serviceMonitor.annotations`
      - Annotations to add to ServiceMonitor hubble-relay
+     - object
+     - ``{}``
+   * - :spelling:ignore:`hubble.relay.prometheus.serviceMonitor.attachMetadata`
+     - Attach node metadata to the targets discovered by ServiceMonitor hubble-relay. ref: https://prometheus-operator.dev/docs/api-reference/api/#monitoring.coreos.com/v1.AttachMetadata
      - object
      - ``{}``
    * - :spelling:ignore:`hubble.relay.prometheus.serviceMonitor.enabled`
@@ -3375,7 +3391,7 @@
    * - :spelling:ignore:`nodeinit.image`
      - node-init image.
      - object
-     - ``{"digest":"sha256:e6d4d88b5958069f4528b02f0168740cfd074850b383ad1b617c1347e6a889ea","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/startup-script","tag":"1790907923-29f9511","useDigest":true}``
+     - ``{"digest":"sha256:d7aca2a73c58463a50384b2c4aeb535722dfa969f55bc01205b5f2aaf8b20da6","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/startup-script","tag":"1792666708-8c1b3e5","useDigest":true}``
    * - :spelling:ignore:`nodeinit.minReadySeconds`
      - Minimum number of seconds for which a newly created node-init pod should be ready before it is considered available.
      - int
@@ -3563,13 +3579,17 @@
    * - :spelling:ignore:`operator.prometheus`
      - Enable prometheus metrics for cilium-operator on the configured port at /metrics
      - object
-     - ``{"enabled":true,"metricsService":false,"port":9963,"portName":"prometheus","serviceMonitor":{"annotations":{},"enabled":false,"interval":"10s","jobLabel":"","labels":{},"metricRelabelings":null,"relabelings":null,"scrapeTimeout":null},"tls":{"enabled":false,"server":{"existingSecret":"","mtls":{"enabled":false}}}}``
+     - ``{"enabled":true,"metricsService":false,"port":9963,"portName":"prometheus","serviceMonitor":{"annotations":{},"attachMetadata":{},"enabled":false,"interval":"10s","jobLabel":"","labels":{},"metricRelabelings":null,"relabelings":null,"scrapeTimeout":null},"tls":{"enabled":false,"server":{"existingSecret":"","mtls":{"enabled":false}}}}``
    * - :spelling:ignore:`operator.prometheus.portName`
      - Name of the cilium-operator Prometheus container port.
      - string
      - ``"prometheus"``
    * - :spelling:ignore:`operator.prometheus.serviceMonitor.annotations`
      - Annotations to add to ServiceMonitor cilium-operator
+     - object
+     - ``{}``
+   * - :spelling:ignore:`operator.prometheus.serviceMonitor.attachMetadata`
+     - Attach node metadata to the targets discovered by ServiceMonitor cilium-operator. ref: https://prometheus-operator.dev/docs/api-reference/api/#monitoring.coreos.com/v1.AttachMetadata
      - object
      - ``{}``
    * - :spelling:ignore:`operator.prometheus.serviceMonitor.enabled`
@@ -3643,7 +3663,7 @@
    * - :spelling:ignore:`operator.tolerations`
      - Node tolerations for cilium-operator scheduling to nodes with taints ref: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/ Toleration for agentNotReadyTaintKey taint is always added to cilium-operator pods. @schema type: [null, array] @schema
      - list
-     - ``[{"key":"node-role.kubernetes.io/control-plane","operator":"Exists"},{"key":"node-role.kubernetes.io/master","operator":"Exists"},{"key":"node.kubernetes.io/not-ready","operator":"Exists"},{"key":"node.cloudprovider.kubernetes.io/uninitialized","operator":"Exists"}]``
+     - ``[{"key":"node-role.kubernetes.io/control-plane","operator":"Exists"},{"key":"node-role.kubernetes.io/master","operator":"Exists"},{"key":"node-role.kubernetes.io/etcd","operator":"Exists"},{"key":"node.kubernetes.io/not-ready","operator":"Exists"},{"key":"node.cloudprovider.kubernetes.io/uninitialized","operator":"Exists"}]``
    * - :spelling:ignore:`operator.topologySpreadConstraints`
      - Pod topology spread constraints for cilium-operator
      - list
@@ -3739,7 +3759,7 @@
    * - :spelling:ignore:`preflight.envoy.image`
      - Envoy pre-flight image.
      - object
-     - ``{"digest":"sha256:abbbe3c68d5f83970af87d89a2b831f52a6a865fec9da8210b5455e7bff9cf24","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.40.0-1792539146-8cc5db890b41fe2417751ce28c23babe4b28e8b3","useDigest":true}``
+     - ``{"digest":"sha256:38d2fb65b6d93be7a4ebfd236652a498aa0f7e42c495dd1f884ae69c880b620b","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.40.1-1792728304-8839ed339cf4446d66a4f7083d8ea2fe7b21b182","useDigest":true}``
    * - :spelling:ignore:`preflight.extraEnv`
      - Additional preflight environment variables.
      - list
@@ -3831,7 +3851,7 @@
    * - :spelling:ignore:`prometheus`
      - Configure prometheus metrics on the configured port at /metrics
      - object
-     - ``{"controllerGroupMetrics":["write-cni-file","sync-host-ips","sync-lb-maps-with-k8s-services"],"enabled":false,"metrics":null,"metricsService":false,"port":9962,"portName":"prometheus","serviceMonitor":{"annotations":{},"enabled":false,"interval":"10s","jobLabel":"","labels":{},"metricRelabelings":null,"relabelings":[{"action":"replace","replacement":"${1}","sourceLabels":["__meta_kubernetes_pod_node_name"],"targetLabel":"node"}],"scrapeTimeout":null,"trustCRDsExist":false}}``
+     - ``{"controllerGroupMetrics":["write-cni-file","sync-host-ips","sync-lb-maps-with-k8s-services"],"enabled":false,"metrics":null,"metricsService":false,"port":9962,"portName":"prometheus","serviceMonitor":{"annotations":{},"attachMetadata":{},"enabled":false,"interval":"10s","jobLabel":"","labels":{},"metricRelabelings":null,"relabelings":[{"action":"replace","replacement":"${1}","sourceLabels":["__meta_kubernetes_pod_node_name"],"targetLabel":"node"}],"scrapeTimeout":null,"trustCRDsExist":false}}``
    * - :spelling:ignore:`prometheus.controllerGroupMetrics`
      - - Enable controller group metrics for monitoring specific Cilium subsystems. The list is a list of controller group names. The special values of "all" and "none" are supported. The set of controller group names is not guaranteed to be stable between Cilium versions.
      - list
@@ -3846,6 +3866,10 @@
      - ``"prometheus"``
    * - :spelling:ignore:`prometheus.serviceMonitor.annotations`
      - Annotations to add to ServiceMonitor cilium-agent
+     - object
+     - ``{}``
+   * - :spelling:ignore:`prometheus.serviceMonitor.attachMetadata`
+     - Attach node metadata to the targets discovered by ServiceMonitor cilium-agent. ref: https://prometheus-operator.dev/docs/api-reference/api/#monitoring.coreos.com/v1.AttachMetadata
      - object
      - ``{}``
    * - :spelling:ignore:`prometheus.serviceMonitor.enabled`

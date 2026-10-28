@@ -245,16 +245,17 @@ func (e *Endpoint) addNewRedirects(selectorPolicy policy.SelectorPolicy, proxyWa
 	for l4, policySelectorTuple := range selectorPolicy.RedirectFilters() {
 		// Possible listener name for both the proxy ID and the proxyPolicy below.
 		listener := policySelectorTuple.Policy.GetListener()
+		parser := policySelectorTuple.Policy.GetL7Parser()
 
 		n := 0
-		for proxyID, dstPort := range e.proxyIDs(selectorPolicy, l4, listener, selectors) {
+		for proxyID, dstPort := range e.proxyIDs(selectorPolicy, l4, parser, listener, selectors) {
 			n++
 			// desiredRedirects starts out empty, so we can use it to check if this
 			// redirect has already been updated on this round.
 			if desiredRedirects[proxyID] != 0 {
 				continue
 			}
-			pp := newProxyPolicy(l4, policySelectorTuple.Policy.L7Parser, listener, dstPort, l4.U8Proto)
+			pp := newProxyPolicy(l4, parser, listener, dstPort, l4.U8Proto)
 			proxyPort, err, revertFunc := e.proxy.CreateOrUpdateRedirect(e.aliveCtx, &pp, proxyID, e.ID, proxyWaitGroup)
 			if err != nil {
 				// Skip redirects that can not be created or updated.  This
@@ -285,7 +286,7 @@ func (e *Endpoint) addNewRedirects(selectorPolicy policy.SelectorPolicy, proxyWa
 			// Update the endpoint API model to report that Cilium manages a
 			// redirect for that port.
 			statsKey := policy.ProxyStatsKey(l4.Ingress, string(l4.Protocol), dstPort, proxyPort)
-			proxyStats := e.getProxyStatistics(statsKey, string(policySelectorTuple.Policy.L7Parser), dstPort, l4.Ingress, proxyPort)
+			proxyStats := e.getProxyStatistics(statsKey, string(parser), dstPort, l4.Ingress, proxyPort)
 			updatedStats = append(updatedStats, proxyStats)
 		}
 		// count missing proxy port mapping as skipped
@@ -330,7 +331,7 @@ func (e *Endpoint) removeOldRedirects(desiredRedirects, realizedRedirects map[st
 		// active or known for that port anymore. We never delete stats
 		// until an endpoint is deleted, so we only set the redirect port
 		// to 0.
-		_, ingress, protocol, port, _, _ := policy.ParseProxyID(id)
+		_, ingress, protocol, port, _, _, _ := policy.ParseProxyID(id)
 		key := policy.ProxyStatsKey(ingress, protocol, port, redirectPort)
 		e.proxyStatisticsMutex.Lock()
 		if proxyStats, ok := e.proxyStatistics[key]; ok {
@@ -380,23 +381,20 @@ func (e *Endpoint) regenerateBPF(regenContext *regenerationContext) (revnum uint
 	}
 
 	datapathRegenCtxt.prepareForProxyUpdates(regenContext.parentContext)
-	defer datapathRegenCtxt.completionCancel()
+	defer func() {
+		datapathRegenCtxt.completionCancel()
+		// Canceling the parent context alone does not finish callbacks or owner
+		// cleanup. Cancel the WaitGroup for early error returns and on a fake Endpoints
+		// for which we do not Wait.
+		datapathRegenCtxt.proxyWaitGroup.Cancel()
+
+		// Ignore finalizing of proxy state in dry mode.
+		if !e.IsProperty(endpointtypes.PropertyFakeEndpoint) {
+			e.finalizeEndpointRegeneration(regenContext, reterr)
+		}
+	}()
 
 	err = e.runPreCompilationSteps(regenContext)
-
-	// Ignore finalizing of proxy state in dry mode.
-	if !e.IsProperty(endpointtypes.PropertyFakeEndpoint) {
-		// Keep track of the side-effects of the regeneration that need to be
-		// reverted in case of failure.
-		// Also keep track of the regeneration finalization code that can't be
-		// reverted, and execute it in case of regeneration success.
-		// Must use closure to get the current value of 'reterr' at the time
-		// of execution.
-		defer func() {
-			e.finalizeEndpointRegeneration(regenContext, reterr)
-		}()
-	}
-
 	if err != nil {
 		return 0, err
 	}
@@ -460,7 +458,7 @@ func (e *Endpoint) regenerateBPF(regenContext *regenerationContext) (revnum uint
 		}
 
 		stats.proxyWaitForAck.Start()
-		err = e.waitForProxyCompletions(datapathRegenCtxt.proxyWaitGroup)
+		err = e.waitForProxyCompletions(datapathRegenCtxt.completionCtx, datapathRegenCtxt.proxyWaitGroup)
 		stats.proxyWaitForAck.End(err == nil)
 		if err != nil {
 			return 0, newRegenerationErrorf(regenerationFailureReasonProxyPolicyError, "error waiting for proxy network policy update: %w", err)
@@ -507,7 +505,7 @@ func (e *Endpoint) regenerateBPF(regenContext *regenerationContext) (revnum uint
 	}
 
 	stats.proxyWaitForAck.Start()
-	err = e.waitForProxyCompletions(datapathRegenCtxt.proxyWaitGroup)
+	err = e.waitForProxyCompletions(datapathRegenCtxt.completionCtx, datapathRegenCtxt.proxyWaitGroup)
 	stats.proxyWaitForAck.End(err == nil)
 	if err != nil {
 		return 0, newRegenerationErrorf(regenerationFailureReasonProxyPolicyError, "error waiting for proxy network policy update: %w", err)

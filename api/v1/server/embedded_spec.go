@@ -1327,10 +1327,12 @@ func init() {
     },
     "/prefilter": {
       "get": {
+        "description": "Deprecated: This will be removed in the future.\n",
         "tags": [
           "prefilter"
         ],
         "summary": "Retrieve list of CIDRs",
+        "deprecated": true,
         "responses": {
           "200": {
             "description": "Success",
@@ -1348,10 +1350,12 @@ func init() {
         }
       },
       "delete": {
+        "description": "Deprecated: This will be removed in the future.\n",
         "tags": [
           "prefilter"
         ],
         "summary": "Delete list of CIDRs",
+        "deprecated": true,
         "parameters": [
           {
             "$ref": "#/parameters/prefilter-spec"
@@ -1384,10 +1388,12 @@ func init() {
         }
       },
       "patch": {
+        "description": "Deprecated: This will be removed in the future.\n",
         "tags": [
           "prefilter"
         ],
         "summary": "Update list of CIDRs",
+        "deprecated": true,
         "parameters": [
           {
             "$ref": "#/parameters/prefilter-spec"
@@ -3315,13 +3321,12 @@ func init() {
       "description": "IP entry with metadata",
       "type": "object",
       "required": [
-        "cidr",
         "identity"
       ],
       "properties": {
         "cidr": {
           "description": "Key of the entry in the form of a CIDR range",
-          "type": "string"
+          "$ref": "#/definitions/CIDR"
         },
         "encryptKey": {
           "description": "The context ID for the encryption session",
@@ -3329,7 +3334,7 @@ func init() {
         },
         "hostIP": {
           "description": "IP address of the host",
-          "type": "string"
+          "$ref": "#/definitions/Address"
         },
         "identity": {
           "description": "Numerical identity assigned to the IP",
@@ -6690,10 +6695,12 @@ func init() {
     },
     "/prefilter": {
       "get": {
+        "description": "Deprecated: This will be removed in the future.\n",
         "tags": [
           "prefilter"
         ],
         "summary": "Retrieve list of CIDRs",
+        "deprecated": true,
         "responses": {
           "200": {
             "description": "Success",
@@ -6711,10 +6718,12 @@ func init() {
         }
       },
       "delete": {
+        "description": "Deprecated: This will be removed in the future.\n",
         "tags": [
           "prefilter"
         ],
         "summary": "Delete list of CIDRs",
+        "deprecated": true,
         "parameters": [
           {
             "description": "List of CIDR ranges for filter table",
@@ -6753,10 +6762,12 @@ func init() {
         }
       },
       "patch": {
+        "description": "Deprecated: This will be removed in the future.\n",
         "tags": [
           "prefilter"
         ],
         "summary": "Update list of CIDRs",
+        "deprecated": true,
         "parameters": [
           {
             "description": "List of CIDR ranges for filter table",
@@ -8788,13 +8799,12 @@ func init() {
       "description": "IP entry with metadata",
       "type": "object",
       "required": [
-        "cidr",
         "identity"
       ],
       "properties": {
         "cidr": {
           "description": "Key of the entry in the form of a CIDR range",
-          "type": "string"
+          "$ref": "#/definitions/CIDR"
         },
         "encryptKey": {
           "description": "The context ID for the encryption session",
@@ -8802,7 +8812,7 @@ func init() {
         },
         "hostIP": {
           "description": "IP address of the host",
-          "type": "string"
+          "$ref": "#/definitions/Address"
         },
         "identity": {
           "description": "Numerical identity assigned to the IP",
