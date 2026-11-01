@@ -15,6 +15,9 @@ on:
       SHA:
         description: "SHA under test (head of the PR branch)."
         required: true
+      base-SHA:
+        description: "SHA of the base branch (target branch of the PR)."
+        required: false
       num-test-nodes:
         description: "Number of test nodes to create"
         required: false
@@ -67,7 +70,7 @@ env:
   # renovate: datasource=github-releases depName=kubernetes/kubernetes
   kubectl_version: v1.37.1
   # renovate: datasource=docker depName=google/cloud-sdk
-  gcloud_version: 590.0.0
+  gcloud_version: 591.0.0
 
   test_name: l7-perf
   cluster_name: ${{ github.run_id }}-${{ github.run_attempt }}

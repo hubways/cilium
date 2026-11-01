@@ -1163,7 +1163,7 @@ int tail_nodeport_nat_ingress_ipv6(struct __ctx_buff *ctx)
 	if (!CONFIG(dsr_cfg).enable || CONFIG(dsr_cfg).enable_by_user ||
 	    (is_defined(ENABLE_EGRESS_GATEWAY_COMMON) &&
 	     (is_defined(IS_BPF_XDP) || is_defined(IS_BPF_HOST)))) {
-		if ((is_defined(ENABLE_HOST_FIREWALL) && is_defined(IS_BPF_HOST)) ||
+		if ((CONFIG(enable_host_firewall) && is_defined(IS_BPF_HOST)) ||
 		    is_defined(IS_BPF_XDP))
 			ret = tail_call_internal(ctx, CILIUM_CALL_IPV6_NODEPORT_REVNAT_INGRESS,
 						 &ext_err);
@@ -1411,6 +1411,7 @@ static __always_inline int nodeport_svc_lb6(struct __ctx_buff *ctx,
 				return handle_nonroutable_endpoints_v6(svc);
 			if (CONFIG(enable_service_no_backend_response)) {
 				edt_set_aggregate(ctx, 0);
+				ctx_store_meta(ctx, CB_SRC_LABEL, src_sec_identity);
 				ret = tail_call_internal(ctx, CILIUM_CALL_IPV6_NO_SERVICE,
 							 ext_err);
 				return ret;
@@ -2499,7 +2500,7 @@ int tail_nodeport_nat_ingress_ipv4(struct __ctx_buff *ctx)
 		 * Also let nodeport_rev_dnat_ipv4() redirect EgressGW
 		 * reply traffic into tunnel (see there for details).
 		 */
-		if ((is_defined(ENABLE_HOST_FIREWALL) && is_defined(IS_BPF_HOST)) ||
+		if ((CONFIG(enable_host_firewall) && is_defined(IS_BPF_HOST)) ||
 		    is_defined(IS_BPF_XDP))
 			ret = tail_call_internal(ctx, CILIUM_CALL_IPV4_NODEPORT_REVNAT, &ext_err);
 		else
@@ -2756,6 +2757,7 @@ static __always_inline int nodeport_svc_lb4(struct __ctx_buff *ctx,
 				if (CONFIG(enable_service_no_backend_response)) {
 					/* Packet is TX'ed back out, avoid EDT false-positives: */
 					edt_set_aggregate(ctx, 0);
+					ctx_store_meta(ctx, CB_SRC_LABEL, src_sec_identity);
 					ret = tail_call_internal(ctx, CILIUM_CALL_IPV4_NO_SERVICE,
 								 ext_err);
 					return ret;

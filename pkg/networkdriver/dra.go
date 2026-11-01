@@ -486,12 +486,8 @@ func (driver *Driver) newClaimPrepState(pod resourceapi.ResourceClaimConsumerRef
 // valid (podIfName, sysctl settings) before any destructive work begins.
 func validateDeviceConfigs(claim *resourceapi.ResourceClaim, deviceClaimConfigs map[string]types.DeviceConfig) error {
 	for request, cfg := range deviceClaimConfigs {
-		if err := types.ValidateInterfaceName(cfg.PodIfName); err != nil {
-			return fmt.Errorf("invalid podIfName in request %s for claim %s: %w",
-				request, path.Join(claim.Namespace, claim.Name), err)
-		}
-		if err := validateInterfaceSysctl(cfg); err != nil {
-			return fmt.Errorf("invalid sysctl config in request %s for claim %s: %w",
+		if err := cfg.Validate(); err != nil {
+			return fmt.Errorf("invalid device config in request %s for claim %s: %w",
 				request, path.Join(claim.Namespace, claim.Name), err)
 		}
 	}
@@ -881,7 +877,7 @@ func (driver *Driver) allocateAddrs(ctx context.Context, deviceName string, cfg 
 				ctx, "failed to get IP addresses for device, will retry",
 				logfields.Device, deviceName,
 				logfields.PoolName, cfg.IPPool,
-				logfields.Error, errs,
+				logfields.Error, errors.Join(errs...),
 			)
 			return false, nil
 		}

@@ -14,7 +14,7 @@ SPHINX_OPTS := "-j=auto"
 
 .PHONY: default clean help cilium-build cmdref epub latex html
 
-DOCS_BUILDER_IMG ?= quay.io/cilium/docs-builder:cd9f601a1edba91d911e50c1acce48b6413008d7@sha256:c377837bcb944b4dba60607f839be47d45e49c140f415d5c43cd051c0ee2a875
+DOCS_BUILDER_IMG ?= quay.io/cilium/docs-builder:16b20632cc36a85a7fa7bd1c52470a46463281cf@sha256:bfcda38c4fc7831b6cc3483ae6d4c640aa18d55be8ddb0dfa41087c0eaa7c9c7
 
 .PHONY: update-docs-builder-image
 update-docs-builder-image: DOCS_BUILDER_TAG=$(word 3,$(shell git ls-tree --full-tree HEAD -- $(DOCS_BUILDER_DIR)))
@@ -157,7 +157,7 @@ update-redirects: builder-image ## Build and serve the documentation locally.
 update-requirements: docs-base-image $(DOCS_REQUIREMENTS_NODEP) ## Regenerate the requirements.txt file from requirements-min/requirements.txt.
 	@echo '## Auto-generated from Documentation/$(DOCS_REQUIREMENTS_NODEP) with "make update-requirements"' > $(DOCS_BUILDER_DIR)/$(DOCS_REQUIREMENTS)
 	$(QUIET)$(DOCKER_CTR_BASE) $(DOCS_BASE_IMG) \
-		bash -c "export HOME=/tmp && pip install --no-warn-script-location -r ../../Documentation/$(DOCS_REQUIREMENTS_NODEP) && pip freeze -r ../../$(DOCS_REQUIREMENTS_NODEP) >> $(DOCS_REQUIREMENTS)"
+		bash -c "export HOME=/tmp && pip install --no-warn-script-location -r ../../Documentation/$(DOCS_REQUIREMENTS_NODEP) && pip freeze -r ../../Documentation/$(DOCS_REQUIREMENTS_NODEP) >> $(DOCS_REQUIREMENTS)"
 
 clean: ## Clean up all artefacts from documentation.
 	-$(QUIET)rm -rf _build _exts/__pycache__ _preview Pipfile Pipfile.lock

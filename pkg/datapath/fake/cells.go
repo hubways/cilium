@@ -33,6 +33,7 @@ import (
 	dpnode "github.com/cilium/cilium/pkg/datapath/node"
 	"github.com/cilium/cilium/pkg/datapath/tables"
 	"github.com/cilium/cilium/pkg/datapath/tunnel"
+	"github.com/cilium/cilium/pkg/datapath/xdp"
 	fakeendpoint "github.com/cilium/cilium/pkg/endpoint/fake"
 	endpoint "github.com/cilium/cilium/pkg/endpoint/types"
 	"github.com/cilium/cilium/pkg/maps/egressmap"
@@ -86,6 +87,7 @@ var Cell = cell.Module(
 		tables.NewDeviceTable,
 		tables.NewL2AnnounceTable, statedb.RWTable[*tables.L2AnnounceEntry].ToTable,
 		tables.NewRouteTable, statedb.RWTable[*tables.Route].ToTable,
+		tables.NewNeighborTable, statedb.RWTable[*tables.Neighbor].ToTable,
 
 		func() bigtcp.Features { return &fakebigtcp.UserConfig{} },
 
@@ -98,6 +100,7 @@ var Cell = cell.Module(
 	tables.DirectRoutingDeviceCell,
 
 	tunnel.Cell,
+	xdp.Cell,
 	cell.Provide(fakeDevices),
 	link.Cell,
 )
