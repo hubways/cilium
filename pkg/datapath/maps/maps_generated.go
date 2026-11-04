@@ -142,7 +142,7 @@ func newCiliumCallsSpec(btf *btf.Spec) *ebpf.MapSpec {
 		Type:       ebpf.ProgramArray,
 		KeySize:    4,
 		ValueSize:  4,
-		MaxEntries: 50,
+		MaxEntries: 51,
 		Flags:      0,
 		Pinning:    ebpf.PinType(16),
 	}
@@ -1262,7 +1262,7 @@ func newCiliumVTEPMapSpec(btf *btf.Spec) *ebpf.MapSpec {
 		ValueSize:  16,
 		Value:      anyTypeByName(btf, "vtep_value"),
 		MaxEntries: 8,
-		Flags:      unix.BPF_F_NO_PREALLOC | unix.BPF_F_RDONLY_PROG,
+		Flags:      unix.BPF_F_RDONLY_PROG,
 		Pinning:    ebpf.PinByName,
 	}
 }

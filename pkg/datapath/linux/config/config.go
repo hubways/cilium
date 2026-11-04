@@ -19,6 +19,7 @@ import (
 	"github.com/cilium/cilium/pkg/datapath/config"
 	dpdef "github.com/cilium/cilium/pkg/datapath/linux/config/defines"
 	"github.com/cilium/cilium/pkg/datapath/linux/sysctl"
+	"github.com/cilium/cilium/pkg/datapath/types"
 	"github.com/cilium/cilium/pkg/defaults"
 	endpoint "github.com/cilium/cilium/pkg/endpoint/types"
 	"github.com/cilium/cilium/pkg/kpr"
@@ -31,7 +32,6 @@ import (
 	"github.com/cilium/cilium/pkg/maps/metricsmap"
 	"github.com/cilium/cilium/pkg/maps/nodemap"
 	"github.com/cilium/cilium/pkg/maps/policymap"
-	"github.com/cilium/cilium/pkg/maps/vtep"
 	"github.com/cilium/cilium/pkg/node"
 	"github.com/cilium/cilium/pkg/option"
 )
@@ -196,30 +196,24 @@ func (h *HeaderfileWriter) writeNodeConfig(w io.Writer, cfg *config.Config, with
 	cDefinesMap["NODEPORT_NEIGH6_SIZE"] = fmt.Sprintf("%d", option.Config.NeighMapEntriesGlobal)
 	cDefinesMap["NODEPORT_NEIGH4_SIZE"] = fmt.Sprintf("%d", option.Config.NeighMapEntriesGlobal)
 
-	if h.kprCfg.KubeProxyReplacement {
-		cDefinesMap["ENABLE_NODEPORT"] = "1"
+	// todo(ekoops): get rid of this once we are able to ship pre-compiled objects.
+	if !h.kprCfg.KubeProxyReplacement && !option.Config.EnableBPFMasquerade {
+		cDefinesMap["SKIP_NODEPORT_PROGS"] = "1"
+	}
 
+	if h.kprCfg.KubeProxyReplacement {
 		// --- WARNING: THIS CONFIGURATION METHOD IS DEPRECATED, SEE FUNCTION DOC ---
 
-		const (
-			dsrEncapInv = iota
-			dsrEncapNone
-			dsrEncapIPIP
-			dsrEncapGeneve
-		)
-		cDefinesMap["DSR_ENCAP_IPIP"] = fmt.Sprintf("%d", dsrEncapIPIP)
-		cDefinesMap["DSR_ENCAP_GENEVE"] = fmt.Sprintf("%d", dsrEncapGeneve)
-		cDefinesMap["DSR_ENCAP_NONE"] = fmt.Sprintf("%d", dsrEncapNone)
 		if cfg.LBConfig.LoadBalancerUsesDSR() {
 			if cfg.LBConfig.DSRDispatch == loadbalancer.DSRDispatchOption {
-				cDefinesMap["DSR_ENCAP_MODE"] = fmt.Sprintf("%d", dsrEncapNone)
+				cDefinesMap["DSR_ENCAP_MODE"] = fmt.Sprintf("%d", types.DSREncapModeDSREncapModeNone)
 			} else if cfg.LBConfig.DSRDispatch == loadbalancer.DSRDispatchIPIP {
-				cDefinesMap["DSR_ENCAP_MODE"] = fmt.Sprintf("%d", dsrEncapIPIP)
+				cDefinesMap["DSR_ENCAP_MODE"] = fmt.Sprintf("%d", types.DSREncapModeDSREncapModeIPIP)
 			} else if cfg.LBConfig.DSRDispatch == loadbalancer.DSRDispatchGeneve {
-				cDefinesMap["DSR_ENCAP_MODE"] = fmt.Sprintf("%d", dsrEncapGeneve)
+				cDefinesMap["DSR_ENCAP_MODE"] = fmt.Sprintf("%d", types.DSREncapModeDSREncapModeGeneve)
 			}
 		} else {
-			cDefinesMap["DSR_ENCAP_MODE"] = fmt.Sprintf("%d", dsrEncapInv)
+			cDefinesMap["DSR_ENCAP_MODE"] = fmt.Sprintf("%d", types.DSREncapModeDSREncapModeInvalid)
 		}
 	}
 
@@ -237,16 +231,10 @@ func (h *HeaderfileWriter) writeNodeConfig(w io.Writer, cfg *config.Config, with
 	cDefinesMap["SNAT_MAPPING_IPV4_SIZE"] = fmt.Sprintf("%d", option.Config.NATMapEntriesGlobal)
 	cDefinesMap["SNAT_MAPPING_IPV6_SIZE"] = fmt.Sprintf("%d", option.Config.NATMapEntriesGlobal)
 
-	if option.Config.EnableBPFMasquerade {
-		cDefinesMap["ENABLE_NODEPORT"] = "1"
-	}
-
 	// --- WARNING: THIS CONFIGURATION METHOD IS DEPRECATED, SEE FUNCTION DOC ---
 
 	fmt.Fprintf(fw, "#define CT_MAP_SIZE_TCP %d\n", cmp.Or(option.Config.CTMapEntriesGlobalTCP, option.CTMapEntriesGlobalTCPDefault))
 	fmt.Fprintf(fw, "#define CT_MAP_SIZE_ANY %d\n", cmp.Or(option.Config.CTMapEntriesGlobalAny, option.CTMapEntriesGlobalAnyDefault))
-
-	cDefinesMap["VTEP_MAP_SIZE"] = fmt.Sprintf("%d", vtep.MaxEntries)
 
 	if option.Config.TunnelingEnabled() {
 		cDefinesMap["TUNNEL_MODE"] = "1"

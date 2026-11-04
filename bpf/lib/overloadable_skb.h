@@ -77,32 +77,29 @@ neigh_resolver_available(void)
 }
 
 static __always_inline __maybe_unused void
-ctx_skip_nodeport_clear(struct __sk_buff *ctx __maybe_unused)
+ctx_skip_nodeport_clear(struct __sk_buff *ctx)
 {
-#ifdef ENABLE_NODEPORT
-	ctx->tc_index &= ~TC_INDEX_F_SKIP_NODEPORT;
-#endif
+	if (NODEPORT_ENABLED)
+		ctx->tc_index &= ~TC_INDEX_F_SKIP_NODEPORT;
 }
 
 static __always_inline __maybe_unused void
-ctx_skip_nodeport_set(struct __sk_buff *ctx __maybe_unused)
+ctx_skip_nodeport_set(struct __sk_buff *ctx)
 {
-#ifdef ENABLE_NODEPORT
-	ctx->tc_index |= TC_INDEX_F_SKIP_NODEPORT;
-#endif
+	if (NODEPORT_ENABLED)
+		ctx->tc_index |= TC_INDEX_F_SKIP_NODEPORT;
 }
 
 static __always_inline __maybe_unused bool
-ctx_skip_nodeport(struct __sk_buff *ctx __maybe_unused)
+ctx_skip_nodeport(struct __sk_buff *ctx)
 {
-#ifdef ENABLE_NODEPORT
+	if (!NODEPORT_ENABLED)
+		return true;
+
 	volatile __u32 tc_index = ctx->tc_index;
 
 	ctx->tc_index &= ~TC_INDEX_F_SKIP_NODEPORT;
 	return tc_index & TC_INDEX_F_SKIP_NODEPORT;
-#else
-	return true;
-#endif
 }
 
 static __always_inline __maybe_unused __u32 ctx_get_xfer(struct __sk_buff *ctx,
@@ -145,7 +142,7 @@ static __always_inline bool ctx_snat_done(const struct __sk_buff *ctx)
 
 static __always_inline bool ctx_is_overlay(const struct __sk_buff *ctx)
 {
-	if (!is_defined(HAVE_ENCAP))
+	if (!HAVE_ENCAP)
 		return false;
 
 	return (ctx->mark & MARK_MAGIC_HOST_MASK) == MARK_MAGIC_OVERLAY;

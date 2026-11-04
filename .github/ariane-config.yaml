@@ -14,6 +14,7 @@ triggers:
     workflows:
     - lint-ariane-config.yaml
     - lint-images-base.yaml
+    - conformance-aks.yaml
     - conformance-aws-cni.yaml
     - conformance-clustermesh.yaml
     - conformance-delegated-ipam.yaml
@@ -21,6 +22,7 @@ triggers:
     - conformance-ztunnel-e2e.yaml
     - conformance-eks.yaml
     - conformance-gateway-api.yaml
+    - conformance-gke.yaml
     - conformance-mcs-api.yaml
     - conformance-ginkgo.yaml
     - conformance-ingress.yaml
@@ -37,6 +39,7 @@ triggers:
     - integration-test.yaml
     - tests-clustermesh-upgrade.yaml
     - tests-datapath-verifier.yaml
+    - tests-e2e-upgrade.yaml
     - tests-smoke-conformance.yaml
     - tests-smoke-ipv6.yaml
     - hubble-cli-integration-test.yaml
@@ -174,6 +177,11 @@ triggers:
   /scale-egw:
     workflows:
     - scale-test-egw.yaml
+  /ci-resource-churn(\s+(?:scenario=[-a-z0-9]+)?(?:\s*baseline=(?:none|v[0-9.]+|[a-f0-9]+))?)?:
+    workflows:
+    - resource-churn-test.yaml
+    depends-on:
+    - /build-images-dependency
   /net-perf-gke:
     workflows:
     - net-perf-gke.yaml

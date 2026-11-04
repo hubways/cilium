@@ -865,6 +865,20 @@
       ]
     },
     {
+      // We bump Python by hand with Documentation/.readthedocs.yaml and runtime.txt.
+      "enabled": false,
+      "matchFileNames": [
+        "images/docs-builder/Dockerfile"
+      ],
+      "matchPackageNames": [
+        "docker.io/library/python"
+      ],
+      "matchUpdateTypes": [
+        "major",
+        "minor"
+      ]
+    },
+    {
       // k8s major/minor updates are disabled on all branches.
       // On main, they will be updated manually along with tests.
       // On stable branches, patch updates are allowed via the "k8s.io patch updates stable" rule.
@@ -970,6 +984,15 @@
         "gcr.io/k8s-staging-gateway-api/echo-advanced"
       ],
       "versioning": "regex:^v(?<major>\\d+)-v(?<minor>\\d+)\\.(?<patch>\\d+)\\.(?<build>\\d+)$"
+    },
+    {
+      // iptables-wrappers has no GitHub releases, only tags, in two
+      // independent series: "iptables-wrapper-vN" for the binary we build,
+      // and semver "vX.Y.Z" for the Go library. Only track the former.
+      "matchDepNames": [
+        "kubernetes-sigs/iptables-wrappers"
+      ],
+      "versioning": "regex:^iptables-wrapper-v(?<major>\\d+)$"
     },
     {
       // cilium-envoy is referenced in both images/cilium/Dockerfile and
@@ -1180,7 +1203,8 @@
         "/images/builder/install-protoc.sh/",
         "/images/builder/install-protoplugins.sh/",
         "/images/runtime/build-cni.sh/",
-        "/images/runtime/build-gops.sh/"
+        "/images/runtime/build-gops.sh/",
+        "/images/runtime/build-iptables-wrapper.sh/"
       ],
       // These regexes manage version and digest strings in shell scripts,
       // similar to the examples shown here:

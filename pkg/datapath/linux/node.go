@@ -28,7 +28,6 @@ import (
 	"github.com/cilium/cilium/pkg/backoff"
 	"github.com/cilium/cilium/pkg/datapath/config"
 	"github.com/cilium/cilium/pkg/datapath/linux/ipsec"
-	fakeipsec "github.com/cilium/cilium/pkg/datapath/linux/ipsec/fake"
 	ipsecTypes "github.com/cilium/cilium/pkg/datapath/linux/ipsec/types"
 	"github.com/cilium/cilium/pkg/datapath/linux/linux_defaults"
 	"github.com/cilium/cilium/pkg/datapath/linux/route"
@@ -43,7 +42,6 @@ import (
 	"github.com/cilium/cilium/pkg/maps/nodemap"
 	subnetmap "github.com/cilium/cilium/pkg/maps/subnet"
 	"github.com/cilium/cilium/pkg/node"
-	"github.com/cilium/cilium/pkg/node/manager"
 	nodeTypes "github.com/cilium/cilium/pkg/node/types"
 	"github.com/cilium/cilium/pkg/option"
 	cslices "github.com/cilium/cilium/pkg/slices"
@@ -129,9 +127,10 @@ func NewNodeHandler(
 	log *slog.Logger,
 	tunnelConfig dpTunnel.Config,
 	nodeMap nodemap.MapV2,
-	nodeConfigNotifier *manager.NodeConfigNotifier,
+	nodeConfigNotifier *config.NodeConfigNotifier,
 	kprCfg kpr.KPRConfig,
 	ipsecAgent ipsecTypes.Agent,
+	ipsecCfg ipsecTypes.Config,
 	localNodeStore *node.LocalNodeStore,
 	nodePolicy *NodePolicy,
 	params reconciler.Params,
@@ -152,7 +151,7 @@ func NewNodeHandler(
 		nodeMap,
 		kprCfg,
 		ipsecAgent,
-		fakeipsec.Config{},
+		ipsecCfg,
 		localNodeStore,
 		nodePolicy,
 		db,

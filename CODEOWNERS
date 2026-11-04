@@ -81,6 +81,10 @@
 #   Review vendor updates for software dependencies to check for any potential
 #   upstream breakages / incompatibilities. Discourage the use of unofficial
 #   forks of upstream libraries if they are actively maintained.
+# - @cilium/ai-guidance:
+#   Help shape the usage of generative AI in the Cilium projects by providing
+#   review of guides and artifacts that are interpreted by either humans or
+#   machines regarding how to use these tools.
 #
 # Repository Owners
 # +++++++++++++++++
@@ -247,6 +251,7 @@
 /CODEOWNERS @cilium/contributing
 /CONTRIBUTING.md @cilium/contributing
 /CHANGELOG.md @cilium/release-managers
+/AGENTS.md @cilium/ai-guidance
 /.authors.aux @cilium/contributing
 /.clomonitor.yml @cilium/contributing
 /.custom-gcl.yaml @cilium/ci-structure
@@ -671,6 +676,7 @@ Makefile* @cilium/build
 /pkg/networkdriver @cilium/network-driver
 /pkg/node @cilium/sig-agent
 /pkg/node/neighbordiscovery @cilium/sig-agent @cilium/sig-datapath
+/pkg/node/policy/ @cilium/sig-agent
 /pkg/nodediscovery/ @cilium/sig-agent
 /pkg/nodeipamconfig @cilium/sig-ipam
 /pkg/option @cilium/sig-agent @cilium/cli
@@ -745,6 +751,7 @@ Makefile* @cilium/build
 /tools/envoy-bootstrap-locality @cilium/envoy
 /tools/metricslint @cilium/metrics
 /tools/statedblint @cilium/sig-foundations
+/tools/cl2-report @cilium/sig-scalability
 /USERS.md @cilium/community
 /go.sum @cilium/vendor
 /go.mod @cilium/vendor
