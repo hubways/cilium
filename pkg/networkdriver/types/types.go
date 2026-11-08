@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strings"
 
+	corev1 "k8s.io/api/core/v1"
 	resourceapi "k8s.io/api/resource/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	kube_types "k8s.io/apimachinery/pkg/types"
@@ -159,9 +160,8 @@ type Device interface {
 	GetCapacity() map[resourceapi.QualifiedName]resourceapi.DeviceCapacity
 	AllowMultipleAllocations() bool
 	// Setup prepares one allocation and returns the device representing it.
-	// For a shared allocation, this may be an allocation-specific child, such as a
-	// netdev that leases one RX queue, rather than the device published in the
-	// ResourceSlice.
+	// For a shared allocation, this may contain allocation-specific state, such
+	// as one reserved queue from a NIC published in the ResourceSlice.
 	Setup(allocation DeviceAllocation) (Device, error)
 	// Recover re-creates missing kernel state for an allocation restored from
 	// ResourceClaim status. The returned device must represent the same logical
@@ -186,11 +186,12 @@ type DeviceManager interface {
 }
 
 type DeviceConfig struct {
-	PodIfName string       `json:"podIfName,omitempty"` // Custom interface name for the pod namespace
-	Vlan      int32        `json:"vlan,omitempty"`      // VLAN ID to assign to the device (0 = untagged / no change)
-	IPv4Addr  netip.Prefix `json:"ipv4Addr,omitzero"`
-	IPv6Addr  netip.Prefix `json:"ipv6Addr,omitzero"`
-	IPPool    string       `json:"ipPool,omitempty"`
+	PodIfName string         `json:"podIfName,omitempty"` // Custom interface name for the pod namespace
+	Vlan      int32          `json:"vlan,omitempty"`      // VLAN ID to assign to the device (0 = untagged / no change)
+	IPv4Addr  netip.Prefix   `json:"ipv4Addr,omitzero"`
+	IPv6Addr  netip.Prefix   `json:"ipv6Addr,omitzero"`
+	IPPool    string         `json:"ipPool,omitempty"`
+	RXQueue   *RXQueueConfig `json:"rxQueue,omitempty"`
 
 	// InterfaceSysctlIPv4/IPv6 hold leaf sysctl parameters (e.g.
 	// "arp_filter") applied under net.<family>.conf.<interface>. for the
@@ -211,11 +212,31 @@ func (d *DeviceConfig) Empty() bool {
 		!d.IPv6Addr.IsValid() &&
 		d.IPPool == "" &&
 		len(d.InterfaceSysctlIPv4) == 0 &&
-		len(d.InterfaceSysctlIPv6) == 0
+		len(d.InterfaceSysctlIPv6) == 0 &&
+		d.RXQueue == nil
 }
 
 func (d *DeviceConfig) HasPool() bool {
 	return d.IPPool != ""
+}
+
+// RXQueueConfig selects traffic for an allocated RX queue.
+type RXQueueConfig struct {
+	PodEndpoint *RXQueuePodEndpoint `json:"podEndpoint"`
+}
+
+// RXQueuePodEndpoint selects a port on the pod consuming the ResourceClaim.
+// Port may be a decimal port number or a named container port.
+type RXQueuePodEndpoint struct {
+	Port     string          `json:"port"`
+	Protocol corev1.Protocol `json:"protocol"`
+}
+
+// RXQueueFlow identifies traffic to steer to an allocated RX queue.
+type RXQueueFlow struct {
+	DestinationIP   netip.Addr      `json:"destinationIP"`
+	DestinationPort uint16          `json:"destinationPort"`
+	Protocol        corev1.Protocol `json:"protocol"`
 }
 
 // DeviceAllocation contains scheduler and driver parameters for one allocation.
