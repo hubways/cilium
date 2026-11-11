@@ -8,7 +8,7 @@
 
 /* Enable code paths under test */
 #define ENABLE_IPV4 1
-#define ENABLE_IPV6
+#define ENABLE_IPV6 1
 
 /* Needed variables for the setup */
 #define CLIENT_IP		v4_pod_one
@@ -65,6 +65,7 @@ mock_tail_call_dynamic(struct __ctx_buff *ctx __maybe_unused,
 ASSIGN_CONFIG(__u32, cilium_net_ifindex, 10)
 ASSIGN_CONFIG(__u32, interface_ifindex, 12)
 
+ASSIGN_CONFIG(bool, enable_ipv4, true)
 ASSIGN_CONFIG(bool, enable_l7_lb, true)
 ASSIGN_CONFIG(bool, enable_nodeport, true)
 

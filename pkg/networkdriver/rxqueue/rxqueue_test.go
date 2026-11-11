@@ -6,6 +6,7 @@ package rxqueue
 import (
 	"context"
 	"errors"
+	"maps"
 	"net"
 	"slices"
 	"testing"
@@ -53,6 +54,20 @@ type fakeNetlink struct {
 	ringsSetError  error
 	ignoreRSSSet   bool
 	ignoreRingsSet bool
+	flows          map[uint32]netlink.NetDevRxFlow
+	flowGetErrors  map[uint32]error
+	// flowActions overrides the queue action derived from a rule.
+	flowActions   map[uint32]netlink.NetDevRxFlowAction
+	flowInserts   int
+	flowDeletes   int
+	flowTableSize uint32
+	// flowSpecialLocations reports driver-chosen rule locations as supported.
+	flowSpecialLocations bool
+
+	features                map[string]netlink.NetDevFeature
+	featureSetCalls         []map[string]bool
+	featuresSetError        error
+	ringsRequireHardwareGRO bool
 }
 
 func newFakeNetlink(maxRXQueues, realRXQueues int, _ ...kube_types.UID) *fakeNetlink {
@@ -73,8 +88,15 @@ func newFakeNetlink(maxRXQueues, realRXQueues int, _ ...kube_types.UID) *fakeNet
 		links: map[string]netlink.Link{
 			testPhysicalIfName: physical,
 		},
-		leases:       make(map[uint32]*netlink.NetDevQueueLease),
-		realRXQueues: realRXQueues,
+		leases:        make(map[uint32]*netlink.NetDevQueueLease),
+		flows:         make(map[uint32]netlink.NetDevRxFlow),
+		flowGetErrors: make(map[uint32]error),
+		flowActions:   make(map[uint32]netlink.NetDevRxFlowAction),
+		flowTableSize: 1024,
+		// Like bnxt, the fake driver chooses rule locations itself.
+		flowSpecialLocations: true,
+		features:             make(map[string]netlink.NetDevFeature),
+		realRXQueues:         realRXQueues,
 		rss: netlink.NetDevRSS{
 			HashFunction:        netlink.NetDevRSSHashFunctionToeplitz,
 			IndirectionTable:    indirectionTable,
@@ -101,7 +123,23 @@ func (f *fakeNetlink) install(t *testing.T) {
 	originalRSSSet := netlinkNetDevRSSSet
 	originalRingsGet := netlinkNetDevRingsGet
 	originalRingsSet := netlinkNetDevRingsSet
+	originalFeaturesGet := netlinkNetDevFeaturesGet
+	originalFeaturesSet := netlinkNetDevFeaturesSet
+	originalFlowInsert := netlinkNetDevRxFlowInsert
+	originalFlowDelete := netlinkNetDevRxFlowDelete
+	originalFlowList := netlinkNetDevRxFlowList
+	originalFlowGet := netlinkNetDevRxFlowGet
+	originalFlowTableGet := netlinkNetDevRxFlowTableGet
+	originalFlowActionGet := netlinkNetDevRxFlowActionGet
 	t.Cleanup(func() {
+		netlinkNetDevFeaturesGet = originalFeaturesGet
+		netlinkNetDevFeaturesSet = originalFeaturesSet
+		netlinkNetDevRxFlowInsert = originalFlowInsert
+		netlinkNetDevRxFlowDelete = originalFlowDelete
+		netlinkNetDevRxFlowList = originalFlowList
+		netlinkNetDevRxFlowGet = originalFlowGet
+		netlinkNetDevRxFlowTableGet = originalFlowTableGet
+		netlinkNetDevRxFlowActionGet = originalFlowActionGet
 		netlinkLinkByName = originalLinkByName
 		netlinkNetDevQueueGet = originalQueueGet
 		netlinkNetDevRSSGet = originalRSSGet
@@ -110,6 +148,31 @@ func (f *fakeNetlink) install(t *testing.T) {
 		netlinkNetDevRingsSet = originalRingsSet
 	})
 
+	f.installFlows()
+	netlinkNetDevFeaturesGet = func(ifIndex int) (map[string]netlink.NetDevFeature, error) {
+		if ifIndex != testPhysicalIndex {
+			return nil, unix.ENODEV
+		}
+		return maps.Clone(f.features), nil
+	}
+	netlinkNetDevFeaturesSet = func(ifIndex int, config map[string]bool) error {
+		if ifIndex != testPhysicalIndex {
+			return unix.ENODEV
+		}
+		f.featureSetCalls = append(f.featureSetCalls, maps.Clone(config))
+		if f.featuresSetError != nil {
+			return f.featuresSetError
+		}
+		for name, wanted := range config {
+			feature, ok := f.features[name]
+			if !ok {
+				return unix.EINVAL
+			}
+			feature.Wanted, feature.Active = wanted, wanted
+			f.features[name] = feature
+		}
+		return nil
+	}
 	netlinkLinkByName = func(name string) (netlink.Link, error) {
 		link, exists := f.links[name]
 		if !exists {
@@ -168,6 +231,11 @@ func (f *fakeNetlink) install(t *testing.T) {
 		if f.ringsSetError != nil {
 			return f.ringsSetError
 		}
+		if f.ringsRequireHardwareGRO && config.TCPDataSplit != nil &&
+			*config.TCPDataSplit == netlink.NetDevTCPDataSplitEnabled &&
+			!f.features[hardwareGROFeature].Active {
+			return unix.EINVAL
+		}
 		if !f.ignoreRingsSet && config.TCPDataSplit != nil {
 			f.rings.TCPDataSplit = *config.TCPDataSplit
 		}
@@ -175,6 +243,72 @@ func (f *fakeNetlink) install(t *testing.T) {
 			f.rings.HDSThreshold = *config.HDSThreshold
 		}
 		return nil
+	}
+}
+
+// installFlows replaces the ethtool RX flow steering calls with an in-memory
+// rule table. Locations returned for RX_CLS_LOC_ANY start at 100.
+func (f *fakeNetlink) installFlows() {
+	netlinkNetDevRxFlowInsert = func(ifName string, flow netlink.NetDevRxFlow) (uint32, error) {
+		if ifName != testPhysicalIfName {
+			return 0, unix.ENODEV
+		}
+		f.flowInserts++
+		if flow.Location == netlink.RX_CLS_LOC_ANY && !f.flowSpecialLocations {
+			return 0, unix.EINVAL
+		}
+		if flow.Location == netlink.RX_CLS_LOC_ANY {
+			flow.Location = 100
+			for f.flows[flow.Location].Match != nil {
+				flow.Location++
+			}
+		}
+		f.flows[flow.Location] = flow
+		return flow.Location, nil
+	}
+	netlinkNetDevRxFlowDelete = func(ifName string, location uint32) error {
+		if _, found := f.flows[location]; !found {
+			return unix.ENOENT
+		}
+		f.flowDeletes++
+		delete(f.flows, location)
+		return nil
+	}
+	netlinkNetDevRxFlowList = func(ifName string) ([]uint32, error) {
+		if ifName != testPhysicalIfName {
+			return nil, unix.ENODEV
+		}
+		return slices.Sorted(maps.Keys(f.flows)), nil
+	}
+	netlinkNetDevRxFlowTableGet = func(ifName string) (*netlink.NetDevRxFlowTable, error) {
+		if ifName != testPhysicalIfName {
+			return nil, unix.ENODEV
+		}
+		return &netlink.NetDevRxFlowTable{
+			Rules:            uint32(len(f.flows)),
+			Size:             f.flowTableSize,
+			SpecialLocations: f.flowSpecialLocations,
+		}, nil
+	}
+	netlinkNetDevRxFlowActionGet = func(ifName string, location uint32) (*netlink.NetDevRxFlowAction, error) {
+		flow, found := f.flows[location]
+		if !found {
+			return nil, unix.ENOENT
+		}
+		if action, overridden := f.flowActions[location]; overridden {
+			return &action, nil
+		}
+		return &flow.Action, nil
+	}
+	netlinkNetDevRxFlowGet = func(ifName string, location uint32) (*netlink.NetDevRxFlow, error) {
+		if err := f.flowGetErrors[location]; err != nil {
+			return nil, err
+		}
+		flow, found := f.flows[location]
+		if !found {
+			return nil, unix.ENOENT
+		}
+		return &flow, nil
 	}
 }
 
@@ -419,6 +553,63 @@ func TestNewManager(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, netlink.NetDevTCPDataSplitEnabled, fake.rings.TCPDataSplit)
 		require.Zero(t, fake.rings.HDSThreshold)
+	})
+
+	t.Run("enables hardware GRO when the driver requires it for TCP data splitting", func(t *testing.T) {
+		fake := newFakeNetlink(8, 4, testShareID)
+		fake.features[hardwareGROFeature] = netlink.NetDevFeature{Hardware: true}
+		fake.ringsRequireHardwareGRO = true
+		fake.install(t)
+
+		_, err := NewManager(hivetest.Logger(t), &v2alpha1.RXQueueDeviceManagerConfig{
+			Ifaces: []v2alpha1.RXQueueDeviceConfig{{IfName: testPhysicalIfName}},
+		})
+		require.NoError(t, err)
+		require.Equal(t, netlink.NetDevTCPDataSplitEnabled, fake.rings.TCPDataSplit)
+		require.True(t, fake.features[hardwareGROFeature].Active)
+		require.Len(t, fake.ringsSetCalls, 2)
+		require.Equal(t, []map[string]bool{{hardwareGROFeature: true}}, fake.featureSetCalls)
+	})
+
+	t.Run("leaves hardware GRO alone when TCP data splitting succeeds", func(t *testing.T) {
+		fake := newFakeNetlink(8, 4, testShareID)
+		fake.rings.TCPDataSplit = netlink.NetDevTCPDataSplitUnknown
+		fake.features[hardwareGROFeature] = netlink.NetDevFeature{Hardware: true}
+		fake.install(t)
+
+		_, err := NewManager(hivetest.Logger(t), &v2alpha1.RXQueueDeviceManagerConfig{
+			Ifaces: []v2alpha1.RXQueueDeviceConfig{{IfName: testPhysicalIfName}},
+		})
+		require.NoError(t, err)
+		require.Empty(t, fake.featureSetCalls)
+	})
+
+	t.Run("restores hardware GRO and RSS when TCP data splitting still fails", func(t *testing.T) {
+		fake := newFakeNetlink(8, 4, testShareID)
+		originalRSS := cloneNetDevRSS(&fake.rss)
+		originalGRO := netlink.NetDevFeature{Hardware: true}
+		fake.features[hardwareGROFeature] = originalGRO
+		fake.ringsSetError = unix.EINVAL
+		fake.install(t)
+
+		_, err := NewManager(hivetest.Logger(t), &v2alpha1.RXQueueDeviceManagerConfig{
+			Ifaces: []v2alpha1.RXQueueDeviceConfig{{IfName: testPhysicalIfName}},
+		})
+		require.ErrorIs(t, err, unix.EINVAL)
+		require.Equal(t, originalGRO, fake.features[hardwareGROFeature])
+		require.Equal(t, originalRSS.IndirectionTable, fake.rss.IndirectionTable)
+	})
+
+	t.Run("reports unavailable hardware GRO", func(t *testing.T) {
+		fake := newFakeNetlink(8, 4, testShareID)
+		fake.ringsRequireHardwareGRO = true
+		fake.install(t)
+
+		_, err := NewManager(hivetest.Logger(t), &v2alpha1.RXQueueDeviceManagerConfig{
+			Ifaces: []v2alpha1.RXQueueDeviceConfig{{IfName: testPhysicalIfName}},
+		})
+		require.ErrorIs(t, err, unix.EOPNOTSUPP)
+		require.Empty(t, fake.featureSetCalls)
 	})
 
 	t.Run("does not change rings when the RSS update fails", func(t *testing.T) {
