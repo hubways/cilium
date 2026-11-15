@@ -3681,9 +3681,9 @@
      - bool
      - ``true``
    * - :spelling:ignore:`operator.unmanagedPodWatcher.selector`
-     - Selector for pods that should be restarted when not managed by Cilium. If not set, defaults to built-in selector "k8s-app=kube-dns". Set to empty string to select all pods. @schema type: [null, string] @schema
+     - Selector for pods that should be restarted when not managed by Cilium. Set to an empty string "" to restart all unmanaged Pods. @schema type: [null, string] @schema
      - string
-     - ``nil``
+     - ``"k8s-app=kube-dns"``
    * - :spelling:ignore:`operator.updateStrategy`
      - cilium-operator update strategy
      - object
@@ -3908,6 +3908,14 @@
      - Set to ``true`` and helm will not check for monitoring.coreos.com/v1 CRDs before deploying
      - bool
      - ``false``
+   * - :spelling:ignore:`rbac.admissionPolicies.agent.create`
+     - create all admission policies for the Cilium agent
+     - bool
+     - ``true``
+   * - :spelling:ignore:`rbac.admissionPolicies.preflight.create`
+     - create all admission policies for pre-flight
+     - bool
+     - ``true``
    * - :spelling:ignore:`rbac.create`
      - Enable creation of Resource-Based Access Control configuration.
      - bool
